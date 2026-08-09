@@ -11,6 +11,14 @@ setup(
         ("share/" + package_name + "/config", [
             "config/ur_teleop.yaml",
         ]),
+        ("share/" + package_name + "/config/rviz", [
+            "config/rviz/ur_teleop.rviz",
+        ]),
+        ("share/" + package_name + "/launch", [
+            "launch/cell.launch.py",
+            "launch/home.launch.py",
+            "launch/teleop.launch.py",
+        ]),
         ("share/ament_index/resource_index/packages", ["resource/ur_teleop"]),
     ],
     install_requires=["setuptools"],
