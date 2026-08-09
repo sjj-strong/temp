@@ -399,3 +399,44 @@ qt.qpa.xcb: could not connect to display :1
 - 需要在允许 ROS 2 DDS 本地通信、具有可用 X server 的环境重新启动 launch，再执行 `/robot_description`、`/joint_states`、`view_frames` 与 `world -> gripper_tcp` 的 live 检查。
 - RViz 外观、UR 六轴 GUI 拖动以及夹爪 mimic 同步必须由人工真实操作后才能从“未执行”改为 PASS。
 - 默认 `/ros2_ws/build/ur_dashboard_msgs` 的旧构建冲突仍保留；本阶段只使用隔离 build-base，没有删除用户数据。
+
+## 2026-08-09：夹爪默认安装姿态单一真源验证
+
+本次增量只修改组合 Xacro 的 `gripper_rpy` 默认值；`robotiq_gripper` 的 origin 仍通过 `$(arg gripper_rpy)` 消费该值，Display、Mock 和 MoveIt launch 未新增安装姿态硬编码。
+
+修改前先生成 display flattened URDF，并执行目标姿态断言：
+
+```bash
+source /ros2_ws/install/setup.bash
+xacro /ros2_ws/src/ur10e_robotiq/ur10e_robotiq_description/urdf/ur10e_robotiq.urdf.xacro \
+  include_ros2_control:=false > /tmp/ur10e_robotiq_display.urdf
+xmllint --xpath \
+  'string(/robot/joint[@name="robotiq_85_base_joint"]/origin/@rpy)' \
+  /tmp/ur10e_robotiq_display.urdf
+xmllint --xpath \
+  '/robot/joint[@name="robotiq_85_base_joint"]/origin[@rpy="-3.1415 0 0"]/@rpy' \
+  /tmp/ur10e_robotiq_display.urdf
+```
+
+RED 结果：Xacro 退出码 `0`，实际输出 `0 0 0`；精确 XPath 报 `XPath set is empty`，退出码 `10`。这证明断言能捕获旧默认值。
+
+将组合 Xacro 的默认值改为 `-3.1415 0 0` 后执行：
+
+```bash
+source /ros2_ws/install/setup.bash
+xacro /ros2_ws/src/ur10e_robotiq/ur10e_robotiq_description/urdf/ur10e_robotiq.urdf.xacro \
+  include_ros2_control:=false > /tmp/ur10e_robotiq_display.urdf
+xacro /ros2_ws/src/ur10e_robotiq/ur10e_robotiq_description/urdf/ur10e_robotiq.urdf.xacro \
+  include_ros2_control:=true use_mock_hardware:=true \
+  use_fake_hardware:=true use_fake_mode:=true \
+  > /tmp/ur10e_robotiq_mock.urdf
+check_urdf /tmp/ur10e_robotiq_display.urdf
+check_urdf /tmp/ur10e_robotiq_mock.urdf
+xmllint --xpath 'count(/robot/ros2_control)' /tmp/ur10e_robotiq_display.urdf
+xmllint --xpath 'count(/robot/ros2_control)' /tmp/ur10e_robotiq_mock.urdf
+xmllint --xpath \
+  '/robot/joint[@name="robotiq_85_base_joint"]/origin[@rpy="-3.1415 0 0"]/@rpy' \
+  /tmp/ur10e_robotiq_display.urdf
+```
+
+GREEN 结果：两份 Xacro、两次 `check_urdf` 和全部 XPath 检查退出码均为 `0`；两次 `check_urdf` 均输出 `Successfully Parsed XML`；display/mock 的 `<ros2_control>` 数量分别为 `0` 和 `3`；姿态输出为 `rpy="-3.1415 0 0"`。

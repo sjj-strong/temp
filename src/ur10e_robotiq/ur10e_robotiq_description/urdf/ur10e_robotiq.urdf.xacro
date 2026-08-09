@@ -9,7 +9,7 @@
   <xacro:arg name="ft_xyz" default="0 0 0"/>
   <xacro:arg name="ft_rpy" default="0 0 0"/>
   <xacro:arg name="gripper_xyz" default="0 0 0"/>
-  <xacro:arg name="gripper_rpy" default="0 0 0"/>
+  <xacro:arg name="gripper_rpy" default="-3.1415 0 0"/>
   <xacro:arg name="tcp_xyz" default="0 0 0.15"/>
   <xacro:arg name="tcp_rpy" default="0 0 0"/>
 
