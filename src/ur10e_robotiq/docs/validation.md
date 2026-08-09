@@ -1243,3 +1243,156 @@ task5_residual pgrep_exit=1 count=0 assertion_exit=0 status=PASS
 ```
 
 结果：残留进程为 `0`，清理断言退出码为 `0`（**PASS**）。停止期间出现一次 `pal_statistics` context error，记录为 shutdown 警告，不改变已经取得的 live 断言或残留进程结论。
+
+## 2026-08-09 — Stage 6
+
+- 目标：建立 UR10e + FT300 + 2F-85 的组合 MoveIt config package 与 SRDF。
+- 总体结果：**PASS**；TDD RED、源码 YAML/XML/SRDF 解析、隔离构建、安装空间解析与 package-prefix GREEN 全部通过。
+
+### TDD RED：目标 MoveIt package 尚不存在
+
+创建包前执行：
+
+```bash
+source /opt/ros/jazzy/setup.bash
+source /ros2_ws/install/setup.bash
+ros2 pkg prefix ur10e_robotiq_moveit_config
+```
+
+实际退出码为 `1`，关键输出：
+
+```text
+Package not found
+RED_EXIT_CODE=1
+```
+
+结果：因目标 package 尚不存在而按预期失败（**PASS，预期 RED**）。
+
+### 上游配置复制与初始 SRDF
+
+只读检查了上游：
+
+```text
+/ros2_ws/src/Universal_Robots_ROS2_Driver/ur_moveit_config/srdf/ur_macro.srdf.xacro
+/ros2_ws/src/Universal_Robots_ROS2_Driver/ur_moveit_config/config/joint_limits.yaml
+/ros2_ws/src/Universal_Robots_ROS2_Driver/ur_moveit_config/config/ompl_planning.yaml
+```
+
+`home`、`up`、`test_configuration` 的六轴值已完整复制。两条逐字节比较命令均退出 `0`：
+
+```bash
+cmp -s <upstream>/config/joint_limits.yaml <combined>/config/joint_limits.yaml
+cmp -s <upstream>/config/ompl_planning.yaml <combined>/config/ompl_planning.yaml
+```
+
+初始 `disable_collisions` 仅保留上游 8 对 `reason="Adjacent"` 的 UR 相邻链路；排除上游 3 对 `Never`，未添加任何 FT/夹爪碰撞豁免。完整组合碰撞矩阵留待 Task 7 生成和检查。
+
+SRDF 的关键契约为：
+
+```text
+ur_manipulator: base_link -> gripper_tcp
+gripper: robotiq_85_left_knuckle_joint（唯一 joint）
+end_effector: robotiq_2f85, parent_link=robotiq_85_base_link
+gripper states: open=0.0, close=0.7929
+```
+
+MoveIt controller 关键映射为：
+
+```text
+scaled_joint_trajectory_controller: FollowJointTrajectory / follow_joint_trajectory
+robotiq_gripper_controller: ParallelGripperCommand / gripper_cmd
+```
+
+### YAML/XML/SRDF 真实解析
+
+执行：
+
+```bash
+xacro ur10e_robotiq_moveit_config/srdf/ur10e_robotiq.srdf.xacro \
+  > /tmp/ur10e_robotiq_task6.srdf
+xacro ur10e_robotiq_description/urdf/ur10e_robotiq.urdf.xacro \
+  include_ros2_control:=false > /tmp/ur10e_robotiq_task6.urdf
+python3 <YAML safe_load + XML ElementTree + SRDF/URDF cross-check assertions>
+```
+
+整组退出码为 `0`。关键输出：
+
+```text
+PASS package.xml: XML parsed; exact runtime dependency set found
+PASS joint_limits.yaml: YAML parsed; six upstream joints match
+PASS ompl_planning.yaml: YAML parsed; upstream OMPL config matches
+PASS kinematics.yaml: YAML parsed; KDL group is ur_manipulator
+PASS moveit_controllers.yaml: YAML parsed; arm and ParallelGripperCommand mappings match
+PASS SRDF groups: XML parsed; arm tip=gripper_tcp and gripper has one active joint
+PASS SRDF states: upstream home/up/test_configuration and gripper open/close match
+PASS SRDF collisions: exactly eight justified UR Adjacent pairs; no FT/gripper pairs
+PARSE_EXIT_CODE=0
+```
+
+解析同时断言所有 SRDF link/joint 均存在于唯一组合 Xacro 展开的 URDF 中（**PASS**）。
+
+### 隔离构建与 package-prefix GREEN
+
+默认 build-base 有既有冲突，因此按约束使用 `mktemp` 目录：
+
+```bash
+task6_tmp=$(mktemp -d /tmp/ur10e-task6-build.XXXXXX)
+source /opt/ros/jazzy/setup.bash
+source /ros2_ws/install/setup.bash
+colcon --log-base "${task6_tmp}/log" build --symlink-install \
+  --build-base "${task6_tmp}/build" \
+  --install-base /ros2_ws/install \
+  --packages-up-to ur10e_robotiq_moveit_config
+```
+
+实际目录为 `/tmp/ur10e-task6-build.SWn5Rk`，构建退出码为 `0`。关键输出：
+
+```text
+Finished <<< ur10e_robotiq_description [0.86s]
+Finished <<< ur10e_robotiq_moveit_config [0.86s]
+Summary: 12 packages finished [1min 29s]
+BUILD_EXIT_CODE=0
+```
+
+8 个上游 package 有 CMake/API 弃用警告，没有失败；默认 `/ros2_ws/build` 未被删除或修改。
+
+构建后执行：
+
+```bash
+source /opt/ros/jazzy/setup.bash
+source /ros2_ws/install/setup.bash
+ros2 pkg prefix ur10e_robotiq_moveit_config
+xacro /ros2_ws/install/ur10e_robotiq_moveit_config/share/ur10e_robotiq_moveit_config/srdf/ur10e_robotiq.srdf.xacro \
+  > /tmp/ur10e_robotiq_installed_task6.srdf
+rg -n 'gripper_tcp|robotiq_85_left_knuckle_joint|robotiq_2f85' \
+  /tmp/ur10e_robotiq_installed_task6.srdf
+```
+
+整组退出码为 `0`，关键输出：
+
+```text
+/ros2_ws/install/ur10e_robotiq_moveit_config
+PREFIX_GREEN_EXIT_CODE=0
+8:    <chain base_link="base_link" tip_link="gripper_tcp"/>
+11:    <joint name="robotiq_85_left_knuckle_joint"/>
+13:  <end_effector group="gripper" name="robotiq_2f85" parent_group="ur_manipulator" parent_link="robotiq_85_base_link"/>
+PASS installed artifacts: SRDF/XML and controller YAML parsed from install prefix
+INSTALLED_PARSE_EXIT_CODE=0
+```
+
+package.xml 声明的 10 个 runtime dependency 均可由 `ros2 pkg prefix` 解析（**PASS**）。CMake 要求安装 `launch` 目录，而实际 launch 属于 Task 7，因此本阶段加入 `launch/.gitkeep` 作为必要构建脚手架。
+
+### 完成前复验
+
+使用第二个新隔离目录 `/tmp/ur10e-task6-verify.z50g4F` 对当前磁盘状态执行 `--packages-select ur10e_robotiq_moveit_config`，目标包在 0.96 秒完成，构建退出码为 `0`。重新展开安装空间 SRDF、唯一组合 URDF，并执行完整 YAML/XML/SRDF/URDF 语义断言，输出：
+
+```text
+VERIFY_PREFIX=/ros2_ws/install/ur10e_robotiq_moveit_config
+FINAL_SEMANTIC_ASSERTIONS=PASS
+FINAL_SEMANTIC_EXIT_CODE=0
+FINAL_CMP joint_limits=0 ompl=0
+FINAL_DIFF_CHECK_EXIT_CODE=0
+FINAL_AUDIT_EXIT_CODE=0
+```
+
+结果：当前磁盘状态的目标包重建、安装前缀、语义接口、上游文件一致性与补丁空白检查全部通过（**PASS**）。本 Stage 未执行 Git 提交。
