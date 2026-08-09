@@ -4,7 +4,7 @@
 
 - ROS 发行版：Jazzy
 - 工作区：`/ros2_ws`
-- 总体结果：**PASS**
+- 总体结果：**PARTIAL（带已知环境阻塞）**；Stage 0、FT300 与隔离 build-base 验证 **PASS**，默认 build-base 验证 **FAIL（环境构建基线冲突）**
 
 ### Stage 0：上游基线
 
@@ -77,6 +77,8 @@ Summary: 3 packages finished [3.69s]
 
 ### Description 骨架
 
+#### 默认 build-base：FAIL（环境构建基线冲突）
+
 首次执行 brief 原命令：
 
 ```bash
@@ -84,7 +86,40 @@ source /opt/ros/jazzy/setup.bash
 colcon build --symlink-install --packages-up-to ur10e_robotiq_description
 ```
 
-工作区旧 `build/ur_dashboard_msgs` 中已有普通目录，和当前 symlink-install 目标冲突，命令退出码为 2。未删除旧构建产物，也未修改上游。使用全新 build/log 前缀并保持目标 install 前缀后重新验证：
+实际关键输出（保存于 `/ros2_ws/log/build_2026-08-09_18-38-01/`）：
+
+```text
+failed to create symbolic link '/ros2_ws/build/ur_dashboard_msgs/ament_cmake_python/ur_dashboard_msgs/ur_dashboard_msgs' because existing path cannot be removed: Is a directory
+gmake[2]: *** [CMakeFiles/ament_cmake_python_symlink_ur_dashboard_msgs.dir/build.make:70: CMakeFiles/ament_cmake_python_symlink_ur_dashboard_msgs] Error 1
+gmake[1]: *** [CMakeFiles/Makefile2:577: CMakeFiles/ament_cmake_python_symlink_ur_dashboard_msgs.dir/all] Error 2
+gmake: *** [Makefile:146: all] Error 2
+Failed   <<< ur_dashboard_msgs [2.86s, exited with code 2]
+Aborted  <<< ur_msgs [4.08s]
+Aborted  <<< ur_description [4.80s]
+Aborted  <<< ur_client_library [18.8s]
+
+Summary: 4 packages finished [18.9s]
+  1 package failed: ur_dashboard_msgs
+  3 packages aborted: ur_client_library ur_description ur_msgs
+  2 packages had stderr output: ur_dashboard_msgs ur_description
+  3 packages not processed
+```
+
+对应 `events.log` 原始状态：
+
+```text
+[2.864597] (ur_dashboard_msgs) JobEnded: {'identifier': 'ur_dashboard_msgs', 'rc': 2}
+[4.084196] (ur_msgs) JobEnded: {'identifier': 'ur_msgs', 'rc': 'SIGINT'}
+[4.813017] (ur_description) JobEnded: {'identifier': 'ur_description', 'rc': 'SIGINT'}
+[18.796175] (ur_client_library) JobEnded: {'identifier': 'ur_client_library', 'rc': 'SIGINT'}
+[18.796921] (ur10e_robotiq_description) JobSkipped: {'identifier': 'ur10e_robotiq_description'}
+```
+
+结果：**FAIL（环境构建基线冲突）**。工作区旧 `build/ur_dashboard_msgs` 中已有普通目录，和当前 symlink-install 目标冲突，命令退出码为 2，目标包未被执行。未删除旧构建产物，也未修改上游。
+
+#### 隔离 build-base：PASS
+
+使用全新 build/log 前缀并保持目标 install 前缀后重新验证：
 
 ```bash
 source /opt/ros/jazzy/setup.bash
@@ -101,4 +136,9 @@ Finished <<< ur10e_robotiq_description [0.88s]
 /ros2_ws/install/ur10e_robotiq_description
 ```
 
-结果：骨架真实构建成功，且唯一目标 package 前缀正确（PASS）。
+结果：骨架在隔离 build-base 中真实构建成功，且唯一目标 package 前缀正确（PASS）。
+
+### 剩余问题
+
+- 默认 `/ros2_ws/build` 中的既有普通目录仍与 `--symlink-install` 冲突；本任务未删除或修复用户的既有构建产物。
+- 因此，使用默认 build-base 的最终全工作区验证仍受阻并保持 **FAIL**；隔离 build-base 的 **PASS** 仅证明依赖与 `ur10e_robotiq_description` 骨架可从干净构建基线成功构建和安装。
