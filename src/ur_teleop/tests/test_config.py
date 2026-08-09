@@ -54,8 +54,8 @@ def test_missing_file_raises(tmp_path):
 
 
 def test_invalid_mode_raises(tmp_path):
-    with pytest.raises(ConfigError, match="mode"):
-        load_config(_write(tmp_path, "mode: bogus\nsim: true\nhome: {}\nmapping: {}\n"))
+    with pytest.raises(ConfigError, match="mode must be"):
+        load_config(_write(tmp_path, BASE.replace("mode: teleop", "mode: bogus")))
 
 
 def test_home_length_mismatch_raises(tmp_path):
