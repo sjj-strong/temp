@@ -125,12 +125,14 @@ WAITING_CELL → VERIFY_HOME → SETTLING → CAPTURE_OFFSET → ARMED → ACTIV
 ```
 
 1. **WAITING_CELL**：等 `/joint_states`（UR 100 Hz 出现）+ `/controller_manager` service，超时（30 s）报错退出
-2. **VERIFY_HOME**：检查双臂实测位置在配置 home 容差内（`at_home_tolerance`，默认 0.05 rad）。不满足 → 打印两侧误差，等待重试，不自动继续；`--force` 跳过
-3. **SETTLING**：静止等待 `settle_time_s`（默认 2 s，实测变化 < 阈值视为静止）
+2. **VERIFY_HOME**：检查双臂实测位置在配置 home 容差内（`at_home_tolerance`，默认 0.05 rad）。不满足 → 打印两侧误差，等待重试，不自动继续；launch 参数 `force_home:=true` 跳过
+3. **SETTLING**：静止等待 `settle_time_s`（默认 2 s，实测变化 < `settle_motion_threshold_rad`（默认 0.01）视为静止）
 4. **CAPTURE_OFFSET**：捕获主臂/从臂实测值作为本会话 offset（`master_home_actual`、`slave_home_actual`），不写盘
 5. **ARMED**：打印提示，等 Enter
 6. **ACTIVE**：控制器切换（trajectory → forward_position）→ `/demonstration=true`（Alicia 拖拽模式）→ 50 Hz 映射发布 + 10 Hz 夹爪 FSM。`/teleop/status=true`
 7. **INACTIVE**：主臂数据超时（`watchdog_timeout_s`，默认 0.5 s）→ 暂停映射（改发当前位置，避免跳变）、`/teleop/status=false`；主臂恢复自动回 ACTIVE，无需重新 Enter
+
+注：`/teleop/e_stop` 不是独立状态 —— 它是 ACTIVE/INACTIVE 内的冻结标志（置位时定时器回调直接 return，关节指令与夹爪 FSM 均暂停）。
 
 **退出流程**（Ctrl-C）：`/demonstration=false`（恢复力矩）→ 切回 trajectory controller（`restore_controller_on_exit`，默认 true）→ recorder `finalize()`。
 
@@ -162,7 +164,7 @@ WAITING_CELL → VERIFY_HOME → SETTLING → CAPTURE_OFFSET → ARMED → ACTIV
 - 控制器切换只在 ARMED→ACTIVE 边界做一次（trajectory → forward_position），带重试（5 次 + 自动 load，沿用现 controller_switcher 逻辑），用纯 service 调用 + 超时，不用嵌套 spin（修复问题 10）
 - Alicia 单位转换集中在 config 层：状态侧 Gripper（米）↔ 命令侧 0–1000 反向值（stroke 按 50mm/100mm）
 - 夹爪：`gripper.enabled=false`（sim 默认）时 FSM 不启动；`action_type_is_available` 探测一次，不存在则警告降级
-- recorder：EE 位姿查询失败该帧 ee 段填 NaN + 一次性警告（不填 0 占位，修复问题 11）
+- recorder：EE 位姿查询失败该帧 ee 段填 NaN + 一次性警告（不填 0 占位）；夹爪 state 从 UR `/joint_states` 的 `robotiq_85_left_knuckle_joint` 读取**真实状态**，action 的夹爪维用 `/teleop/commands[6]` 指令（修复问题 11 的"夹爪 state 用指令代理"）
 
 ## 8. 配置
 
@@ -182,6 +184,7 @@ home:
   slave:  [0.0, -1.57, 0.0, -1.57, 0.0, 0.0]
   at_home_tolerance_rad: 0.05
   settle_time_s: 2.0
+  settle_motion_threshold_rad: 0.01
   move_timeout_s: 30.0
 mapping:
   alicia_joint_order: [Joint1, Joint2, Joint3, Joint4, Joint5, Joint6]
@@ -224,11 +227,11 @@ recorder:
 | 场景 | 行为 |
 |---|---|
 | cell 未启动 | WAITING_CELL 30 s 超时打印"请先运行 home.launch"后退出（非零码） |
-| 双臂不在 home | VERIFY_HOME 打印两侧误差，等待重试；`--force` 跳过 |
+| 双臂不在 home | VERIFY_HOME 打印两侧误差，等待重试；`force_home:=true` 跳过 |
 | UR home 轨迹失败 | home 节点打印原因 + 目标/当前关节对比，退出非零码；cell 保持运行 |
 | Alicia 串口断开 | driver 自行重连；watchdog 感知 → INACTIVE（改发当前位置避免跳变） |
 | 主臂数据恢复 | 自动回 ACTIVE，无需重新 Enter |
-| 到位超时 | home 节点报告"未到位"，`--force` 可继续 |
+| 到位超时 | home 节点报告"未到位"，`force_home:=true` 可继续 |
 | recorder 崩溃 | teleop 不受影响（进程隔离）；已保存 episodes 保留 |
 | lerobot 数据集已存在 | 时间戳后缀新建 repo_id，不覆盖不追加 |
 | EE 位姿查询失败 | 该帧 ee 段填 NaN + 一次性警告 |
