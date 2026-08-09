@@ -1,0 +1,992 @@
+"""Full-stack integration tests: cell(mock) + teleop_node + fake_master.
+
+Excluded by default (pytest.ini addopts). Run with:
+  colcon test --packages-select ur_teleop --pytest-args "-m integration"
+Requires a sourced ROS environment (and the lerobot venv for the record test).
+"""
+
+import concurrent.futures
+import os
+import re
+import select
+import signal
+import subprocess
+import sys
+import time
+import types
+from pathlib import Path
+
+import pytest
+import rclpy
+from sensor_msgs.msg import JointState
+
+from ur_teleop.config import ALICIA_JOINT_NAMES, GRIPPER_JOINT, UR_JOINT_NAMES
+from ur_teleop.controller_switcher import ControllerSwitcher
+from ur_teleop.home_node import HomeNode
+from ur_teleop.teleop_node import TeleopNode, State
+
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.skipif("AMENT_PREFIX_PATH" not in os.environ,
+                       reason="需要已 source 的 ROS 环境"),
+]
+
+SELF = Path(__file__).resolve().parent
+REPO = SELF.parent
+FAKE_MASTER = SELF / "fake_master.py"
+
+# 与 CFG_BODY home.slave 一致（= mock UR10e 初始位姿 = config/ur_teleop.yaml）
+SLAVE_HOME = [0.0, -1.57, 0.0, -1.57, 0.0, 0.0]
+
+CFG_BODY = """\
+mode: teleop
+sim: true
+cell:
+  launch_rviz: false
+home:
+  master: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+  # mock UR10e 初始位姿即 UR home pose（与 config/ur_teleop.yaml 的 home.slave 一致）
+  slave: [0.0, -1.57, 0.0, -1.57, 0.0, 0.0]
+  master_gripper_value: 1000
+  at_home_tolerance_rad: 0.05
+  settle_time_s: 2.0
+  settle_motion_threshold_rad: 0.01
+  move_timeout_s: 30.0
+mapping:
+  alicia_joint_order: [Joint1, Joint2, Joint3, Joint4, Joint5, Joint6]
+  ur_joint_order: [shoulder_pan_joint, shoulder_lift_joint, elbow_joint, wrist_1_joint, wrist_2_joint, wrist_3_joint]
+  sign: [1, 1, 1, 1, 1, 1]
+  scale: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+safety:
+  clamp_margin_rad: 0.1
+  limits:
+    shoulder_pan_joint: [-6.283, 6.283]
+    shoulder_lift_joint: [-6.283, 6.283]
+    elbow_joint: [-3.142, 3.142]
+    wrist_1_joint: [-6.283, 6.283]
+    wrist_2_joint: [-6.283, 6.283]
+    wrist_3_joint: [-6.283, 6.283]
+teleop:
+  command_rate_hz: 50
+  watchdog_timeout_s: 0.5
+  restore_controller_on_exit: true
+gripper:
+  enabled: false
+recorder:
+  repo_id: test/ur_teleop_it
+  root: ""
+  fps: 50
+  robot_type: ur10e_alicia_teleop
+  use_videos: false
+  ee_pose_source: none
+  cameras: {}
+  min_frames_per_episode: 2
+"""
+
+
+def _start(*argv, cwd=REPO, stdin=None):
+    p = subprocess.Popen(list(argv), cwd=str(cwd), stdout=subprocess.PIPE,
+                         stderr=subprocess.STDOUT, text=True, stdin=stdin,
+                         start_new_session=True)
+    # Capture the process group id at spawn: the group leader can exit before
+    # teardown, after which os.getpgid(pid) fails and the rest of the group
+    # (cell/controller_manager children) would be orphaned.
+    p.pgid = os.getpgid(p.pid)
+    return p
+
+
+def _kill(procs):
+    for p in procs:
+        try:
+            os.killpg(p.pgid, signal.SIGTERM)
+        except (ProcessLookupError, PermissionError):
+            pass
+    time.sleep(1.0)
+    for p in procs:
+        try:
+            os.killpg(p.pgid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            pass
+
+
+def _sweep_orphaned_control_nodes():
+    """清扫孤儿 controller_manager：cell 的 CM 经 --params-file /tmp/launch_params_*
+    启动（路径不含测试 tmp_path），pytest 被外部杀死（finally 不执行）时它可能随
+    launch 组长死亡而脱管残留，与当前测试的 CM 同时服务 switch_controller →
+    SWITCHING 不确定、ACTIVE 永远到不了（2026-08-10 实况：SIGABRT 残留的 CM
+    使 record 测试连续 2 次 60 s enable 窗口全失败）。
+    判别：cmdline 含 ros2_control_node 且其 pgid 组长已不存在 → 孤儿，整组击杀。
+    用户 mock 栈（组长即存活 launch）与当前测试的 CM（组长存活）均不匹配，
+    误杀风险为零。"""
+    for d in os.listdir("/proc"):
+        if not d.isdigit():
+            continue
+        try:
+            with open(f"/proc/{d}/cmdline", "rb") as f:
+                cmd = f.read().replace(b"\x00", b" ").decode()
+            pgid = os.getpgid(int(d))
+        except (OSError, ValueError):
+            continue
+        if "ros2_control_node" not in cmd:
+            continue
+        if not os.path.exists(f"/proc/{pgid}"):
+            try:
+                os.killpg(pgid, signal.SIGKILL)
+            except (ProcessLookupError, PermissionError):
+                pass
+
+
+def _sweep(tmp_path):
+    """清扫本测试可能残留的子进程：pytest 被外部终止（超时/断电）时 finally
+    不会执行，残留的 fake_master（锁存 sine 发布）会污染后续测试的 VERIFY_HOME。
+    tmp_path 出现在 stack 各进程的 cmdline（config_file:=...），fake 按路径匹配；
+    均为本仓库测试独占进程，误杀风险为零。"""
+    subprocess.run(["pkill", "-9", "-f", str(tmp_path)], capture_output=True)
+    subprocess.run(["pkill", "-9", "-f", "tests/fake_master.py"], capture_output=True)
+    _sweep_orphaned_control_nodes()
+    time.sleep(0.5)
+
+
+def _topic_once(topic, field=None, timeout=6.0):
+    """ros2 topic echo --once; returns (ok, payload). ok=False on timeout/no message."""
+    cmd = ["ros2", "topic", "echo", topic, "--once"]
+    if field:
+        cmd += ["--field", field]
+    try:
+        out = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        return (out.returncode == 0 and bool(out.stdout.strip())), out.stdout.strip()
+    except subprocess.TimeoutExpired:
+        return False, ""
+
+
+def _pub_bool(topic, value):
+    subprocess.run(["ros2", "topic", "pub", "--once", topic, "std_msgs/msg/Bool",
+                    f"{{data: {str(value).lower()}}}"], capture_output=True, timeout=10.0)
+
+
+def _pub_bool_window(topic, value, times=10, rate=2):
+    """窗口化发布 Bool：--once 发布者常在 DDS 发现完成前退出导致消息丢失，
+    窗口发布让发布者存活 ~5 s，发现完成后持续送达（enable/e_stop 等锁存信号用）。"""
+    subprocess.run(
+        ["ros2", "topic", "pub", "--times", str(times), "--rate", str(rate),
+         topic, "std_msgs/msg/Bool", f"{{data: {str(value).lower()}}}"],
+        capture_output=True, timeout=15.0)
+
+
+class _OnceEcho:
+    """长驻 `ros2 topic echo --once`：订阅一次，捕获下一条消息。
+
+    status/demonstration 是单次信号（teleop 仅在状态迁移时发布一次），
+    每次轮询新建 --once echo 会因 DDS 发现延迟错过；本类在信号前订阅，
+    next() 阻塞读取到消息或超时。
+    """
+
+    def __init__(self, topic, field="data"):
+        self._p = subprocess.Popen(
+            ["ros2", "topic", "echo", topic, "--field", field, "--once"],
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+
+    def next(self, timeout):
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            r, _, _ = select.select([self._p.stdout], [], [],
+                                    max(0.0, deadline - time.time()))
+            if not r:
+                return None
+            line = self._p.stdout.readline()
+            if line:
+                return line.strip()
+            return None                       # EOF（echo 已退出）
+        return None
+
+    def close(self):
+        self._p.kill()
+
+
+class _LineEcho:
+    """长驻逐行 echo（stdbuf -oL 行缓冲）：连续流消息（commands 等）。
+
+    与 _OnceEcho 不同：不退出、不断开，可持续读取后续消息；next() 超时
+    返回 None（静默检测——e_stop 下 teleop 的 _tick 提前返回、不再发布）。
+    管道输出必须行缓冲，否则块缓冲会把消息积压在内存里读不到。
+    """
+
+    def __init__(self, topic, field="data"):
+        self._p = subprocess.Popen(
+            ["stdbuf", "-oL", "ros2", "topic", "echo", topic, "--field", field],
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+
+    def next(self, timeout):
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            r, _, _ = select.select([self._p.stdout], [], [],
+                                    max(0.0, deadline - time.time()))
+            if not r:
+                return None
+            line = self._p.stdout.readline()
+            if line:
+                return line.strip()
+            return None                       # EOF（echo 已退出）
+        return None
+
+    def drain(self, timeout=0.5):
+        """读取并丢弃已缓冲的行（清掉冻结前最后几条在途指令，再断言静默）。"""
+        while self.next(timeout) is not None:
+            pass
+
+    def close(self):
+        self._p.kill()
+
+
+def _wait_status(value, timeout=25.0):
+    """等待 /teleop/status 的下一条消息为给定值（长驻 --once echo，事后订阅会错过）。"""
+    echo = _OnceEcho("/teleop/status")
+    try:
+        got = echo.next(timeout)
+        return got is not None and str(value).lower() in got.lower()
+    finally:
+        echo.close()
+
+
+def _wait_status_true(timeout=25.0):
+    return _wait_status("true", timeout)
+
+
+def _enable_and_wait(timeout=60.0):
+    """窗口化发布 /teleop/enable 直到 ACTIVE。
+
+    ACTIVE 判定双通道：
+    - /teleop/status=true（状态迁移单次发布，信号前订阅的长驻 echo 捕获）；
+    - /forward_position_controller/commands 出现新数据（50 Hz 流）。record 测试
+      中 enable 由 recorder 的 Enter 先行发出，status 的 ACTIVE 迁移可能在测试
+      订阅完成前就已发生（稳定 ACTIVE 不再发布 status），靠指令流兜底。
+    注：teleop 仅在 ACTIVE 发布映射指令（INACTIVE 的 hold 需要主臂超时，假主臂
+    常驻时不会发生），故指令流可作为 ACTIVE 判据。"""
+    echo = _OnceEcho("/teleop/status")
+    cmd = _LineEcho("/forward_position_controller/commands")
+    try:
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            _pub_bool_window("/teleop/enable", True)
+            got = echo.next(2.0)
+            if got is not None and "true" in got.lower():
+                return True
+            if cmd.next(1.0) is not None:
+                return True
+        return False
+    finally:
+        echo.close()
+        cmd.close()
+
+
+def _launch_stack(tmp_path, master_off_home=False):
+    cfg_path = tmp_path / "ur_teleop.yaml"
+    cfg_path.write_text(CFG_BODY)
+    procs = [
+        _start("ros2", "launch", "ur_teleop", "cell.launch.py",
+               f"config_file:={cfg_path}", "sim:=true", "launch_rviz:=false"),
+        _start("ros2", "run", "ur_teleop", "teleop_node",
+               "--ros-args", "-p", f"config_file:={cfg_path}"),
+        _start(sys.executable, str(FAKE_MASTER),
+               "--off-home" if master_off_home else ""),
+    ]
+    return procs
+
+
+def test_enter_gate_then_mirror(tmp_path):
+    """无 enable 不 ACTIVE；enable 后 50 Hz 映射发布、clamp 生效、跟随正弦。"""
+    _sweep(tmp_path)
+    procs = _launch_stack(tmp_path)
+    try:
+        time.sleep(20.0)                       # cell 启动 + settle 2 s + offset 捕获
+        ok, val = _topic_once("/teleop/status", "data", timeout=5.0)
+        assert not ok, f"Enter/enable 前不应 ACTIVE，却收到 status={val}"
+
+        assert _enable_and_wait(), "enable 后未进入 ACTIVE（重试发布）"
+
+        samples = []
+        for _ in range(4):
+            ok, val = _topic_once("/forward_position_controller/commands", "data", timeout=5.0)
+            assert ok, "未收到 /forward_position_controller/commands"
+            # 偶发的 DDS 重复投递会在行首拼入残留值 → 取末尾 6 维（teleop 只发 6 维）
+            vals = [float(x) for x in re.findall(r"-?\d+\.?\d*", val)]
+            samples.append(vals[-6:] if len(vals) >= 6 else vals)
+            time.sleep(1.0)
+        assert all(len(s) == 6 for s in samples), f"命令维数错误: {samples}"
+        lo, hi = -6.283 + 0.1, 6.283 - 0.1
+        assert all(lo <= v <= hi for s in samples for v in s), f"指令越出 safety 范围: {samples}"
+        spread = [max(x) - min(x) for x in zip(*samples)]
+        assert max(spread) > 0.01, f"指令未跟随主臂运动: {samples}"
+    finally:
+        _kill(procs)
+        _sweep(tmp_path)
+
+
+def test_verify_home_rejects_off_home_master(tmp_path):
+    """主臂不在 home 时停在 VERIFY_HOME，不进入 ACTIVE（spec §9）。"""
+    _sweep(tmp_path)
+    procs = _launch_stack(tmp_path, master_off_home=True)
+    try:
+        time.sleep(18.0)
+        ok, val = _topic_once("/teleop/status", "data", timeout=5.0)
+        assert not ok, f"主臂不在 home 时不应 ACTIVE，却收到 status={val}"
+    finally:
+        _kill(procs)
+        _sweep(tmp_path)
+
+
+def test_record_one_episode(tmp_path):
+    """record 冒烟：Enter → ACTIVE → 录帧 → D 丢弃 → Q finalize（spec §11.3）。"""
+    try:
+        import lerobot  # noqa: F401
+    except ImportError:
+        pytest.skip("lerobot 未安装（需要 source /opt/lerobot_venv/bin/activate）")
+
+    root = tmp_path / "data"
+    cfg_path = tmp_path / "ur_teleop.yaml"
+    cfg_path.write_text(CFG_BODY.replace("mode: teleop", "mode: record")
+                                .replace('root: ""', f"root: {root}"))
+    _sweep(tmp_path)                           # 必须先于 spawn：pkill 按 tmp_path 匹配 stack cmdline
+    procs = [
+        _start("ros2", "launch", "ur_teleop", "cell.launch.py",
+               f"config_file:={cfg_path}", "sim:=true", "launch_rviz:=false"),
+        _start("ros2", "run", "ur_teleop", "teleop_node",
+               "--ros-args", "-p", f"config_file:={cfg_path}"),
+        _start(sys.executable, str(FAKE_MASTER)),
+        # 注意：data_recorder 用 venv 解释器以 -m 启动（ros2 run 的入口脚本
+        # shebang 是系统 python3，缺少 lerobot 会直接崩溃）
+        _start(sys.executable, "-m", "ur_teleop.data_recorder",
+               "--ros-args", "-p", f"config_file:={cfg_path}", stdin=subprocess.PIPE),
+    ]
+    recorder = procs[-1]
+    try:
+        time.sleep(20.0)
+        recorder.stdin.write("enter\n")
+        recorder.stdin.flush()                 # 开始 episode 1 + 发 /teleop/enable
+        assert _enable_and_wait(), "Enter 后未进入 ACTIVE（重试发布 enable）"
+        time.sleep(3.0)                        # 录 ~150 帧
+        recorder.stdin.write("d\n")
+        recorder.stdin.flush()                 # 丢弃
+        time.sleep(1.0)
+        recorder.stdin.write("q\n")
+        recorder.stdin.flush()                 # 退出 + finalize
+        recorder.wait(timeout=15.0)
+        # 本地布局（lerobot 0.5.x 显式 root）：<root>/meta/info.json 在 create 时
+        # 即落盘；repo_id 仅是元数据，不存在 <root>/test/ur_teleop_it 目录
+        assert (root / "meta" / "info.json").exists(), "数据集 meta/info.json 未创建"
+        log = recorder.stdout.read()
+        assert "finalize" in log.lower(), f"recorder 日志未见 finalize:\n{log[-2000:]}"
+    finally:
+        _kill(procs)
+        _sweep(tmp_path)
+
+
+# ============================================================================
+# 追加覆盖（Task 11 派发 A–D）：in-process FSM 白盒 + 子进程冒烟
+# ============================================================================
+
+def _kill_one(p):
+    """Kill a single process group (used to drop fake_master mid-test)."""
+    try:
+        os.killpg(p.pgid, signal.SIGTERM)
+    except (ProcessLookupError, PermissionError):
+        pass
+    time.sleep(1.0)
+    try:
+        os.killpg(p.pgid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):
+        pass
+
+
+class _FakeFuture:
+    """可控的 rclpy Future 替身：done()/result()；finish() 标记完成（白盒 FSM 测试用）。"""
+
+    def __init__(self, result=None, exception=None, cancelled=False, done=True):
+        self._result = result
+        self._exception = exception
+        self._cancelled = cancelled
+        self._done = done
+
+    def done(self):
+        return self._done
+
+    def result(self, timeout=None):
+        if not self._done:
+            raise RuntimeError("future not done")
+        if self._exception is not None:
+            raise self._exception
+        if self._cancelled:
+            raise concurrent.futures.CancelledError()
+        return self._result
+
+    def finish(self, result=None, exception=None):
+        self._done = True
+        self._result = result
+        self._exception = exception
+
+
+def _make_pending(store):
+    f = _FakeFuture(done=False)
+    store.append(f)
+    return f
+
+
+def _ctl(name, state="active"):
+    return types.SimpleNamespace(name=name, state=state)
+
+
+def _list_resp(controllers):
+    return types.SimpleNamespace(controller=controllers)
+
+
+def _load_resp(ok=True):
+    return types.SimpleNamespace(ok=ok)
+
+
+def _switch_resp(ok=True):
+    return types.SimpleNamespace(ok=ok)
+
+
+def _inject_joints(node, master=None, slave=None, gripper=None):
+    # Jazzy 的 JointState.position 是 array.array：先拼 list 再整体赋值。
+    names, positions = [], []
+    if master is not None:
+        names += ALICIA_JOINT_NAMES
+        positions += list(master)
+    if slave is not None:
+        names += UR_JOINT_NAMES
+        positions += list(slave)
+    if gripper is not None:
+        names += [GRIPPER_JOINT]
+        positions += [gripper]
+    msg = JointState()
+    msg.name = names
+    msg.position = positions
+    node._joint_cb(msg)
+
+
+class _CapturePub:
+    def __init__(self, store):
+        self._store = store
+
+    def publish(self, msg):
+        self._store.append(msg)
+
+
+@pytest.fixture
+def fsm_node(tmp_path, monkeypatch):
+    """teleop_node in-process：settle_time_s=0.1 加速；不 spin，直接驱动。"""
+    cfg_path = tmp_path / "ur_teleop.yaml"
+    cfg_path.write_text(CFG_BODY.replace("settle_time_s: 2.0", "settle_time_s: 0.1"))
+    monkeypatch.setattr("ur_teleop.teleop_node.default_config_path", lambda: str(cfg_path))
+    rclpy.init()
+    node = TeleopNode()
+    yield node
+    node.destroy_node()
+    rclpy.try_shutdown()
+
+
+@pytest.fixture
+def home_node(tmp_path, monkeypatch):
+    cfg_path = tmp_path / "ur_teleop.yaml"
+    cfg_path.write_text(CFG_BODY)
+    monkeypatch.setattr("ur_teleop.home_node.default_config_path", lambda: str(cfg_path))
+    rclpy.init()
+    node = HomeNode()
+    yield node
+    node.destroy_node()
+    rclpy.try_shutdown()
+
+
+# ---------- A. teleop_node FSM ----------
+
+def test_switching_chain_list_load_switch_active(fsm_node):
+    """A1: list → (fwd 未加载) → load → switch → ACTIVE（状态与 phase 顺序）。"""
+    node = fsm_node
+    list_fut = _FakeFuture(done=False)
+    load_fut = _FakeFuture(done=False)
+    switch_fut = _FakeFuture(done=False)
+    node._switcher.list_controllers = lambda: list_fut
+    node._switcher.load_controller = lambda name: load_fut
+    node._switcher.switch = lambda a, d: switch_fut
+    node._begin_switch()
+    assert node._state == State.SWITCHING and node._switch_phase == "list"
+    node._tick()                               # in-flight：不阻塞不前进
+    assert node._state == State.SWITCHING and node._switch_phase == "list"
+    list_fut.finish(_list_resp([_ctl("scaled_joint_trajectory_controller")]))
+    node._tick()                               # list 完成且无 fwd → load
+    assert node._switch_phase == "load"
+    load_fut.finish(_load_resp(ok=True))
+    node._tick()                               # load ok → switch
+    assert node._switch_phase == "switch"
+    switch_fut.finish(_switch_resp(ok=True))
+    node._tick()                               # switch ok → ACTIVE
+    assert node._state == State.ACTIVE
+
+
+def test_switching_load_failure_returns_to_armed(fsm_node):
+    """A2: load 响应 ok=false → 回到 ARMED。"""
+    node = fsm_node
+    node._switcher.list_controllers = lambda: _FakeFuture(
+        _list_resp([_ctl("scaled_joint_trajectory_controller")]))
+    node._switcher.load_controller = lambda name: _FakeFuture(_load_resp(ok=False))
+    node._begin_switch()
+    node._tick()                               # list → load
+    assert node._switch_phase == "load"
+    node._tick()                               # load ok=false → ARMED
+    assert node._state == State.ARMED
+    assert node._switch_attempt == 0           # load 失败不计入 switch 重试
+
+
+def test_switching_five_failures_caps_to_armed(fsm_node):
+    """A3: switch 连续失败 5 次 → ARMED（attempt 计数 5）。"""
+    node = fsm_node
+    made = []
+    node._switcher.list_controllers = lambda: _FakeFuture(
+        _list_resp([_ctl("forward_position_controller")]))
+    node._switcher.switch = lambda a, d: _make_pending(made)
+    node._begin_switch()
+    node._tick()                               # fwd 已加载 → 直接 switch
+    assert node._switch_phase == "switch"
+    for attempt in range(1, 6):
+        made[-1].finish(_switch_resp(ok=False))
+        node._tick()
+        if attempt < 5:
+            assert node._state == State.SWITCHING, f"第 {attempt} 次失败应重试"
+        else:
+            assert node._state == State.ARMED, "第 5 次失败应回到 ARMED"
+    assert node._switch_attempt == 5
+
+
+def test_switching_list_exception_falls_through_to_load(fsm_node):
+    """A4a: list future.result() 抛异常 → 视为未加载，走 load 路径。"""
+    node = fsm_node
+    node._switcher.list_controllers = lambda: _FakeFuture(
+        exception=RuntimeError("controller_manager died mid-call"))
+    node._switcher.load_controller = lambda name: _FakeFuture(_load_resp(ok=True))
+    node._switcher.switch = lambda a, d: _FakeFuture(_switch_resp(ok=True))
+    node._begin_switch()
+    node._tick()                               # list 异常 → load
+    assert node._switch_phase == "load"
+    node._tick()                               # load ok → switch
+    assert node._switch_phase == "switch"
+    node._tick()                               # switch ok → ACTIVE
+    assert node._state == State.ACTIVE
+
+
+def test_switching_switch_exception_retries_then_armed(fsm_node):
+    """A4b: switch future 抛异常 → 视为失败重试；5 次后 ARMED，异常不逃逸 _tick。"""
+    node = fsm_node
+    made = []
+    node._switcher.list_controllers = lambda: _FakeFuture(
+        _list_resp([_ctl("forward_position_controller")]))
+    node._switcher.switch = lambda a, d: _make_pending(made)
+    node._begin_switch()
+    node._tick()
+    assert node._switch_phase == "switch"
+    for attempt in range(1, 6):
+        made[-1].finish(exception=RuntimeError("controller_manager died mid-call"))
+        node._tick()                           # 不得抛异常
+        if attempt < 5:
+            assert node._state == State.SWITCHING and node._switch_attempt == attempt
+        else:
+            assert node._state == State.ARMED and node._switch_attempt == 5
+
+
+def test_switching_none_future_returns_to_armed(fsm_node):
+    """A5: future=None（客户端未就绪）→ 直接 ARMED。"""
+    node = fsm_node
+    node._state = State.SWITCHING
+    node._switch_phase = "switch"
+    node._switch_future = None
+    node._tick()
+    assert node._state == State.ARMED
+
+
+def test_switching_inflight_future_does_not_block(fsm_node):
+    """A6: in-flight switch future 时 _tick 立即返回，完成后才推进。"""
+    node = fsm_node
+    list_fut = _FakeFuture(done=False)
+    node._switcher.list_controllers = lambda: list_fut
+    node._begin_switch()
+    t0 = time.time()
+    node._tick()
+    elapsed = time.time() - t0
+    assert node._state == State.SWITCHING
+    assert elapsed < 0.5, f"_tick 阻塞 {elapsed:.2f}s（in-flight future 应立即返回）"
+    list_fut.finish(_list_resp([_ctl("scaled_joint_trajectory_controller")]))
+    node._switcher.load_controller = lambda name: _FakeFuture(_load_resp(ok=True))
+    node._switcher.switch = lambda a, d: _FakeFuture(_switch_resp(ok=True))
+    node._tick()
+    node._tick()
+    node._tick()
+    assert node._state == State.ACTIVE
+
+
+def test_teleop_alone_exits_1_without_cell(tmp_path):
+    """A7（子进程）: 无 cell 时 ~30 s 超时 → exit 1 + 超时错误日志。"""
+    cfg_path = tmp_path / "ur_teleop.yaml"
+    cfg_path.write_text(CFG_BODY)
+    proc = _start("ros2", "run", "ur_teleop", "teleop_node",
+                  "--ros-args", "-p", f"config_file:={cfg_path}")
+    try:
+        rc = proc.wait(timeout=40.0)
+        log = proc.stdout.read()
+        assert rc == 1, f"无 cell 应 exit 1，实际 {rc}；log:\n{log[-2000:]}"
+        assert "30 s 内未检测到 cell" in log, f"未见超时错误日志:\n{log[-2000:]}"
+    finally:
+        _kill([proc])
+
+
+def test_verify_home_tolerance_boundary(fsm_node):
+    """A8: 恰好等于 tolerance → 通过；逐关节 tol+ε → 拒绝；进入 SETTLING。"""
+    node = fsm_node
+    tol = 0.05
+    _inject_joints(node, master=[0.0] * 6, slave=SLAVE_HOME)
+    node._state = State.VERIFY_HOME
+    node._tick()
+    assert node._state == State.SETTLING, "恰好在 tolerance 内应通过"
+    for i in range(6):
+        for side in ("master", "slave"):
+            m = [0.0] * 6
+            s = list(SLAVE_HOME)
+            (m if side == "master" else s)[i] += tol + 1e-6
+            _inject_joints(node, master=m, slave=s)
+            node._state = State.VERIFY_HOME
+            node._tick()
+            assert node._state == State.VERIFY_HOME, f"{side}[{i}] 超限应拒绝"
+    # 恰好 tol → 通过
+    m = [0.0] * 6
+    m[2] = tol
+    _inject_joints(node, master=m, slave=SLAVE_HOME)
+    node._state = State.VERIFY_HOME
+    node._tick()
+    assert node._state == State.SETTLING
+
+
+def test_verify_home_force_home_skips_check(tmp_path, monkeypatch):
+    """A8: force_home:=true 参数 → tolerance 置 inf，远离 home 也通过。"""
+    cfg_path = tmp_path / "ur_teleop.yaml"
+    cfg_path.write_text(CFG_BODY)
+    monkeypatch.setattr("ur_teleop.teleop_node.default_config_path", lambda: str(cfg_path))
+    rclpy.init(args=["--ros-args", "-p", "force_home:=true"])
+    node = TeleopNode()
+    try:
+        assert node._cfg["home"]["at_home_tolerance_rad"] == float("inf")
+        _inject_joints(node, master=[0.5] * 6, slave=[-0.3] * 6)
+        node._state = State.VERIFY_HOME
+        node._tick()
+        assert node._state == State.SETTLING, "force_home 应跳过 VERIFY_HOME 验证"
+    finally:
+        node.destroy_node()
+        rclpy.try_shutdown()
+
+
+def test_settling_motion_resets_timer(fsm_node):
+    """A9: SETTLING 中运动超过阈值重置计时；静止满 settle_time_s 才前进。"""
+    node = fsm_node
+    _inject_joints(node, master=[0.0] * 6, slave=[0.0] * 6)
+    node._state = State.SETTLING
+    node._settle_start = time.time()
+    node._tick()                               # 首帧：记录 _last_pose
+    assert node._state == State.SETTLING
+    time.sleep(0.06)                           # 未满 settle 0.1 s
+    node._tick()
+    assert node._state == State.SETTLING, "settle 未到 0.1 s 不应离开"
+    _inject_joints(node, master=[0.05] * 6, slave=[0.0] * 6)
+    node._tick()                               # motion 0.05 > 0.01 → 计时重置
+    assert node._state == State.SETTLING
+    time.sleep(0.06)                           # 重置后仅 0.06 s（未重置则累计 0.12 s）
+    node._tick()
+    assert node._state == State.SETTLING, "motion 重置后计时应重新开始"
+    time.sleep(0.15)                           # 静止 0.15 s ≥ 0.1 s
+    node._tick()
+    assert node._state == State.CAPTURE_OFFSET
+
+
+def test_capture_offset_builds_working_mapper(fsm_node):
+    """A10: CAPTURE_OFFSET 后构造 JointMapper，master home → ≈ slave home。"""
+    node = fsm_node
+    master = [0.1, -0.2, 0.3, -0.1, 0.05, 0.2]
+    slave = [-0.05, -1.6, 0.1, -1.5, 0.02, 0.1]
+    _inject_joints(node, master=master, slave=slave)
+    node._state = State.CAPTURE_OFFSET
+    node._tick()
+    assert node._state == State.ARMED
+    assert node._offset.captured
+    assert node._mapper is not None
+    out = node._mapper.master_to_slave(master)
+    assert all(abs(a - b) < 1e-9 for a, b in zip(out, slave)), \
+        f"master home 应映射到 slave home: {out} vs {slave}"
+    moved = [m + 0.1 for m in master]
+    out2 = node._mapper.master_to_slave(moved)
+    assert all(abs(a - b - 0.1) < 1e-9 for a, b in zip(out2, out)), "偏移映射错误"
+
+
+def _cmd_values(line):
+    vals = [float(x) for x in re.findall(r"-?\d+\.?\d*", line or "")]
+    return vals if len(vals) == 6 else None
+
+
+def _wait_still_commands(timeout=6.0, settle=1.0):
+    """等待指令流变为恒定值（INACTIVE 的 hold：50 Hz 持续发布但值不变）。
+
+    status=false 是单次信号、可能被 DDS 发现延迟错过；指令恒定是 INACTIVE
+    的连续可观测行为，作为兜底判据。"""
+    echo = _LineEcho("/forward_position_controller/commands")
+    try:
+        deadline = time.time() + timeout
+        base, t0 = None, None
+        while time.time() < deadline:
+            vals = _cmd_values(echo.next(2.0))
+            if vals is None:
+                continue
+            if base is None:
+                base, t0 = vals, time.time()
+            elif max(abs(a - b) for a, b in zip(base, vals)) > 0.01:
+                base, t0 = vals, time.time()
+            elif time.time() - t0 >= settle:
+                return True
+        return False
+    finally:
+        echo.close()
+
+
+def _wait_moving_commands(timeout=8.0, move=0.01):
+    """等待指令流恢复变化（ACTIVE 的映射跟随主臂正弦；INACTIVE 的 hold 恒定）。
+
+    status=true 是单次信号、可能被 DDS 发现延迟错过；指令变化是 ACTIVE 恢复
+    的连续可观测行为，作为兜底判据。"""
+    echo = _LineEcho("/forward_position_controller/commands")
+    try:
+        deadline = time.time() + timeout
+        first = None
+        while time.time() < deadline:
+            vals = _cmd_values(echo.next(2.0))
+            if vals is None:
+                continue
+            if first is None:
+                first = vals
+                continue
+            if max(abs(a - b) for a, b in zip(first, vals)) > move:
+                return True
+        return False
+    finally:
+        echo.close()
+
+
+def test_watchdog_inactive_then_recover(tmp_path):
+    """A11+A13（子进程）: ACTIVE → 杀 fake_master → status=false；重启 → status=true；
+    且 ACTIVE 时 /demonstration=true。"""
+    _sweep(tmp_path)
+    procs = _launch_stack(tmp_path)
+    echoes = []
+    try:
+        time.sleep(20.0)
+        # /demonstration 只在 ACTIVE 迁移时发布一次 → 在 enable 前订阅
+        demo = _OnceEcho("/demonstration")
+        echoes.append(demo)
+        assert _enable_and_wait(), "enable 后未进入 ACTIVE（重试发布）"
+        got_demo = demo.next(5.0)
+        assert got_demo is not None and "true" in got_demo.lower(), \
+            f"/demonstration 应为 true: {got_demo!r}"
+        # status=false 也是单次信号 → 先订阅（给 DDS 匹配留时间），再杀 fake
+        e_false = _OnceEcho("/teleop/status")
+        echoes.append(e_false)
+        time.sleep(1.5)
+        _kill_one(procs[2])                    # 杀掉 fake_master
+        got = e_false.next(6.0)
+        if got is None or "false" not in got.lower():
+            # status=false 单次信号可能被错过 → 指令恒定（hold）兜底
+            assert _wait_still_commands(6.0), \
+                "主臂断开后未发布 status=false，指令流也未冻结为 hold"
+        # 恢复：订阅后再重启 fake
+        e_true = _OnceEcho("/teleop/status")
+        echoes.append(e_true)
+        time.sleep(1.0)
+        procs[2] = _start(sys.executable, str(FAKE_MASTER))
+        got = e_true.next(6.0)
+        if got is None or "true" not in got.lower():
+            # status=true 单次信号可能被错过 → 指令恢复跟随（正弦）兜底
+            assert _wait_moving_commands(8.0), \
+                "主臂恢复后未回到 ACTIVE（status 单次信号被错过，指令流也未恢复跟随）"
+    finally:
+        for e in echoes:
+            e.close()
+        _kill(procs)
+        _sweep(tmp_path)
+
+
+def test_estop_freezes_then_resumes(tmp_path):
+    """A12（子进程）: ACTIVE → e_stop ON → 指令静默（_tick 提前返回、不再发布）；
+    OFF → 恢复跟随。"""
+    _sweep(tmp_path)
+    procs = _launch_stack(tmp_path)
+    echo = None
+    try:
+        time.sleep(20.0)
+        assert _enable_and_wait(), "enable 后未进入 ACTIVE（重试发布）"
+        echo = _LineEcho("/forward_position_controller/commands")
+        s1 = echo.next(8.0)
+        assert s1 is not None, "ACTIVE 下未收到 commands"
+        s2 = echo.next(2.0)
+        assert s1 != s2, f"ACTIVE 下指令应随主臂运动: {s1} vs {s2}"
+        _pub_bool_window("/teleop/e_stop", True)   # --once 会因 DDS 发现延迟丢失
+        time.sleep(3.0)                            # 等锁存生效（含发现延迟）
+        echo.drain()                               # 清掉冻结前最后几条在途指令
+        frozen = echo.next(3.0)
+        assert frozen is None, \
+            f"e_stop 下指令应静默（_tick 提前返回），却收到: {frozen!r}"
+        _pub_bool_window("/teleop/e_stop", False)
+        r1 = echo.next(8.0)
+        assert r1 is not None, "e_stop 解除后未恢复 commands"
+        r2 = echo.next(2.0)
+        assert r1 != r2, f"e_stop 解除后指令应恢复运动: {r1} vs {r2}"
+    finally:
+        if echo is not None:
+            echo.close()
+        _kill(procs)
+        _sweep(tmp_path)
+
+
+@pytest.mark.xfail(reason="包内 bug: teleop_node.py _gripper_tick 调用 rclpy "
+                          "ActionClient.server_is_available()（Jazzy 中不存在，"
+                          "应为 server_is_ready()）→ 首次探测抛 AttributeError；"
+                          "待 Task 12 修复，本测试记录预期行为（探测→禁用）")
+def test_gripper_probe_disables_fsm_without_action_server(tmp_path, monkeypatch):
+    """A14: gripper.enabled=true 且无 action server → 首次 _gripper_tick 探测后禁用，不抛异常。"""
+    cfg_path = tmp_path / "ur_teleop.yaml"
+    cfg_path.write_text(CFG_BODY.replace("enabled: false", "enabled: true"))
+    monkeypatch.setattr("ur_teleop.teleop_node.default_config_path", lambda: str(cfg_path))
+    rclpy.init()
+    node = TeleopNode()
+    try:
+        assert node._gripper.enabled
+        assert node._gripper_action is not None
+        node._gripper_tick()                   # 首次探测：server 不可用 → 禁用
+        assert not node._gripper.enabled, "无 action server 时应禁用夹爪 FSM"
+        assert node._gripper_probed
+        node._gripper_tick()                   # 后续 tick 直接返回，不抛异常
+        assert not node._gripper.enabled
+    finally:
+        node.destroy_node()
+        rclpy.try_shutdown()
+
+
+def test_shutdown_restore_without_controller_manager_is_prompt(fsm_node):
+    """A15: restore_controller_on_exit 且无 controller_manager（switch→None）→ 立即返回不抛。"""
+    node = fsm_node
+    node._state = State.ACTIVE
+    t0 = time.time()
+    node.shutdown()                            # 客户端未就绪 → switch() 返回 None
+    assert time.time() - t0 < 2.0
+
+
+# ---------- B. ControllerSwitcher statics ----------
+
+def test_switcher_statics_contract_on_bad_futures():
+    """B: list_result/switch_ok 对 cancelled/异常 future 抛错（调用侧已守卫）；其余不抛。"""
+    cancelled = _FakeFuture(cancelled=True)
+    failed = _FakeFuture(exception=RuntimeError("controller_manager died mid-call"))
+    with pytest.raises(concurrent.futures.CancelledError):
+        ControllerSwitcher.list_result(cancelled)
+    with pytest.raises(RuntimeError):
+        ControllerSwitcher.list_result(failed)
+    with pytest.raises(concurrent.futures.CancelledError):
+        ControllerSwitcher.switch_ok(cancelled)
+    with pytest.raises(RuntimeError):
+        ControllerSwitcher.switch_ok(failed)
+    # 未完成 / None / 空结果：不抛
+    assert ControllerSwitcher.list_result(None) == {}
+    assert ControllerSwitcher.list_result(_FakeFuture(done=False)) == {}
+    assert ControllerSwitcher.list_result(_FakeFuture(result=None)) == {}
+    assert ControllerSwitcher.switch_ok(None) is False
+    assert ControllerSwitcher.switch_ok(_FakeFuture(done=False)) is False
+    assert ControllerSwitcher.switch_ok(_FakeFuture(result=None)) is False
+
+
+# ---------- C. home_node ----------
+
+def test_home_at_home_tolerance_boundary(home_node):
+    """C: at_home 恰好 tolerance → True；逐关节 tol+ε → False；缺数据 → False。"""
+    node = home_node
+    tol = node._tolerance
+    assert tol == 0.05
+    _inject_joints(node, master=[0.0] * 6, slave=SLAVE_HOME)
+    assert node.at_home()
+    for i in range(6):
+        for side in ("master", "slave"):
+            m = [0.0] * 6
+            s = list(SLAVE_HOME)
+            (m if side == "master" else s)[i] += tol + 1e-6
+            _inject_joints(node, master=m, slave=s)
+            assert not node.at_home(), f"{side}[{i}] 超限应 False"
+    m = [0.0] * 6
+    m[3] = tol
+    _inject_joints(node, master=m, slave=SLAVE_HOME)
+    assert node.at_home(), "恰好 tol 应 True"
+    node._joint_states = None
+    assert not node.at_home(), "缺关节数据应 False"
+
+
+def test_home_publish_alicia_home_opens_gripper(home_node):
+    """C: publish_alicia_home 在 6 关节后附带夹爪 1000（开）。"""
+    node = home_node
+    captured = []
+    node._cmd_pub = _CapturePub(captured)
+    node.publish_alicia_home()
+    assert len(captured) == 1
+    msg = captured[0]
+    assert list(msg.name) == ALICIA_JOINT_NAMES + [GRIPPER_JOINT]
+    assert list(msg.position) == [0.0] * 6 + [1000.0]
+
+
+# ---------- D. lerobot record 保存冒烟 ----------
+
+def test_record_save_episode(tmp_path):
+    """D（子进程）: Enter → ACTIVE → 录帧 → S 保存 → Q finalize（1 episode 已保存）。"""
+    try:
+        import lerobot  # noqa: F401
+    except ImportError:
+        pytest.skip("lerobot 未安装（需要 source /opt/lerobot_venv/bin/activate）")
+
+    root = tmp_path / "data"
+    cfg_path = tmp_path / "ur_teleop.yaml"
+    cfg_path.write_text(CFG_BODY.replace("mode: teleop", "mode: record")
+                                .replace('root: ""', f"root: {root}"))
+    _sweep(tmp_path)                           # 必须先于 spawn：pkill 按 tmp_path 匹配 stack cmdline
+    procs = [
+        _start("ros2", "launch", "ur_teleop", "cell.launch.py",
+               f"config_file:={cfg_path}", "sim:=true", "launch_rviz:=false"),
+        _start("ros2", "run", "ur_teleop", "teleop_node",
+               "--ros-args", "-p", f"config_file:={cfg_path}"),
+        _start(sys.executable, str(FAKE_MASTER)),
+        # 注意：data_recorder 用 venv 解释器以 -m 启动（ros2 run 的入口脚本
+        # shebang 是系统 python3，缺少 lerobot 会直接崩溃）
+        _start(sys.executable, "-m", "ur_teleop.data_recorder",
+               "--ros-args", "-p", f"config_file:={cfg_path}", stdin=subprocess.PIPE),
+    ]
+    recorder = procs[-1]
+    try:
+        time.sleep(20.0)
+        recorder.stdin.write("enter\n")
+        recorder.stdin.flush()                 # 开始 episode 1 + 发 /teleop/enable
+        assert _enable_and_wait(), "Enter 后未进入 ACTIVE（重试发布 enable）"
+        time.sleep(3.0)                        # 录 ≥ min_frames 帧
+        recorder.stdin.write("s\n")
+        recorder.stdin.flush()                 # 保存 episode
+        time.sleep(1.0)
+        recorder.stdin.write("q\n")
+        recorder.stdin.flush()                 # 退出 + finalize
+        recorder.wait(timeout=15.0)
+        # 本地布局（lerobot 0.5.x 显式 root）：info.json 在 create 时落盘，
+        # episode parquet 在 save_episode 时落盘到 data/chunk-000/
+        assert (root / "meta" / "info.json").exists(), "数据集 meta/info.json 未创建"
+        assert (root / "data" / "chunk-000" / "file-000.parquet").exists(), \
+            "episode parquet 未保存"
+        log = recorder.stdout.read()
+        assert "已保存" in log, f"recorder 日志未见保存:\n{log[-2000:]}"
+        assert "finalize" in log.lower(), f"recorder 日志未见 finalize:\n{log[-2000:]}"
+    finally:
+        _kill(procs)
+        _sweep(tmp_path)
