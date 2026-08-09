@@ -766,6 +766,7 @@ ament_flake8 exit=0 key=No problems found PASS
 
 ```bash
 python3 -c '
+from copy import deepcopy
 from pathlib import Path
 import yaml
 
@@ -800,15 +801,22 @@ assert local["robotiq_force_torque_sensor_broadcaster"]["ros__parameters"] == {
 assert local["force_torque_sensor_broadcaster"] == upstream[
     "force_torque_sensor_broadcaster"
 ]
-print("yaml_exact_extensions=PASS")
+reduced = deepcopy(local)
+reduced_manager = reduced["controller_manager"]["ros__parameters"]
+reduced_manager.pop("robotiq_gripper_controller")
+reduced_manager.pop("robotiq_force_torque_sensor_broadcaster")
+reduced.pop("robotiq_gripper_controller")
+reduced.pop("robotiq_force_torque_sensor_broadcaster")
+assert reduced == upstream
+print("yaml_upstream_plus_exact_extensions=PASS")
 '
 ```
 
 实际输出与结果：
 
 ```text
-yaml_exact_extensions=PASS
-yaml_assertions exit=0 key=yaml_exact_extensions=PASS PASS
+yaml_upstream_plus_exact_extensions=PASS
+yaml_full_structure_assertion exit=0 status=PASS
 ```
 
 4. 两个 launch 的 `LaunchDescription` 构造与顶层 entity 数量断言：
