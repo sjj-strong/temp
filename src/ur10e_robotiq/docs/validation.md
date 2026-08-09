@@ -440,3 +440,20 @@ xmllint --xpath \
 ```
 
 GREEN 结果：两份 Xacro、两次 `check_urdf` 和全部 XPath 检查退出码均为 `0`；两次 `check_urdf` 均输出 `Successfully Parsed XML`；display/mock 的 `<ros2_control>` 数量分别为 `0` 和 `3`；姿态输出为 `rpy="-3.1415 0 0"`。
+
+### 逐项验证状态（fix round 1/5）
+
+每条命令均在执行后立即捕获退出码与关键输出；脚本使用累积 `overall` 状态，任一项失败都会令最终退出码非零，不会被后续成功命令掩盖。
+
+| 验证项 | 实际退出码 | 实际关键输出 | 状态 |
+|---|---:|---|---|
+| display Xacro | `0` | 生成 `/tmp/ur10e_robotiq_display_review1.urdf`，`23769` bytes | **PASS** |
+| mock Xacro | `0` | 生成 `/tmp/ur10e_robotiq_mock_review1.urdf`，`41491` bytes | **PASS** |
+| display `check_urdf` | `0` | `Successfully Parsed XML` | **PASS** |
+| mock `check_urdf` | `0` | `Successfully Parsed XML` | **PASS** |
+| display `<ros2_control>` 计数 | `0` | 实际 `0`，预期 `0` | **PASS** |
+| mock `<ros2_control>` 计数 | `0` | 实际 `3`，预期 `3` | **PASS** |
+| display `robotiq_85_base_joint` 姿态断言 | `0` | `rpy="-3.1415 0 0"` | **PASS** |
+| mock `robotiq_85_base_joint` 姿态断言 | `0` | `rpy="-3.1415 0 0"` | **PASS** |
+
+累积结果：`overall_exit=0`，**PASS**。
