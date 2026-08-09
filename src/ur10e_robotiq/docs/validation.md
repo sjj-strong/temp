@@ -987,3 +987,230 @@ residual_process_check pgrep_exit=1 count=0 assertion_exit=0 status=PASS
 ```
 
 本轮所有静态与 live 项均有命令、输出及逐项退出码，累计 **PASS**。此前沙箱 DDS/socket 失败历史，以及夹爪激活时一次 500 Hz loop overrun、停止时两次 statistics context 警告均继续保留。
+
+## 2026-08-09 — Stage 5：unified Mock hardware、FT300、夹爪与 UR trajectory
+
+- live 环境：沙箱外，`ROS_DOMAIN_ID=96`、`ROS_HOME=/tmp/ur10e-task5-main-ros-home`；基础查询阶段 `ROS_LOG_DIR=/tmp/ur10e-task5-main-query-log`，action 阶段切换为 `/tmp/ur10e-task5-main-action-log`
+- 总体结果：brief 要求的自动 live 断言全部 **PASS**；任务状态为 **DONE_WITH_CONCERNS**，因为 RViz mimic 人工视觉未执行，且保留若干不影响必需 position/wrench 断言的观察警告。
+- 历史边界：此前沙箱内 `ROS_DOMAIN_ID=95` 的尝试被 DDS/socket `Operation not permitted` 阻塞；以下结论仅来自本次沙箱外补验，不覆盖或隐藏该失败历史。
+
+### 启动与基础命令
+
+执行环境与 launch：
+
+```bash
+source /ros2_ws/install/setup.bash
+export ROS_DOMAIN_ID=96
+export ROS_HOME=/tmp/ur10e-task5-main-ros-home
+export ROS_LOG_DIR=/tmp/ur10e-task5-main-query-log
+ros2 launch ur10e_robotiq_description mock_control.launch.py
+```
+
+launch 运行期间执行：
+
+```bash
+ros2 control list_hardware_components --controller-manager /controller_manager \
+  > /tmp/ur10e_task5_hardware.txt
+ros2 control list_hardware_interfaces --controller-manager /controller_manager \
+  > /tmp/ur10e_task5_interfaces.txt
+ros2 control list_controllers --controller-manager /controller_manager \
+  > /tmp/ur10e_task5_controllers.txt
+ros2 action list -t > /tmp/ur10e_task5_actions.txt
+ros2 topic info /robotiq_force_torque_sensor_broadcaster/wrench -v \
+  > /tmp/ur10e_task5_wrench_info.txt
+ros2 topic echo --once --timeout 10 /robotiq_force_torque_sensor_broadcaster/wrench \
+  > /tmp/ur10e_task5_wrench.txt
+ros2 topic echo --once --timeout 10 /joint_states \
+  > /tmp/ur10e_task5_joint_initial.txt
+```
+
+实际逐项退出码：
+
+```text
+hardware_components_exit=0
+hardware_interfaces_exit=0
+controllers_exit=0
+action_list_exit=0
+wrench_info_exit=0
+wrench_echo_exit=0
+initial_joint_echo_exit=0
+overall_exit=0
+```
+
+### Hardware、interface 与 controller
+
+`/tmp/ur10e_task5_hardware.txt` 关键输出：
+
+```text
+Hardware Component 1
+  name: robotiq_ft_sensor
+  state: id=3 label=active
+Hardware Component 2
+  name: ur
+  state: id=3 label=active
+Hardware Component 3
+  name: robotiq_2f85
+  state: id=3 label=active
+```
+
+结果：三个目标 hardware component 均为 `active`（**PASS**）。
+
+`/tmp/ur10e_task5_interfaces.txt` 与 hardware 输出的关键接口为：
+
+```text
+elbow_joint/position [available] [claimed]
+shoulder_lift_joint/position [available] [claimed]
+shoulder_pan_joint/position [available] [claimed]
+wrist_1_joint/position [available] [claimed]
+wrist_2_joint/position [available] [claimed]
+wrist_3_joint/position [available] [claimed]
+
+elbow_joint/velocity
+shoulder_lift_joint/velocity
+shoulder_pan_joint/velocity
+wrist_1_joint/velocity
+wrist_2_joint/velocity
+wrist_3_joint/velocity
+
+robotiq_85_left_knuckle_joint/position [available] [claimed]
+robotiq_85_left_knuckle_joint/position
+
+robotiq_ft_sensor/force.x
+robotiq_ft_sensor/force.y
+robotiq_ft_sensor/force.z
+robotiq_ft_sensor/torque.x
+robotiq_ft_sensor/torque.y
+robotiq_ft_sensor/torque.z
+```
+
+结果：UR 六轴 position command/state 与 velocity state、主动夹爪 position command/state、FT 六个 state interface 均存在（**PASS**）。
+
+`/tmp/ur10e_task5_controllers.txt` 关键输出：
+
+```text
+scaled_joint_trajectory_controller      ur_controllers/ScaledJointTrajectoryController                active
+robotiq_force_torque_sensor_broadcaster force_torque_sensor_broadcaster/ForceTorqueSensorBroadcaster  active
+joint_state_broadcaster                 joint_state_broadcaster/JointStateBroadcaster                 active
+robotiq_gripper_controller              parallel_gripper_action_controller/GripperActionController    active
+```
+
+结果：四个目标 controller 均为 `active`（**PASS**）。夹爪 controller 已 active，因此没有执行条件式 `set_controller_state`，也未修改 controller YAML。
+
+### Action 类型与 FT300 fake wrench
+
+`ros2 action list -t` 的实际关键输出：
+
+```text
+/robotiq_gripper_controller/gripper_cmd [control_msgs/action/ParallelGripperCommand]
+/scaled_joint_trajectory_controller/follow_joint_trajectory [control_msgs/action/FollowJointTrajectory]
+```
+
+结果：夹爪使用 Jazzy `ParallelGripperCommand`，scaled UR controller 提供 `FollowJointTrajectory`（**PASS**）。
+
+wrench topic info 与一次消息的关键输出：
+
+```text
+Type: geometry_msgs/msg/WrenchStamped
+Publisher count: 1
+Node name: robotiq_force_torque_sensor_broadcaster
+Topic type: geometry_msgs/msg/WrenchStamped
+
+header:
+  frame_id: robotiq_ft_frame_id
+wrench:
+  force:  {x: 0.0, y: 0.0, z: 0.0}
+  torque: {x: 0.0, y: 0.0, z: 0.0}
+```
+
+结果：类型、frame 与六个有限零值全部满足 fake mode 契约（**PASS**）。`ros2 topic echo` 同时报告一次 `A message was lost`；命令仍退出 `0` 且取得一条完整有效消息，故记录为 QoS/采样警告，不改变消息内容断言。
+
+### ParallelGripperCommand Open、Mid、Close
+
+逐目标执行，并在每个 goal 后采集 joint state：
+
+```bash
+export ROS_LOG_DIR=/tmp/ur10e-task5-main-action-log
+
+ros2 action send_goal /robotiq_gripper_controller/gripper_cmd \
+  control_msgs/action/ParallelGripperCommand \
+  "{command: {name: [robotiq_85_left_knuckle_joint], position: [0.0], velocity: [], effort: []}}" \
+  --feedback > /tmp/ur10e_task5_gripper_open.txt
+ros2 topic echo --once --timeout 10 /joint_states \
+  > /tmp/ur10e_task5_joint_open.txt
+
+ros2 action send_goal /robotiq_gripper_controller/gripper_cmd \
+  control_msgs/action/ParallelGripperCommand \
+  "{command: {name: [robotiq_85_left_knuckle_joint], position: [0.4], velocity: [], effort: []}}" \
+  --feedback > /tmp/ur10e_task5_gripper_mid.txt
+ros2 topic echo --once --timeout 10 /joint_states \
+  > /tmp/ur10e_task5_joint_mid.txt
+
+ros2 action send_goal /robotiq_gripper_controller/gripper_cmd \
+  control_msgs/action/ParallelGripperCommand \
+  "{command: {name: [robotiq_85_left_knuckle_joint], position: [0.7929], velocity: [], effort: []}}" \
+  --feedback > /tmp/ur10e_task5_gripper_close.txt
+ros2 topic echo --once --timeout 10 /joint_states \
+  > /tmp/ur10e_task5_joint_close.txt
+```
+
+实际逐项退出码：
+
+```text
+open_goal_exit=0  open_joint_echo_exit=0
+mid_goal_exit=0   mid_joint_echo_exit=0
+close_goal_exit=0 close_joint_echo_exit=0
+gripper_overall_exit=0
+```
+
+三个 action result 均包含：
+
+```text
+Goal accepted with ID: <非空 UUID>
+stalled: false
+reached_goal: true
+Goal finished with status: SUCCEEDED
+```
+
+result position 分别为 `0.0`、`0.4`、`0.7929`。每次目标后的 `/joint_states` 中，`robotiq_85_left_knuckle_joint` 也分别精确为：
+
+```text
+Open:  0.0
+Mid:   0.4
+Close: 0.7929
+```
+
+结果：Open/Mid/Close 的 accepted、成功 result、`reached_goal: true`、`SUCCEEDED` 与主动关节 position 全部通过（**PASS**）。
+
+Mid/Close 的五个 mimic joint 数值自动证据为：
+
+```text
+joint                                      Mid       Close
+robotiq_85_left_finger_tip_joint          -0.4      -0.7929
+robotiq_85_left_inner_knuckle_joint        0.4       0.7929
+robotiq_85_right_finger_tip_joint          0.4       0.7929
+robotiq_85_right_inner_knuckle_joint      -0.4      -0.7929
+robotiq_85_right_knuckle_joint            -0.4      -0.7929
+```
+
+结果：五个 mimic joint 按预期正负号与幅值同步（自动数值检查 **PASS**）。RViz mimic links 人工视觉：**未执行**。
+
+观察警告：Close action result（Open/Mid 也出现同类格式）的 `state.name` 为空数组，effort 为极小非零值 `6.3541539735668e-310`；各 `/joint_states` 的六个夹爪 effort 为 `.nan`。这些字段不属于 brief 的必需 position/reached_goal 断言，故不改变上述 PASS，但不能据此声称 mock effort 有效。
+
+### UR trajectory action 与六关节 position
+
+action 类型已由上述 `action list` 验证。`/tmp/ur10e_task5_joint_initial.txt` 及三个目标后的 joint state 均含以下 UR position：
+
+```text
+elbow_joint:         0.0
+shoulder_lift_joint: -1.57
+shoulder_pan_joint:   0.0
+wrist_1_joint:       -1.57
+wrist_2_joint:        0.0
+wrist_3_joint:        0.0
+```
+
+六值均存在且为有限数（**PASS**）。
+
+### 停止与残留
+
+完成验证后停止 launch。日志显示 `robotiq_ft_sensor`、`ur`、`robotiq_2f85` 三个 hardware component 均 successful shutdown，`ros2_control_node`、`robot_state_publisher` 与 `trajectory_until_node` clean finish；残留进程计数为 `0`，清理断言退出码为 `0`（**PASS**）。停止期间出现一次 `pal_statistics` context error，记录为 shutdown 警告，不改变已经取得的 live 断言或残留进程结论。
