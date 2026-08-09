@@ -586,3 +586,137 @@ reason 'the frame id of the message is empty'
 | GUI 拖动主动夹爪关节观察五个 mimic 同步 | **未执行** | joint_states/TF 可用，但没有人工拖动与视觉同步验收 |
 
 动态自动验收结论：live description、joint states、安装 TF、TCP TF 和完整 frame graph 均取得有效证据（**PASS**）。Stage 3 总状态保持 **DONE_WITH_CONCERNS**：剩余 concerns 为 RViz 空 frame message-filter 警告，以及三项人工视觉/拖动检查未执行。
+
+## 2026-08-09 — Stage 4：单 controller_manager Mock control
+
+- 目标：通过一个上游 `ur_control.launch.py` 实例管理 UR、Robotiq 2F-85 和 FT300，并加载夹爪与 FT broadcaster。
+- 总体结果：**自动验收 PASS（带警告）**。RED、配置/launch 静态检查、隔离构建、唯一 control-node、三个 active hardware、目标 service graph 和 controller 状态均取得真实证据；保留沙箱内 DDS/socket **FAIL（环境）** 历史。非阻塞 concerns 为一次 500 Hz loop overrun，以及停止阶段两次 statistics context 警告。
+
+### TDD RED
+
+创建 Task 4 文件前执行：
+
+```bash
+source /ros2_ws/install/setup.bash
+ros2 launch ur10e_robotiq_description mock_control.launch.py
+```
+
+退出码 `1`，关键输出为：
+
+```text
+file 'mock_control.launch.py' was not found in the share directory of package
+'ur10e_robotiq_description'
+```
+
+结果：**PASS（预期 RED）**，失败原因精确为目标 launch 缺失。
+
+### 静态配置与 launch
+
+| 检查项 | 状态 | 实际证据 |
+|---|---|---|
+| 两份 launch Python 语法 | **PASS** | `py_compile` 退出 `0`；pycache 定向至 `/tmp` |
+| LaunchDescription 构造 | **PASS** | RSP/mock 分别构造 `3` 个顶层 entity |
+| YAML 真实解析 | **PASS** | `yaml.safe_load` 成功，精确 type/参数断言全部通过 |
+| 官方 YAML 保留 | **PASS** | 删除四个 Task 4 新增键后，解析结构与官方 YAML 完全相等 |
+| 上游 UR FT broadcaster 不变 | **PASS** | 本地/官方对应解析块完全相等，仍使用 `tcp_fts_sensor`、`tool0_controller`、`ft_data` |
+| 单一姿态来源 | **PASS** | 两个 launch 无 `gripper_rpy` 或姿态数值；继承组合 Xacro 默认值 |
+| 安装后 launch 展开 | **PASS** | `ros2 launch ... --show-args` 退出 `0` |
+
+首次 LaunchDescription 构造因默认 `/root/.ros/log` 只读而退出 `1`；仅设置 `ROS_LOG_DIR=/tmp/ur10e-task4-static-log` 后原检查退出 `0`，未修改源码。
+
+### 隔离构建
+
+执行：
+
+```bash
+source /opt/ros/jazzy/setup.bash
+source /ros2_ws/install/setup.bash
+colcon --log-base /tmp/ur10e-task4.3gXRSt/log build \
+  --symlink-install \
+  --build-base /tmp/ur10e-task4.3gXRSt/build \
+  --install-base /ros2_ws/install \
+  --packages-select ur10e_robotiq_description
+```
+
+退出码 `0`：
+
+```text
+Finished <<< ur10e_robotiq_description [0.93s]
+Summary: 1 package finished [1.03s]
+```
+
+结果：**PASS**。未删除或修复默认 `/ros2_ws/build` 的既有冲突。
+
+### 动态启动与日志
+
+使用可写 ROS home、log 目录及独立 domain 启动：
+
+```bash
+source /ros2_ws/install/setup.bash
+export ROS_HOME=/tmp/ur10e-task4-ros-home
+export ROS_LOG_DIR=/tmp/ur10e-task4-dynamic-log-2
+export ROS_DOMAIN_ID=84
+ros2 launch ur10e_robotiq_description mock_control.launch.py
+```
+
+运行中精确 `pgrep` 只得到一个 `/opt/ros/jazzy/lib/controller_manager/ros2_control_node` 进程。关键日志：
+
+```text
+Successful initialization of hardware 'robotiq_2f85'
+Successful initialization of hardware 'ur'
+Successful initialization of hardware 'robotiq_ft_sensor'
+Resource Manager has been successfully initialized. Starting Controller Manager services...
+Configured and activated robotiq_force_torque_sensor_broadcaster
+Configured and activated robotiq_gripper_controller
+```
+
+运行日志没有 duplicate hardware、plugin not found、failed to load plugin、joint interface conflict 或 interface already exists。brief 的 FT 参数原样使用并成功配置，未触发 Jazzy schema 错误，故没有兼容性改写。
+
+### Stage 4 逐项验证状态
+
+| 检查项 | 状态 | 实际证据 |
+|---|---|---|
+| 恰有一个 `ros2_control_node` 进程 | **PASS** | 沙箱外 PID `407113`，精确进程计数为 `1` |
+| `robotiq_2f85` hardware | **PASS** | `GenericSystem`，CLI state `active` |
+| `ur` hardware | **PASS** | `GenericSystem`，CLI state `active` |
+| `robotiq_ft_sensor` hardware | **PASS** | `RobotiqFTSensorHardware`，CLI state `active` |
+| `robotiq_gripper_controller` | **PASS** | 指定 plugin type 加载，沙箱外 CLI state `active` |
+| `robotiq_force_torque_sensor_broadcaster` | **PASS** | 指定 plugin type 加载，沙箱外 CLI state `active` |
+| 重复 hardware/plugin/interface 错误扫描 | **PASS** | 运行日志无相关错误 |
+| `/controller_manager/list_controllers` 存在 | **沙箱内 FAIL（环境），沙箱外 PASS** | `/tmp/ur10e_task4_services.txt` 明确包含该 service |
+| `/robotiq_controller_manager/list_controllers` 不存在 | **沙箱内 FAIL（环境），沙箱外 PASS** | 同一 service 文件完全不含 `/robotiq_controller_manager/` |
+| CLI 返回三个 hardware 状态 | **沙箱内 FAIL（环境），沙箱外 PASS** | `/tmp/ur10e_task4_hardware.txt` 恰含三个 hardware，均为 `active` |
+| CLI 返回两个新增 controller 状态 | **沙箱内 FAIL（环境），沙箱外 PASS** | `/tmp/ur10e_task4_controllers.txt` 中两者均为 `active` |
+| launch 后无残留进程 | **PASS** | 沙箱内及沙箱外 Ctrl-C 后精确 `pgrep` 均空输出 |
+
+### 沙箱外动态补验
+
+主 Agent 使用 `ROS_DOMAIN_ID=85` 启动同一 launch。唯一 `ros2_control_node` PID 为 `407113`，精确进程计数为 `1`。所有 live assertions 退出码均为 `0`。
+
+Service graph 证据 `/tmp/ur10e_task4_services.txt` 包含：
+
+```text
+/controller_manager/list_controllers
+/controller_manager/list_hardware_components
+```
+
+该文件完全不含 `/robotiq_controller_manager/`。结果：规定的 `/controller_manager` service 存在，第二个 Robotiq manager service 不存在（**PASS**）。
+
+Hardware 证据 `/tmp/ur10e_task4_hardware.txt` 恰有三个 component：
+
+```text
+robotiq_ft_sensor  RobotiqFTSensorHardware  active
+ur                 GenericSystem            active
+robotiq_2f85       GenericSystem            active
+```
+
+Controller 证据 `/tmp/ur10e_task4_controllers.txt` 中 `robotiq_force_torque_sensor_broadcaster` 与 `robotiq_gripper_controller` 均为 `active`；`joint_state_broadcaster` 与 `scaled_joint_trajectory_controller` 也为 `active`。
+
+Ctrl-C 后，三个 hardware 均记录 successful deactivate/shutdown，`robot_state_publisher`、`trajectory_until_node` 与 `ros2_control_node` 均 cleanly finished；精确 `pgrep` 无残留。
+
+沙箱外日志有两个非阻塞警告：
+
+- 激活夹爪 controller 时，500 Hz control loop 发生一次 overrun。
+- Ctrl-C 停止时，`controller_manager.pal_statistics` 两次报告 `context cannot be slept with because it's invalid`；此后 control node 仍 cleanly finished。
+
+沙箱内 DDS/daemon 关键错误历史保留为 `Error creating socket: Operation not permitted`、`PermissionError: [Errno 1] Operation not permitted`。沙箱外补验已覆盖此前无法完成的 service graph 与 `ros2 control list_*` 项，因此 Stage 4 **自动验收 PASS（带上述警告）**。
