@@ -720,3 +720,262 @@ Ctrl-C 后，三个 hardware 均记录 successful deactivate/shutdown，`robot_s
 - Ctrl-C 停止时，`controller_manager.pal_statistics` 两次报告 `context cannot be slept with because it's invalid`；此后 control node 仍 cleanly finished。
 
 沙箱内 DDS/daemon 关键错误历史保留为 `Error creating socket: Operation not permitted`、`PermissionError: [Errno 1] Operation not permitted`。沙箱外补验已覆盖此前无法完成的 service graph 与 `ros2 control list_*` 项，因此 Stage 4 **自动验收 PASS（带上述警告）**。
+
+### Fix round 1/5：逐项真实命令、输出与退出码
+
+本轮由主 Agent 重新执行全部静态与 live 检查。本节补录新鲜证据，不用事后推测替代实际执行结果。
+
+#### 静态检查完整命令
+
+执行环境先加载已安装工作区：
+
+```bash
+source /ros2_ws/install/setup.bash
+```
+
+1. 两个 launch 的 Python 语法检查：
+
+```bash
+python3 -m py_compile \
+  /ros2_ws/src/ur10e_robotiq/ur10e_robotiq_description/launch/robot_state_publisher.launch.py \
+  /ros2_ws/src/ur10e_robotiq/ur10e_robotiq_description/launch/mock_control.launch.py
+```
+
+实际结果：
+
+```text
+py_compile exit=0 PASS
+```
+
+2. 两个 launch 的 ROS Python 风格检查：
+
+```bash
+ament_flake8 \
+  /ros2_ws/src/ur10e_robotiq/ur10e_robotiq_description/launch/robot_state_publisher.launch.py \
+  /ros2_ws/src/ur10e_robotiq/ur10e_robotiq_description/launch/mock_control.launch.py
+```
+
+实际关键输出与结果：
+
+```text
+No problems found
+ament_flake8 exit=0 key=No problems found PASS
+```
+
+3. YAML 真实解析与精确内容断言：
+
+```bash
+python3 -c '
+from pathlib import Path
+import yaml
+
+local_path = Path("/ros2_ws/src/ur10e_robotiq/ur10e_robotiq_description/config/ur_controllers_mock.yaml")
+upstream_path = Path("/ros2_ws/install/ur_robot_driver/share/ur_robot_driver/config/ur_controllers.yaml")
+local = yaml.safe_load(local_path.read_text())
+upstream = yaml.safe_load(upstream_path.read_text())
+
+manager = local["controller_manager"]["ros__parameters"]
+assert manager["robotiq_gripper_controller"]["type"] == (
+    "parallel_gripper_action_controller/GripperActionController"
+)
+assert manager["robotiq_force_torque_sensor_broadcaster"]["type"] == (
+    "force_torque_sensor_broadcaster/ForceTorqueSensorBroadcaster"
+)
+assert local["robotiq_gripper_controller"]["ros__parameters"] == {
+    "joint": "robotiq_85_left_knuckle_joint",
+    "state_interfaces": ["position", "velocity"],
+    "allow_stalling": True,
+    "stall_timeout": 0.05,
+    "goal_tolerance": 0.02,
+}
+assert local["robotiq_force_torque_sensor_broadcaster"]["ros__parameters"] == {
+    "sensor_name": "robotiq_ft_sensor",
+    "state_interface_names": [
+        "force.x", "force.y", "force.z",
+        "torque.x", "torque.y", "torque.z",
+    ],
+    "frame_id": "robotiq_ft_frame_id",
+    "topic_name": "wrench",
+}
+assert local["force_torque_sensor_broadcaster"] == upstream[
+    "force_torque_sensor_broadcaster"
+]
+print("yaml_exact_extensions=PASS")
+'
+```
+
+实际输出与结果：
+
+```text
+yaml_exact_extensions=PASS
+yaml_assertions exit=0 key=yaml_exact_extensions=PASS PASS
+```
+
+4. 两个 launch 的 `LaunchDescription` 构造与顶层 entity 数量断言：
+
+```bash
+python3 -c '
+from pathlib import Path
+import importlib.util
+
+launch_dir = Path("/ros2_ws/src/ur10e_robotiq/ur10e_robotiq_description/launch")
+entities = []
+for filename in ("robot_state_publisher.launch.py", "mock_control.launch.py"):
+    path = launch_dir / filename
+    spec = importlib.util.spec_from_file_location(filename.replace(".", "_"), path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    entities.append(len(module.generate_launch_description().entities))
+assert entities == [3, 3], entities
+print(f"launch_entities={entities}")
+'
+```
+
+实际输出与结果：
+
+```text
+launch_entities=[3, 3]
+launch_description exit=0 key=launch_entities=[3, 3] PASS
+```
+
+5. 安装后 launch 参数展开：
+
+```bash
+ros2 launch ur10e_robotiq_description mock_control.launch.py --show-args \
+  > /tmp/ur10e_task4_reviewfix_show_args.txt
+wc -c /tmp/ur10e_task4_reviewfix_show_args.txt
+```
+
+实际输出与结果：
+
+```text
+4980 /tmp/ur10e_task4_reviewfix_show_args.txt
+show_args exit=0 bytes=4980 PASS
+```
+
+静态检查累积结果：
+
+```text
+static_overall_exit=0
+```
+
+#### 沙箱外 live 检查完整命令
+
+本轮 live 环境：
+
+```bash
+source /ros2_ws/install/setup.bash
+export ROS_DOMAIN_ID=86
+```
+
+launch 运行期间逐项执行：
+
+1. 唯一 manager 进程：
+
+```bash
+pgrep -af '^/opt/ros/jazzy/lib/controller_manager/ros2_control_node' \
+  > /tmp/ur10e_task4_reviewfix_process.txt
+manager_process_command_exit=$?
+manager_process_count=$(wc -l < /tmp/ur10e_task4_reviewfix_process.txt)
+test "$manager_process_command_exit" -eq 0
+test "$manager_process_count" -eq 1
+```
+
+实际逐项结果：
+
+```text
+manager_process command_exit=0 count=1 assertion_exit=0 status=PASS
+```
+
+2. Service graph 与第二 manager 缺失断言：
+
+```bash
+ros2 service list > /tmp/ur10e_task4_reviewfix_services.txt
+service_graph_command_exit=$?
+rg -qx '/controller_manager/list_controllers' \
+  /tmp/ur10e_task4_reviewfix_services.txt
+manager_service_exit=$?
+! rg -q '^/robotiq_controller_manager/' \
+  /tmp/ur10e_task4_reviewfix_services.txt
+second_manager_absent_exit=$?
+test "$service_graph_command_exit" -eq 0
+test "$manager_service_exit" -eq 0
+test "$second_manager_absent_exit" -eq 0
+```
+
+实际逐项结果：
+
+```text
+service_graph command_exit=0 manager_service_exit=0 second_manager_absent_exit=0 assertion_exit=0 status=PASS
+```
+
+3. Hardware component 数量与 active 状态：
+
+```bash
+ros2 control list_hardware_components \
+  --controller-manager /controller_manager \
+  > /tmp/ur10e_task4_reviewfix_hardware.txt
+hardware_command_exit=$?
+hardware_components=$(rg -c '^Hardware Component [0-9]+$' \
+  /tmp/ur10e_task4_reviewfix_hardware.txt)
+hardware_active=$(rg -c 'state: id=3 label=.*active' \
+  /tmp/ur10e_task4_reviewfix_hardware.txt)
+test "$hardware_command_exit" -eq 0
+test "$hardware_components" -eq 3
+test "$hardware_active" -eq 3
+```
+
+实际逐项结果：
+
+```text
+hardware command_exit=0 components=3 active=3 assertion_exit=0 status=PASS
+```
+
+4. 两个新增 controller 的 active 状态：
+
+```bash
+ros2 control list_controllers \
+  --controller-manager /controller_manager \
+  > /tmp/ur10e_task4_reviewfix_controllers.txt
+controllers_command_exit=$?
+rg -q '^robotiq_gripper_controller .*active' \
+  /tmp/ur10e_task4_reviewfix_controllers.txt
+gripper_active_exit=$?
+rg -q '^robotiq_force_torque_sensor_broadcaster .*active' \
+  /tmp/ur10e_task4_reviewfix_controllers.txt
+ft_active_exit=$?
+test "$controllers_command_exit" -eq 0
+test "$gripper_active_exit" -eq 0
+test "$ft_active_exit" -eq 0
+```
+
+实际逐项结果：
+
+```text
+controllers command_exit=0 gripper_active_exit=0 ft_active_exit=0 assertion_exit=0 status=PASS
+```
+
+所有运行中 live 断言累积结果：
+
+```text
+overall_exit=0
+```
+
+5. Ctrl-C 终止后的残留进程检查：
+
+```bash
+pgrep -af '^/opt/ros/jazzy/lib/controller_manager/ros2_control_node' \
+  > /tmp/ur10e_task4_reviewfix_residual.txt
+residual_pgrep_exit=$?
+residual_process_count=$(wc -l < /tmp/ur10e_task4_reviewfix_residual.txt)
+test "$residual_pgrep_exit" -eq 1
+test "$residual_process_count" -eq 0
+```
+
+实际逐项结果：
+
+```text
+residual_process_check pgrep_exit=1 count=0 assertion_exit=0 status=PASS
+```
+
+本轮所有静态与 live 项均有命令、输出及逐项退出码，累计 **PASS**。此前沙箱 DDS/socket 失败历史，以及夹爪激活时一次 500 Hz loop overrun、停止时两次 statistics context 警告均继续保留。
