@@ -1,0 +1,2040 @@
+.
+├── Universal_Robots_Client_Library
+│   ├── 3rdparty
+│   │   └── urcl_3rdparty
+│   │       ├── httplib
+│   │       │   ├── LICENSE.txt
+│   │       │   └── httplib.h
+│   │       └── nlohmann_json
+│   │           ├── Apache-2.0.txt
+│   │           ├── LICENSE.MIT.txt
+│   │           ├── MIT.txt
+│   │           └── json.hpp
+│   ├── CHANGELOG.rst
+│   ├── CMakeLists.txt
+│   ├── Gemfile
+│   ├── LICENSE_apache_2_0
+│   ├── README.md
+│   ├── colcon.pkg
+│   ├── doc
+│   │   ├── _static
+│   │   │   ├── css
+│   │   │   │   └── ur_theme.css
+│   │   │   └── images
+│   │   │       ├── icon.svg
+│   │   │       └── ur_logo.svg
+│   │   ├── api_reference.rst
+│   │   ├── architecture
+│   │   │   ├── dashboard_client.rst
+│   │   │   ├── instruction_executor.rst
+│   │   │   ├── primary_client.rst
+│   │   │   ├── reverse_interface.rst
+│   │   │   ├── rtde_client.rst
+│   │   │   ├── script_command_interface.rst
+│   │   │   ├── script_reader.rst
+│   │   │   ├── script_sender.rst
+│   │   │   ├── trajectory_point_interface.rst
+│   │   │   └── ur_driver.rst
+│   │   ├── architecture.rst
+│   │   ├── conf.py
+│   │   ├── examples
+│   │   │   ├── dashboard_client.rst
+│   │   │   ├── direct_torque_control.rst
+│   │   │   ├── external_fts_through_rtde.rst
+│   │   │   ├── force_mode.rst
+│   │   │   ├── freedrive.rst
+│   │   │   ├── instruction_executor.rst
+│   │   │   ├── primary_pipeline.rst
+│   │   │   ├── primary_pipeline_calibration.rst
+│   │   │   ├── rtde_client.rst
+│   │   │   ├── script_command_interface.rst
+│   │   │   ├── script_sender.rst
+│   │   │   ├── send_script.rst
+│   │   │   ├── spline_example.rst
+│   │   │   ├── tool_contact_example.rst
+│   │   │   ├── trajectory_point_interface.rst
+│   │   │   ├── trajectory_streaming.rst
+│   │   │   └── ur_driver.rst
+│   │   ├── examples.rst
+│   │   ├── images
+│   │   │   ├── initial_setup_images
+│   │   │   │   ├── cb3_01_welcome.png
+│   │   │   │   ├── cb3_05_urcaps_installed.png
+│   │   │   │   ├── cb3_07_installation_excontrol.png
+│   │   │   │   ├── cb3_10_prog_structure_urcaps.png
+│   │   │   │   ├── cb3_11_program_view_excontrol.png
+│   │   │   │   ├── es_01_welcome.png
+│   │   │   │   ├── es_05_urcaps_installed.png
+│   │   │   │   ├── es_07_installation_excontrol.png
+│   │   │   │   ├── es_10_prog_structure_urcaps.png
+│   │   │   │   ├── es_11_program_view_excontrol.png
+│   │   │   │   ├── family_photo.png
+│   │   │   │   ├── px_01_welcome.png
+│   │   │   │   ├── px_05_urcaps_installed.png
+│   │   │   │   ├── px_07_installation_excontrol.png
+│   │   │   │   ├── px_10_prog_structure_urcaps.png
+│   │   │   │   ├── px_11_program_view_excontrol.png
+│   │   │   │   ├── remote_control.png
+│   │   │   │   ├── services_polyscope5.png
+│   │   │   │   └── services_polyscopex.png
+│   │   │   ├── trajectory_interface.drawio
+│   │   │   ├── trajectory_interface.svg
+│   │   │   ├── urcl_architecture.drawio
+│   │   │   └── urcl_architecture.svg
+│   │   ├── index.rst
+│   │   ├── installation.rst
+│   │   ├── migration_notes.rst
+│   │   ├── polyscope_compatibility.rst
+│   │   ├── real_time.rst
+│   │   ├── resources
+│   │   │   ├── family_photo.png
+│   │   │   ├── fzi-logo_transparenz.png
+│   │   │   └── ur_logo.jpg
+│   │   ├── setup
+│   │   │   ├── network_setup.rst
+│   │   │   ├── robot_setup.rst
+│   │   │   └── ursim_docker.rst
+│   │   └── setup.rst
+│   ├── doc_requirements.txt
+│   ├── examples
+│   │   ├── CMakeLists.txt
+│   │   ├── dashboard_example.cpp
+│   │   ├── direct_torque_control.cpp
+│   │   ├── external_fts_through_rtde.cpp
+│   │   ├── force_mode_example.cpp
+│   │   ├── freedrive_example.cpp
+│   │   ├── full_driver.cpp
+│   │   ├── instruction_executor.cpp
+│   │   ├── primary_pipeline.cpp
+│   │   ├── primary_pipeline_calibration.cpp
+│   │   ├── resources
+│   │   │   ├── rtde_input_only_ft.txt
+│   │   │   ├── rtde_input_recipe.txt
+│   │   │   └── rtde_output_recipe.txt
+│   │   ├── rtde_client.cpp
+│   │   ├── script_command_interface.cpp
+│   │   ├── script_sender.cpp
+│   │   ├── send_script.cpp
+│   │   ├── spline_example.cpp
+│   │   ├── tool_contact_example.cpp
+│   │   ├── trajectory_point_interface.cpp
+│   │   └── trajectory_streaming.cpp
+│   ├── include
+│   │   ├── ur_client_library
+│   │   │   ├── comm
+│   │   │   │   ├── bin_parser.h
+│   │   │   │   ├── control_mode.h
+│   │   │   │   ├── package.h
+│   │   │   │   ├── package_serializer.h
+│   │   │   │   ├── parser.h
+│   │   │   │   ├── pipeline.h
+│   │   │   │   ├── producer.h
+│   │   │   │   ├── shell_consumer.h
+│   │   │   │   ├── socket_t.h
+│   │   │   │   ├── stream.h
+│   │   │   │   ├── tcp_server.h
+│   │   │   │   └── tcp_socket.h
+│   │   │   ├── control
+│   │   │   │   ├── motion_primitives.h
+│   │   │   │   ├── reverse_interface.h
+│   │   │   │   ├── script_command_interface.h
+│   │   │   │   ├── script_reader.h
+│   │   │   │   ├── script_sender.h
+│   │   │   │   └── trajectory_point_interface.h
+│   │   │   ├── default_log_handler.h
+│   │   │   ├── example_robot_wrapper.h
+│   │   │   ├── exceptions.h
+│   │   │   ├── helpers.h
+│   │   │   ├── log.h
+│   │   │   ├── primary
+│   │   │   │   ├── abstract_primary_consumer.h
+│   │   │   │   ├── package_header.h
+│   │   │   │   ├── primary_client.h
+│   │   │   │   ├── primary_consumer.h
+│   │   │   │   ├── primary_package.h
+│   │   │   │   ├── primary_parser.h
+│   │   │   │   ├── robot_message
+│   │   │   │   │   ├── error_code_message.h
+│   │   │   │   │   ├── key_message.h
+│   │   │   │   │   ├── runtime_exception_message.h
+│   │   │   │   │   ├── safety_mode_message.h
+│   │   │   │   │   ├── text_message.h
+│   │   │   │   │   └── version_message.h
+│   │   │   │   ├── robot_message.h
+│   │   │   │   ├── robot_state
+│   │   │   │   │   ├── configuration_data.h
+│   │   │   │   │   ├── kinematics_info.h
+│   │   │   │   │   ├── masterboard_data.h
+│   │   │   │   │   └── robot_mode_data.h
+│   │   │   │   └── robot_state.h
+│   │   │   ├── queue
+│   │   │   │   ├── LICENSE.md
+│   │   │   │   ├── atomicops.h
+│   │   │   │   └── readerwriterqueue.h
+│   │   │   ├── rtde
+│   │   │   │   ├── control_package_pause.h
+│   │   │   │   ├── control_package_setup_inputs.h
+│   │   │   │   ├── control_package_setup_outputs.h
+│   │   │   │   ├── control_package_start.h
+│   │   │   │   ├── data_package.h
+│   │   │   │   ├── get_urcontrol_version.h
+│   │   │   │   ├── package_header.h
+│   │   │   │   ├── request_protocol_version.h
+│   │   │   │   ├── rtde_client.h
+│   │   │   │   ├── rtde_package.h
+│   │   │   │   ├── rtde_parser.h
+│   │   │   │   ├── rtde_writer.h
+│   │   │   │   └── text_message.h
+│   │   │   ├── types.h
+│   │   │   └── ur
+│   │   │       ├── calibration_checker.h
+│   │   │       ├── dashboard_client.h
+│   │   │       ├── dashboard_client_implementation.h
+│   │   │       ├── dashboard_client_implementation_g5.h
+│   │   │       ├── dashboard_client_implementation_x.h
+│   │   │       ├── datatypes.h
+│   │   │       ├── instruction_executor.h
+│   │   │       ├── robot_receive_timeout.h
+│   │   │       ├── tool_communication.h
+│   │   │       ├── ur_driver.h
+│   │   │       └── version_information.h
+│   │   └── urcl_3rdparty
+│   │       └── portable_endian.h
+│   ├── package.xml
+│   ├── resources
+│   │   └── external_control.urscript
+│   ├── rosdoc.yaml
+│   ├── run_examples.sh
+│   ├── scripts
+│   │   ├── start_ursim.sh
+│   │   └── tool_communication.py
+│   ├── src
+│   │   ├── comm
+│   │   │   ├── tcp_server.cpp
+│   │   │   └── tcp_socket.cpp
+│   │   ├── compile_options.h.in
+│   │   ├── control
+│   │   │   ├── motion_primitives.cpp
+│   │   │   ├── reverse_interface.cpp
+│   │   │   ├── script_command_interface.cpp
+│   │   │   ├── script_reader.cpp
+│   │   │   ├── script_sender.cpp
+│   │   │   └── trajectory_point_interface.cpp
+│   │   ├── default_log_handler.cpp
+│   │   ├── example_robot_wrapper.cpp
+│   │   ├── helpers.cpp
+│   │   ├── log.cpp
+│   │   ├── primary
+│   │   │   ├── primary_client.cpp
+│   │   │   ├── primary_package.cpp
+│   │   │   ├── robot_message
+│   │   │   │   ├── error_code_message.cpp
+│   │   │   │   ├── key_message.cpp
+│   │   │   │   ├── runtime_exception_message.cpp
+│   │   │   │   ├── safety_mode_message.cpp
+│   │   │   │   ├── text_message.cpp
+│   │   │   │   └── version_message.cpp
+│   │   │   ├── robot_message.cpp
+│   │   │   ├── robot_state
+│   │   │   │   ├── configuration_data.cpp
+│   │   │   │   ├── kinematics_info.cpp
+│   │   │   │   ├── masterboard_data.cpp
+│   │   │   │   └── robot_mode_data.cpp
+│   │   │   └── robot_state.cpp
+│   │   ├── rtde
+│   │   │   ├── control_package_pause.cpp
+│   │   │   ├── control_package_setup_inputs.cpp
+│   │   │   ├── control_package_setup_outputs.cpp
+│   │   │   ├── control_package_start.cpp
+│   │   │   ├── data_package.cpp
+│   │   │   ├── get_urcontrol_version.cpp
+│   │   │   ├── request_protocol_version.cpp
+│   │   │   ├── rtde_client.cpp
+│   │   │   ├── rtde_package.cpp
+│   │   │   ├── rtde_parser.cpp
+│   │   │   ├── rtde_writer.cpp
+│   │   │   └── text_message.cpp
+│   │   ├── types.cpp
+│   │   └── ur
+│   │       ├── calibration_checker.cpp
+│   │       ├── dashboard_client.cpp
+│   │       ├── dashboard_client_implementation_g5.cpp
+│   │       ├── dashboard_client_implementation_x.cpp
+│   │       ├── instruction_executor.cpp
+│   │       ├── robot_receive_timeout.cpp
+│   │       ├── tool_communication.cpp
+│   │       ├── ur_driver.cpp
+│   │       └── version_information.cpp
+│   ├── tests
+│   │   ├── CMakeLists.txt
+│   │   ├── fake_primary_server.cpp
+│   │   ├── fake_primary_server.h
+│   │   ├── fake_primary_server_main.cpp
+│   │   ├── fake_rtde_server.cpp
+│   │   ├── fake_rtde_server.h
+│   │   ├── fake_rtde_server_main.cpp
+│   │   ├── resources
+│   │   │   ├── dockerursim
+│   │   │   │   └── programs
+│   │   │   │       ├── cb3
+│   │   │   │       │   ├── default.installation
+│   │   │   │       │   ├── default.variables
+│   │   │   │       │   ├── external_control.urp
+│   │   │   │       │   ├── programs.UR5 -> /ursim/programs.UR5
+│   │   │   │       │   └── wait_program.urp
+│   │   │   │       └── e-series
+│   │   │   │           ├── default.installation
+│   │   │   │           ├── default.variables
+│   │   │   │           ├── external_control.urp
+│   │   │   │           └── wait_program.urp
+│   │   │   ├── empty.txt
+│   │   │   ├── example_urscript_feature.urscript
+│   │   │   ├── example_urscript_main.urscript
+│   │   │   ├── exhaustive_rtde_output_recipe.txt
+│   │   │   ├── generate_rtde_outputs.py
+│   │   │   ├── rtde_input_recipe.txt
+│   │   │   ├── rtde_output_recipe.txt
+│   │   │   ├── rtde_output_recipe_spline.txt
+│   │   │   ├── rtde_output_recipe_without_timestamp.txt
+│   │   │   ├── update_prog.urpx
+│   │   │   └── upload_prog.urpx
+│   │   ├── test_bin_parser.cpp
+│   │   ├── test_control_mode.cpp
+│   │   ├── test_dashboard_client.cpp
+│   │   ├── test_dashboard_client_g5.cpp
+│   │   ├── test_dashboard_client_x.cpp
+│   │   ├── test_datatypes.cpp
+│   │   ├── test_deprecated_ur_driver_construction.cpp
+│   │   ├── test_external_control_program.cpp
+│   │   ├── test_fake_primary_server.cpp
+│   │   ├── test_helpers.cpp
+│   │   ├── test_instruction_executor.cpp
+│   │   ├── test_motion_primitives.cpp
+│   │   ├── test_package_serializer.cpp
+│   │   ├── test_pipeline.cpp
+│   │   ├── test_primary_client.cpp
+│   │   ├── test_primary_parser.cpp
+│   │   ├── test_producer.cpp
+│   │   ├── test_reverse_interface.cpp
+│   │   ├── test_robot_receive_timeout.cpp
+│   │   ├── test_rtde_client.cpp
+│   │   ├── test_rtde_control_package_pause.cpp
+│   │   ├── test_rtde_control_package_setup_inputs.cpp
+│   │   ├── test_rtde_control_package_setup_outputs.cpp
+│   │   ├── test_rtde_control_package_start.cpp
+│   │   ├── test_rtde_data_package.cpp
+│   │   ├── test_rtde_get_urcontrol_version.cpp
+│   │   ├── test_rtde_parser.cpp
+│   │   ├── test_rtde_request_protocol_version.cpp
+│   │   ├── test_rtde_writer.cpp
+│   │   ├── test_script_command_interface.cpp
+│   │   ├── test_script_reader.cpp
+│   │   ├── test_script_sender.cpp
+│   │   ├── test_spline_interpolation.cpp
+│   │   ├── test_start_ursim.bats
+│   │   ├── test_stream.cpp
+│   │   ├── test_tcp_server.cpp
+│   │   ├── test_tcp_socket.cpp
+│   │   ├── test_trajectory_point_interface.cpp
+│   │   ├── test_trajectory_streaming.cpp
+│   │   ├── test_types.cpp
+│   │   ├── test_ur_driver.cpp
+│   │   ├── test_utils.h
+│   │   └── test_version_information.cpp
+│   └── ur_client_libraryConfig.cmake
+├── Universal_Robots_ROS2_Description
+│   ├── CHANGELOG.rst
+│   ├── CMakeLists.txt
+│   ├── CONTRIBUTING.md
+│   ├── LICENSE
+│   ├── README.md
+│   ├── ci_status.md
+│   ├── config
+│   │   ├── initial_positions.yaml
+│   │   ├── ur10
+│   │   │   ├── default_kinematics.yaml
+│   │   │   ├── joint_limits.yaml
+│   │   │   ├── physical_parameters.yaml
+│   │   │   └── visual_parameters.yaml
+│   │   ├── ur10e
+│   │   │   ├── default_kinematics.yaml
+│   │   │   ├── joint_limits.yaml
+│   │   │   ├── physical_parameters.yaml
+│   │   │   └── visual_parameters.yaml
+│   │   ├── ur12e
+│   │   │   ├── default_kinematics.yaml
+│   │   │   ├── joint_limits.yaml
+│   │   │   ├── physical_parameters.yaml
+│   │   │   └── visual_parameters.yaml
+│   │   ├── ur15
+│   │   │   ├── default_kinematics.yaml
+│   │   │   ├── joint_limits.yaml
+│   │   │   ├── physical_parameters.yaml
+│   │   │   └── visual_parameters.yaml
+│   │   ├── ur16e
+│   │   │   ├── default_kinematics.yaml
+│   │   │   ├── joint_limits.yaml
+│   │   │   ├── physical_parameters.yaml
+│   │   │   └── visual_parameters.yaml
+│   │   ├── ur18
+│   │   │   ├── default_kinematics.yaml
+│   │   │   ├── joint_limits.yaml
+│   │   │   ├── physical_parameters.yaml
+│   │   │   └── visual_parameters.yaml
+│   │   ├── ur20
+│   │   │   ├── default_kinematics.yaml
+│   │   │   ├── joint_limits.yaml
+│   │   │   ├── physical_parameters.yaml
+│   │   │   └── visual_parameters.yaml
+│   │   ├── ur3
+│   │   │   ├── default_kinematics.yaml
+│   │   │   ├── joint_limits.yaml
+│   │   │   ├── physical_parameters.yaml
+│   │   │   └── visual_parameters.yaml
+│   │   ├── ur30
+│   │   │   ├── default_kinematics.yaml
+│   │   │   ├── joint_limits.yaml
+│   │   │   ├── physical_parameters.yaml
+│   │   │   └── visual_parameters.yaml
+│   │   ├── ur3e
+│   │   │   ├── default_kinematics.yaml
+│   │   │   ├── joint_limits.yaml
+│   │   │   ├── physical_parameters.yaml
+│   │   │   └── visual_parameters.yaml
+│   │   ├── ur5
+│   │   │   ├── default_kinematics.yaml
+│   │   │   ├── joint_limits.yaml
+│   │   │   ├── physical_parameters.yaml
+│   │   │   └── visual_parameters.yaml
+│   │   ├── ur5e
+│   │   │   ├── default_kinematics.yaml
+│   │   │   ├── joint_limits.yaml
+│   │   │   ├── physical_parameters.yaml
+│   │   │   └── visual_parameters.yaml
+│   │   ├── ur7e
+│   │   │   ├── default_kinematics.yaml
+│   │   │   ├── joint_limits.yaml
+│   │   │   ├── physical_parameters.yaml
+│   │   │   └── visual_parameters.yaml
+│   │   └── ur8long
+│   │       ├── default_kinematics.yaml
+│   │       ├── joint_limits.yaml
+│   │       ├── physical_parameters.yaml
+│   │       └── visual_parameters.yaml
+│   ├── doc
+│   │   ├── conf.py
+│   │   ├── frames
+│   │   │   ├── base.png
+│   │   │   └── base_link.png
+│   │   ├── index.rst
+│   │   ├── migration
+│   │   │   └── jazzy.rst
+│   │   ├── migration_notes.rst
+│   │   ├── robot_frames.rst
+│   │   ├── structure.drawio
+│   │   └── structure.svg
+│   ├── doc_requirements.txt
+│   ├── launch
+│   │   ├── view_ur.launch.py
+│   │   └── view_ur.launch.xml
+│   ├── meshes
+│   │   ├── ur10
+│   │   │   ├── collision
+│   │   │   │   ├── base.stl
+│   │   │   │   ├── forearm.stl
+│   │   │   │   ├── shoulder.stl
+│   │   │   │   ├── upperarm.stl
+│   │   │   │   ├── wrist1.stl
+│   │   │   │   ├── wrist2.stl
+│   │   │   │   └── wrist3.stl
+│   │   │   └── visual
+│   │   │       ├── base.dae
+│   │   │       ├── forearm.dae
+│   │   │       ├── shoulder.dae
+│   │   │       ├── upperarm.dae
+│   │   │       ├── wrist1.dae
+│   │   │       ├── wrist2.dae
+│   │   │       └── wrist3.dae
+│   │   ├── ur10e
+│   │   │   ├── collision
+│   │   │   │   ├── base.stl
+│   │   │   │   ├── forearm.stl
+│   │   │   │   ├── shoulder.stl
+│   │   │   │   ├── upperarm.stl
+│   │   │   │   ├── wrist1.stl
+│   │   │   │   ├── wrist2.stl
+│   │   │   │   └── wrist3.stl
+│   │   │   └── visual
+│   │   │       ├── base.dae
+│   │   │       ├── forearm.dae
+│   │   │       ├── shoulder.dae
+│   │   │       ├── upperarm.dae
+│   │   │       ├── wrist1.dae
+│   │   │       ├── wrist2.dae
+│   │   │       └── wrist3.dae
+│   │   ├── ur15
+│   │   │   ├── LICENSE.txt
+│   │   │   ├── collision
+│   │   │   │   ├── base.stl
+│   │   │   │   ├── forearm.stl
+│   │   │   │   ├── shoulder.stl
+│   │   │   │   ├── upperarm.stl
+│   │   │   │   ├── wrist1.stl
+│   │   │   │   ├── wrist2.stl
+│   │   │   │   └── wrist3.stl
+│   │   │   └── visual
+│   │   │       ├── UR15_DIFF_8bit_2K.jpg
+│   │   │       ├── base.dae
+│   │   │       ├── forearm.dae
+│   │   │       ├── shoulder.dae
+│   │   │       ├── upperarm.dae
+│   │   │       ├── wrist1.dae
+│   │   │       ├── wrist2.dae
+│   │   │       └── wrist3.dae
+│   │   ├── ur16e
+│   │   │   ├── collision
+│   │   │   │   ├── forearm.stl
+│   │   │   │   └── upperarm.stl
+│   │   │   └── visual
+│   │   │       ├── forearm.dae
+│   │   │       └── upperarm.dae
+│   │   ├── ur18
+│   │   │   ├── LICENSE.txt
+│   │   │   ├── collision
+│   │   │   │   ├── forearm.stl
+│   │   │   │   └── upperarm.stl
+│   │   │   └── visual
+│   │   │       ├── UR18_DIFF_8bit_2K.jpg
+│   │   │       ├── forearm.dae
+│   │   │       └── upperarm.dae
+│   │   ├── ur20
+│   │   │   ├── LICENSE.txt
+│   │   │   ├── collision
+│   │   │   │   ├── base.stl
+│   │   │   │   ├── forearm.stl
+│   │   │   │   ├── shoulder.stl
+│   │   │   │   ├── upperarm.stl
+│   │   │   │   ├── wrist1.stl
+│   │   │   │   ├── wrist2.stl
+│   │   │   │   └── wrist3.stl
+│   │   │   └── visual
+│   │   │       ├── UR20_DIFF_8bit_2K.png
+│   │   │       ├── base.dae
+│   │   │       ├── forearm.dae
+│   │   │       ├── shoulder.dae
+│   │   │       ├── upperarm.dae
+│   │   │       ├── wrist1.dae
+│   │   │       ├── wrist2.dae
+│   │   │       └── wrist3.dae
+│   │   ├── ur3
+│   │   │   ├── collision
+│   │   │   │   ├── base.stl
+│   │   │   │   ├── forearm.stl
+│   │   │   │   ├── shoulder.stl
+│   │   │   │   ├── upperarm.stl
+│   │   │   │   ├── wrist1.stl
+│   │   │   │   ├── wrist2.stl
+│   │   │   │   └── wrist3.stl
+│   │   │   └── visual
+│   │   │       ├── base.dae
+│   │   │       ├── forearm.dae
+│   │   │       ├── shoulder.dae
+│   │   │       ├── upperarm.dae
+│   │   │       ├── wrist1.dae
+│   │   │       ├── wrist2.dae
+│   │   │       └── wrist3.dae
+│   │   ├── ur30
+│   │   │   ├── LICENSE.txt
+│   │   │   ├── collision
+│   │   │   │   ├── forearm.stl
+│   │   │   │   └── upperarm.stl
+│   │   │   └── visual
+│   │   │       ├── UR30_DIFF_8bit_2K.png
+│   │   │       ├── forearm.dae
+│   │   │       └── upperarm.dae
+│   │   ├── ur3e
+│   │   │   ├── collision
+│   │   │   │   ├── base.stl
+│   │   │   │   ├── forearm.stl
+│   │   │   │   ├── shoulder.stl
+│   │   │   │   ├── upperarm.stl
+│   │   │   │   ├── wrist1.stl
+│   │   │   │   ├── wrist2.stl
+│   │   │   │   └── wrist3.stl
+│   │   │   └── visual
+│   │   │       ├── base.dae
+│   │   │       ├── forearm.dae
+│   │   │       ├── shoulder.dae
+│   │   │       ├── upperarm.dae
+│   │   │       ├── wrist1.dae
+│   │   │       ├── wrist2.dae
+│   │   │       └── wrist3.dae
+│   │   ├── ur5
+│   │   │   ├── collision
+│   │   │   │   ├── base.stl
+│   │   │   │   ├── forearm.stl
+│   │   │   │   ├── shoulder.stl
+│   │   │   │   ├── upperarm.stl
+│   │   │   │   ├── wrist1.stl
+│   │   │   │   ├── wrist2.stl
+│   │   │   │   └── wrist3.stl
+│   │   │   └── visual
+│   │   │       ├── base.dae
+│   │   │       ├── forearm.dae
+│   │   │       ├── shoulder.dae
+│   │   │       ├── upperarm.dae
+│   │   │       ├── wrist1.dae
+│   │   │       ├── wrist2.dae
+│   │   │       └── wrist3.dae
+│   │   ├── ur5e
+│   │   │   ├── collision
+│   │   │   │   ├── base.stl
+│   │   │   │   ├── forearm.stl
+│   │   │   │   ├── shoulder.stl
+│   │   │   │   ├── upperarm.stl
+│   │   │   │   ├── wrist1.stl
+│   │   │   │   ├── wrist2.stl
+│   │   │   │   └── wrist3.stl
+│   │   │   └── visual
+│   │   │       ├── base.dae
+│   │   │       ├── forearm.dae
+│   │   │       ├── shoulder.dae
+│   │   │       ├── upperarm.dae
+│   │   │       ├── wrist1.dae
+│   │   │       ├── wrist2.dae
+│   │   │       └── wrist3.dae
+│   │   └── ur8long
+│   │       ├── LICENSE.txt
+│   │       ├── collision
+│   │       │   ├── forearm.stl
+│   │       │   └── upperarm.stl
+│   │       └── visual
+│   │           ├── UR8Long_DIFF_8bit_2K.jpg
+│   │           ├── forearm.dae
+│   │           └── upperarm.dae
+│   ├── model.pdf
+│   ├── package.xml
+│   ├── rviz
+│   │   └── view_robot.rviz
+│   ├── test
+│   │   ├── test_ur_urdf_xacro.py
+│   │   └── test_view_ur_launch.py
+│   └── urdf
+│       ├── inc
+│       │   ├── ur_common.xacro
+│       │   ├── ur_joint_control.xacro
+│       │   ├── ur_sensors.xacro
+│       │   └── ur_transmissions.xacro
+│       ├── ros2_control_mock_hardware.xacro
+│       ├── ur.urdf.xacro
+│       ├── ur_macro.xacro
+│       └── ur_mocked.urdf.xacro
+├── Universal_Robots_ROS2_Driver
+│   ├── CONTRIBUTING.md
+│   ├── LICENSE
+│   ├── README.md
+│   ├── Universal_Robots_ROS2_Driver.jazzy.repos
+│   ├── ci_status.md
+│   ├── ur
+│   │   ├── CHANGELOG.rst
+│   │   ├── CMakeLists.txt
+│   │   └── package.xml
+│   ├── ur_calibration
+│   │   ├── CHANGELOG.rst
+│   │   ├── CMakeLists.txt
+│   │   ├── README.md
+│   │   ├── doc
+│   │   │   ├── algorithm.rst
+│   │   │   ├── calibration_example.png
+│   │   │   ├── calibration_example_corrected.png
+│   │   │   ├── calibration_uncorrected.png
+│   │   │   ├── conf.py
+│   │   │   ├── index.rst
+│   │   │   └── usage.rst
+│   │   ├── include
+│   │   │   └── ur_calibration
+│   │   │       ├── calibration.hpp
+│   │   │       └── calibration_consumer.hpp
+│   │   ├── launch
+│   │   │   └── calibration_correction.launch.py
+│   │   ├── package.xml
+│   │   ├── src
+│   │   │   ├── calibration.cpp
+│   │   │   ├── calibration_consumer.cpp
+│   │   │   └── calibration_correction.cpp
+│   │   └── test
+│   │       └── calibration_test.cpp
+│   ├── ur_controllers
+│   │   ├── CHANGELOG.rst
+│   │   ├── CMakeLists.txt
+│   │   ├── README.md
+│   │   ├── controller_plugins.xml
+│   │   ├── doc
+│   │   │   ├── index.rst
+│   │   │   ├── traj_with_speed_scaling.png
+│   │   │   └── traj_without_speed_scaling.png
+│   │   ├── include
+│   │   │   └── ur_controllers
+│   │   │       ├── force_mode_controller.hpp
+│   │   │       ├── freedrive_mode_controller.hpp
+│   │   │       ├── friction_model_controller.hpp
+│   │   │       ├── gpio_controller.hpp
+│   │   │       ├── gravity_update_controller.hpp
+│   │   │       ├── passthrough_trajectory_controller.hpp
+│   │   │       ├── scaled_joint_trajectory_controller.hpp
+│   │   │       ├── speed_scaling_state_broadcaster.hpp
+│   │   │       ├── tool_contact_controller.hpp
+│   │   │       └── ur_configuration_controller.hpp
+│   │   ├── package.xml
+│   │   ├── src
+│   │   │   ├── force_mode_controller.cpp
+│   │   │   ├── force_mode_controller_parameters.yaml
+│   │   │   ├── freedrive_mode_controller.cpp
+│   │   │   ├── freedrive_mode_controller_parameters.yaml
+│   │   │   ├── friction_model_controller.cpp
+│   │   │   ├── friction_model_controller_parameters.yaml
+│   │   │   ├── gpio_controller.cpp
+│   │   │   ├── gpio_controller_parameters.yaml
+│   │   │   ├── gravity_update_controller.cpp
+│   │   │   ├── gravity_update_controller_parameters.yaml
+│   │   │   ├── passthrough_trajectory_controller.cpp
+│   │   │   ├── passthrough_trajectory_controller_parameters.yaml
+│   │   │   ├── scaled_joint_trajectory_controller.cpp
+│   │   │   ├── scaled_joint_trajectory_controller_parameters.yaml
+│   │   │   ├── speed_scaling_state_broadcaster.cpp
+│   │   │   ├── speed_scaling_state_broadcaster_parameters.yaml
+│   │   │   ├── tool_contact_controller.cpp
+│   │   │   ├── tool_contact_controller_parameters.yaml
+│   │   │   ├── ur_configuration_controller.cpp
+│   │   │   └── ur_configuration_controller_parameters.yaml
+│   │   └── test
+│   │       ├── force_mode_controller_params.yaml
+│   │       ├── freedrive_mode_controller_params.yaml
+│   │       ├── friction_model_controller_params.yaml
+│   │       ├── test_load_force_mode_controller.cpp
+│   │       ├── test_load_freedrive_mode_controller.cpp
+│   │       └── test_load_friction_model_controller.cpp
+│   ├── ur_dashboard_msgs
+│   │   ├── CHANGELOG.rst
+│   │   ├── CMakeLists.txt
+│   │   ├── action
+│   │   │   └── SetMode.action
+│   │   ├── msg
+│   │   │   ├── OperationalMode.msg
+│   │   │   ├── ProgramInformation.msg
+│   │   │   ├── ProgramState.msg
+│   │   │   ├── RobotMode.msg
+│   │   │   ├── SafetyMode.msg
+│   │   │   ├── SafetyStatus.msg
+│   │   │   ├── UserRole.msg
+│   │   │   └── VersionInformation.msg
+│   │   ├── package.xml
+│   │   └── srv
+│   │       ├── AddToLog.srv
+│   │       ├── DownloadProgram.srv
+│   │       ├── GenerateFlightReport.srv
+│   │       ├── GenerateSupportFile.srv
+│   │       ├── GetLoadedProgram.srv
+│   │       ├── GetOperationalMode.srv
+│   │       ├── GetPolyScopeVersion.srv
+│   │       ├── GetProgramState.srv
+│   │       ├── GetPrograms.srv
+│   │       ├── GetRobotMode.srv
+│   │       ├── GetRobotModel.srv
+│   │       ├── GetSafetyMode.srv
+│   │       ├── GetSafetyStatus.srv
+│   │       ├── GetSerialNumber.srv
+│   │       ├── GetUserRole.srv
+│   │       ├── IsInRemoteControl.srv
+│   │       ├── IsProgramRunning.srv
+│   │       ├── IsProgramSaved.srv
+│   │       ├── Load.srv
+│   │       ├── Popup.srv
+│   │       ├── RawRequest.srv
+│   │       ├── SetOperationalMode.srv
+│   │       ├── SetUserRole.srv
+│   │       └── UploadProgram.srv
+│   ├── ur_moveit_config
+│   │   ├── CHANGELOG.rst
+│   │   ├── CMakeLists.txt
+│   │   ├── config
+│   │   │   ├── chomp_planning.yaml
+│   │   │   ├── joint_limits.yaml
+│   │   │   ├── kinematics.yaml
+│   │   │   ├── moveit.rviz
+│   │   │   ├── moveit_controllers.yaml
+│   │   │   ├── ompl_planning.yaml
+│   │   │   ├── pilz_cartesian_limits.yaml
+│   │   │   ├── pilz_industrial_motion_planner_planning.yaml
+│   │   │   └── ur_servo.yaml
+│   │   ├── doc
+│   │   │   ├── index.rst
+│   │   │   └── migration
+│   │   │       └── jazzy.rst
+│   │   ├── launch
+│   │   │   └── ur_moveit.launch.py
+│   │   ├── package.xml
+│   │   └── srdf
+│   │       ├── ur.srdf.xacro
+│   │       └── ur_macro.srdf.xacro
+│   └── ur_robot_driver
+│       ├── CHANGELOG.rst
+│       ├── CMakeLists.txt
+│       ├── README.md
+│       ├── config
+│       │   ├── test_goal_publishers_config.yaml
+│       │   ├── test_velocity_goal_publishers_config.yaml
+│       │   ├── ur10_update_rate.yaml
+│       │   ├── ur10e_update_rate.yaml
+│       │   ├── ur12e_update_rate.yaml
+│       │   ├── ur15_update_rate.yaml
+│       │   ├── ur16e_update_rate.yaml
+│       │   ├── ur18_update_rate.yaml
+│       │   ├── ur20_update_rate.yaml
+│       │   ├── ur30_update_rate.yaml
+│       │   ├── ur3_update_rate.yaml
+│       │   ├── ur3e_update_rate.yaml
+│       │   ├── ur5_update_rate.yaml
+│       │   ├── ur5e_update_rate.yaml
+│       │   ├── ur7e_update_rate.yaml
+│       │   ├── ur8long_update_rate.yaml
+│       │   └── ur_controllers.yaml
+│       ├── doc
+│       │   ├── architecture_coarse.svg
+│       │   ├── conf.py
+│       │   ├── controller_stopper.rst
+│       │   ├── dashboard_client.rst
+│       │   ├── features.rst
+│       │   ├── hardware_interface.rst
+│       │   ├── hardware_interface_parameters.rst
+│       │   ├── index.rst
+│       │   ├── installation
+│       │   │   ├── initial_setup_images
+│       │   │   │   ├── cb3_01_welcome.png
+│       │   │   │   ├── cb3_05_urcaps_installed.png
+│       │   │   │   ├── cb3_07_installation_excontrol.png
+│       │   │   │   ├── cb3_10_prog_structure_urcaps.png
+│       │   │   │   ├── cb3_11_program_view_excontrol.png
+│       │   │   │   ├── es_01_welcome.png
+│       │   │   │   ├── es_05_urcaps_installed.png
+│       │   │   │   ├── es_07_installation_excontrol.png
+│       │   │   │   ├── es_10_prog_structure_urcaps.png
+│       │   │   │   ├── es_11_program_view_excontrol.png
+│       │   │   │   ├── family_photo.png
+│       │   │   │   ├── remote_control.png
+│       │   │   │   ├── services_polyscope5.png
+│       │   │   │   └── services_polyscopex.jpg
+│       │   │   ├── installation.rst
+│       │   │   ├── robot_setup.rst
+│       │   │   └── toc.rst
+│       │   ├── make.bat
+│       │   ├── migration
+│       │   │   └── jazzy.rst
+│       │   ├── operation_modes.rst
+│       │   ├── overview.rst
+│       │   ├── resources
+│       │   │   ├── 2021-10_ROS_World_2021_Making_a_robot_ROS2_powered.pdf
+│       │   │   ├── README.md
+│       │   │   ├── play_button.svg
+│       │   │   └── ros2_control_ur_driver.drawio
+│       │   ├── robot_state_helper.rst
+│       │   ├── setup_tool_communication.rst
+│       │   ├── trajectory_until_node.rst
+│       │   └── usage
+│       │       ├── controllers.rst
+│       │       ├── move.rst
+│       │       ├── script_code.rst
+│       │       ├── simulation.rst
+│       │       ├── startup.rst
+│       │       └── toc.rst
+│       ├── examples
+│       │   ├── examples.py
+│       │   ├── force_mode.py
+│       │   └── move_until_example.py
+│       ├── hardware_interface_plugin.xml
+│       ├── include
+│       │   └── ur_robot_driver
+│       │       ├── controller_stopper.hpp
+│       │       ├── dashboard_client_ros.hpp
+│       │       ├── hardware_interface.hpp
+│       │       ├── robot_state_helper.hpp
+│       │       ├── trajectory_until_node.hpp
+│       │       └── urcl_log_handler.hpp
+│       ├── launch
+│       │   ├── test_forward_velocity_controller.launch.py
+│       │   ├── test_joint_trajectory_controller.launch.py
+│       │   ├── test_scaled_joint_trajectory_controller.launch.py
+│       │   ├── ur10.launch.py
+│       │   ├── ur10e.launch.py
+│       │   ├── ur12e.launch.py
+│       │   ├── ur15.launch.py
+│       │   ├── ur16e.launch.py
+│       │   ├── ur18.launch.py
+│       │   ├── ur20.launch.py
+│       │   ├── ur3.launch.py
+│       │   ├── ur30.launch.py
+│       │   ├── ur3e.launch.py
+│       │   ├── ur5.launch.py
+│       │   ├── ur5e.launch.py
+│       │   ├── ur7e.launch.py
+│       │   ├── ur8long.launch.py
+│       │   ├── ur_control.launch.py
+│       │   ├── ur_dashboard_client.launch.py
+│       │   └── ur_rsp.launch.py
+│       ├── package.xml
+│       ├── resources
+│       │   ├── externalcontrol-1.0.5.urcap
+│       │   ├── rs485-1.0.urcap
+│       │   ├── rtde_input_recipe.txt
+│       │   └── rtde_output_recipe.txt
+│       ├── scripts
+│       │   ├── example_move.py
+│       │   ├── start_ursim.sh
+│       │   ├── tool_communication.py
+│       │   ├── wait_dashboard_server.sh
+│       │   └── wait_for_robot_description
+│       ├── src
+│       │   ├── controller_stopper.cpp
+│       │   ├── controller_stopper_node.cpp
+│       │   ├── dashboard_client_node.cpp
+│       │   ├── dashboard_client_ros.cpp
+│       │   ├── hardware_interface.cpp
+│       │   ├── robot_state_helper.cpp
+│       │   ├── robot_state_helper_node.cpp
+│       │   ├── trajectory_until_node.cpp
+│       │   ├── urcl_log_handler.cpp
+│       │   └── urscript_interface.cpp
+│       ├── test
+│       │   ├── dashboard_client.py
+│       │   ├── example_move.py
+│       │   ├── integration_test_component_lifecycle.py
+│       │   ├── integration_test_config_controller.py
+│       │   ├── integration_test_controller_switch.py
+│       │   ├── integration_test_force_mode.py
+│       │   ├── integration_test_friction_model.py
+│       │   ├── integration_test_hand_back_control.py
+│       │   ├── integration_test_io_controller.py
+│       │   ├── integration_test_passthrough_controller.py
+│       │   ├── integration_test_robot_models.py
+│       │   ├── integration_test_scaled_joint_controller.py
+│       │   ├── integration_test_tool_contact.py
+│       │   ├── integration_test_trajectory_until.py
+│       │   ├── launch_args.py
+│       │   ├── resources
+│       │   │   └── ursim
+│       │   │       └── e-series
+│       │   │           └── ur5e
+│       │   │               └── programs
+│       │   │                   ├── external_control.urp
+│       │   │                   └── hand_back_control_test_prog.urp
+│       │   ├── test_common.py
+│       │   ├── test_mock_hardware.py
+│       │   ├── test_program.urpx
+│       │   └── urscript_interface.py
+│       ├── ur_robot_driver
+│       │   └── __init__.py
+│       └── urdf
+│           ├── ur.ros2_control.xacro
+│           └── ur.urdf.xacro
+├── lerobot
+│   ├── AI_POLICY.md
+│   ├── CODE_OF_CONDUCT.md
+│   ├── COLCON_IGNORE
+│   ├── CONTRIBUTING.md
+│   ├── LICENSE
+│   ├── MANIFEST.in
+│   ├── Makefile
+│   ├── README.md
+│   ├── SECURITY.md
+│   ├── benchmarks
+│   │   └── video
+│   │       ├── README.md
+│   │       └── run_video_benchmark.py
+│   ├── docker
+│   │   ├── Dockerfile.internal
+│   │   ├── Dockerfile.user
+│   │   └── README.md
+│   ├── docs
+│   │   ├── README.md
+│   │   └── source
+│   │       ├── _toctree.yml
+│   │       ├── act.mdx
+│   │       ├── action_representations.mdx
+│   │       ├── adding_benchmarks.mdx
+│   │       ├── async.mdx
+│   │       ├── backwardcomp.mdx
+│   │       ├── bring_your_own_policies.mdx
+│   │       ├── cameras.mdx
+│   │       ├── contributing.md -> ../../CONTRIBUTING.md
+│   │       ├── damiao.mdx
+│   │       ├── dataset_subtask.mdx
+│   │       ├── debug_processor_pipeline.mdx
+│   │       ├── earthrover_mini_plus.mdx
+│   │       ├── env_processor.mdx
+│   │       ├── envhub.mdx
+│   │       ├── envhub_isaaclab_arena.mdx
+│   │       ├── envhub_leisaac.mdx
+│   │       ├── feetech.mdx
+│   │       ├── groot.mdx
+│   │       ├── hil_data_collection.mdx
+│   │       ├── hilserl.mdx
+│   │       ├── hilserl_sim.mdx
+│   │       ├── hope_jr.mdx
+│   │       ├── il_robots.mdx
+│   │       ├── implement_your_own_processor.mdx
+│   │       ├── index.mdx
+│   │       ├── installation.mdx
+│   │       ├── integrate_hardware.mdx
+│   │       ├── introduction_processors.mdx
+│   │       ├── koch.mdx
+│   │       ├── lekiwi.mdx
+│   │       ├── lerobot-dataset-v3.mdx
+│   │       ├── libero.mdx
+│   │       ├── metaworld.mdx
+│   │       ├── multi_gpu_training.mdx
+│   │       ├── multi_task_dit.mdx
+│   │       ├── notebooks.mdx
+│   │       ├── omx.mdx
+│   │       ├── openarm.mdx
+│   │       ├── peft_training.mdx
+│   │       ├── phone_teleop.mdx
+│   │       ├── pi0.mdx
+│   │       ├── pi05.mdx
+│   │       ├── pi0fast.mdx
+│   │       ├── policy_act_README.md
+│   │       ├── policy_diffusion_README.md
+│   │       ├── policy_groot_README.md
+│   │       ├── policy_multi_task_dit_README.md
+│   │       ├── policy_pi05_README.md
+│   │       ├── policy_pi0_README.md
+│   │       ├── policy_rtc_README.md
+│   │       ├── policy_sarm_README.md
+│   │       ├── policy_smolvla_README.md
+│   │       ├── policy_tdmpc_README.md
+│   │       ├── policy_vqbet_README.md
+│   │       ├── policy_walloss_README.md
+│   │       ├── porting_datasets_v3.mdx
+│   │       ├── processors_robots_teleop.mdx
+│   │       ├── reachy2.mdx
+│   │       ├── rename_map.mdx
+│   │       ├── rtc.mdx
+│   │       ├── sarm.mdx
+│   │       ├── smolvla.mdx
+│   │       ├── so100.mdx
+│   │       ├── so101.mdx
+│   │       ├── streaming_video_encoding.mdx
+│   │       ├── torch_accelerators.mdx
+│   │       ├── unitree_g1.mdx
+│   │       ├── using_dataset_tools.mdx
+│   │       ├── walloss.mdx
+│   │       └── xvla.mdx
+│   ├── docs-requirements.txt
+│   ├── examples
+│   │   ├── backward_compatibility
+│   │   │   └── replay.py
+│   │   ├── dataset
+│   │   │   ├── create_progress_videos.py
+│   │   │   ├── load_lerobot_dataset.py
+│   │   │   ├── slurm_compute_rabc.py
+│   │   │   ├── use_dataset_image_transforms.py
+│   │   │   └── use_dataset_tools.py
+│   │   ├── hil
+│   │   │   ├── hil_data_collection.py
+│   │   │   └── hil_utils.py
+│   │   ├── lekiwi
+│   │   │   ├── evaluate.py
+│   │   │   ├── record.py
+│   │   │   ├── replay.py
+│   │   │   └── teleoperate.py
+│   │   ├── phone_to_so100
+│   │   │   ├── evaluate.py
+│   │   │   ├── record.py
+│   │   │   ├── replay.py
+│   │   │   └── teleoperate.py
+│   │   ├── port_datasets
+│   │   │   ├── display_error_files.py
+│   │   │   ├── port_droid.py
+│   │   │   ├── slurm_aggregate_shards.py
+│   │   │   ├── slurm_port_shards.py
+│   │   │   └── slurm_upload.py
+│   │   ├── rtc
+│   │   │   ├── eval_dataset.py
+│   │   │   └── eval_with_real_robot.py
+│   │   ├── so100_to_so100_EE
+│   │   │   ├── evaluate.py
+│   │   │   ├── record.py
+│   │   │   ├── replay.py
+│   │   │   └── teleoperate.py
+│   │   ├── training
+│   │   │   ├── train_policy.py
+│   │   │   └── train_with_streaming.py
+│   │   └── tutorial
+│   │       ├── act
+│   │       │   ├── act_training_example.py
+│   │       │   └── act_using_example.py
+│   │       ├── async-inf
+│   │       │   ├── policy_server.py
+│   │       │   └── robot_client.py
+│   │       ├── diffusion
+│   │       │   ├── diffusion_training_example.py
+│   │       │   └── diffusion_using_example.py
+│   │       ├── pi0
+│   │       │   └── using_pi0_example.py
+│   │       ├── rl
+│   │       │   ├── hilserl_example.py
+│   │       │   └── reward_classifier_example.py
+│   │       └── smolvla
+│   │           └── using_smolvla_example.py
+│   ├── media
+│   │   └── readme
+│   │       ├── VLA_architecture.jpg
+│   │       ├── lerobot-logo-thumbnail.png
+│   │       ├── robots_control_video.webp
+│   │       └── so100_video.webp
+│   ├── pyproject.toml
+│   ├── requirements-macos.txt
+│   ├── requirements-ubuntu.txt
+│   ├── requirements.in
+│   ├── setup.py
+│   ├── src
+│   │   ├── lerobot
+│   │   │   ├── __init__.py
+│   │   │   ├── __pycache__
+│   │   │   │   ├── __init__.cpython-312.pyc
+│   │   │   │   └── __version__.cpython-312.pyc
+│   │   │   ├── __version__.py
+│   │   │   ├── async_inference
+│   │   │   │   ├── configs.py
+│   │   │   │   ├── constants.py
+│   │   │   │   ├── helpers.py
+│   │   │   │   ├── policy_server.py
+│   │   │   │   └── robot_client.py
+│   │   │   ├── cameras
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── camera.py
+│   │   │   │   ├── configs.py
+│   │   │   │   ├── opencv
+│   │   │   │   │   ├── __init__.py
+│   │   │   │   │   ├── camera_opencv.py
+│   │   │   │   │   └── configuration_opencv.py
+│   │   │   │   ├── reachy2_camera
+│   │   │   │   │   ├── __init__.py
+│   │   │   │   │   ├── configuration_reachy2_camera.py
+│   │   │   │   │   └── reachy2_camera.py
+│   │   │   │   ├── realsense
+│   │   │   │   │   ├── __init__.py
+│   │   │   │   │   ├── camera_realsense.py
+│   │   │   │   │   └── configuration_realsense.py
+│   │   │   │   ├── utils.py
+│   │   │   │   └── zmq
+│   │   │   │       ├── __init__.py
+│   │   │   │       ├── camera_zmq.py
+│   │   │   │       ├── configuration_zmq.py
+│   │   │   │       └── image_server.py
+│   │   │   ├── configs
+│   │   │   │   ├── default.py
+│   │   │   │   ├── eval.py
+│   │   │   │   ├── parser.py
+│   │   │   │   ├── policies.py
+│   │   │   │   ├── train.py
+│   │   │   │   └── types.py
+│   │   │   ├── data_processing
+│   │   │   │   ├── __init__.py
+│   │   │   │   └── sarm_annotations
+│   │   │   │       ├── __init__.py
+│   │   │   │       └── subtask_annotation.py
+│   │   │   ├── datasets
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── aggregate.py
+│   │   │   │   ├── card_template.md
+│   │   │   │   ├── compute_stats.py
+│   │   │   │   ├── dataset_metadata.py
+│   │   │   │   ├── dataset_reader.py
+│   │   │   │   ├── dataset_tools.py
+│   │   │   │   ├── dataset_writer.py
+│   │   │   │   ├── factory.py
+│   │   │   │   ├── feature_utils.py
+│   │   │   │   ├── image_writer.py
+│   │   │   │   ├── io_utils.py
+│   │   │   │   ├── lerobot_dataset.py
+│   │   │   │   ├── multi_dataset.py
+│   │   │   │   ├── pipeline_features.py
+│   │   │   │   ├── sampler.py
+│   │   │   │   ├── streaming_dataset.py
+│   │   │   │   ├── transforms.py
+│   │   │   │   ├── utils.py
+│   │   │   │   └── video_utils.py
+│   │   │   ├── envs
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── configs.py
+│   │   │   │   ├── factory.py
+│   │   │   │   ├── libero.py
+│   │   │   │   ├── metaworld.py
+│   │   │   │   ├── metaworld_config.json
+│   │   │   │   └── utils.py
+│   │   │   ├── model
+│   │   │   │   └── kinematics.py
+│   │   │   ├── motors
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── calibration_gui.py
+│   │   │   │   ├── damiao
+│   │   │   │   │   ├── __init__.py
+│   │   │   │   │   ├── damiao.py
+│   │   │   │   │   └── tables.py
+│   │   │   │   ├── dynamixel
+│   │   │   │   │   ├── __init__.py
+│   │   │   │   │   ├── dynamixel.py
+│   │   │   │   │   └── tables.py
+│   │   │   │   ├── encoding_utils.py
+│   │   │   │   ├── feetech
+│   │   │   │   │   ├── __init__.py
+│   │   │   │   │   ├── feetech.py
+│   │   │   │   │   └── tables.py
+│   │   │   │   ├── motors_bus.py
+│   │   │   │   └── robstride
+│   │   │   │       ├── __init__.py
+│   │   │   │       ├── robstride.py
+│   │   │   │       └── tables.py
+│   │   │   ├── optim
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── factory.py
+│   │   │   │   ├── optimizers.py
+│   │   │   │   └── schedulers.py
+│   │   │   ├── policies
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── act
+│   │   │   │   │   ├── README.md -> ../../../../docs/source/policy_act_README.md
+│   │   │   │   │   ├── configuration_act.py
+│   │   │   │   │   ├── modeling_act.py
+│   │   │   │   │   └── processor_act.py
+│   │   │   │   ├── diffusion
+│   │   │   │   │   ├── README.md -> ../../../../docs/source/policy_diffusion_README.md
+│   │   │   │   │   ├── configuration_diffusion.py
+│   │   │   │   │   ├── modeling_diffusion.py
+│   │   │   │   │   └── processor_diffusion.py
+│   │   │   │   ├── factory.py
+│   │   │   │   ├── groot
+│   │   │   │   │   ├── README.md -> ../../../../docs/source/policy_groot_README.md
+│   │   │   │   │   ├── __init__.py
+│   │   │   │   │   ├── action_head
+│   │   │   │   │   │   ├── __init__.py
+│   │   │   │   │   │   ├── action_encoder.py
+│   │   │   │   │   │   ├── cross_attention_dit.py
+│   │   │   │   │   │   └── flow_matching_action_head.py
+│   │   │   │   │   ├── configuration_groot.py
+│   │   │   │   │   ├── eagle2_hg_model
+│   │   │   │   │   │   ├── configuration_eagle2_5_vl.py
+│   │   │   │   │   │   ├── image_processing_eagle2_5_vl_fast.py
+│   │   │   │   │   │   ├── modeling_eagle2_5_vl.py
+│   │   │   │   │   │   └── processing_eagle2_5_vl.py
+│   │   │   │   │   ├── groot_n1.py
+│   │   │   │   │   ├── modeling_groot.py
+│   │   │   │   │   ├── processor_groot.py
+│   │   │   │   │   └── utils.py
+│   │   │   │   ├── multi_task_dit
+│   │   │   │   │   ├── README.md -> ../../../../docs/source/policy_multi_task_dit_README.md
+│   │   │   │   │   ├── __init__.py
+│   │   │   │   │   ├── configuration_multi_task_dit.py
+│   │   │   │   │   ├── modeling_multi_task_dit.py
+│   │   │   │   │   └── processor_multi_task_dit.py
+│   │   │   │   ├── pi0
+│   │   │   │   │   ├── README.md -> ../../../../docs/source/policy_pi0_README.md
+│   │   │   │   │   ├── __init__.py
+│   │   │   │   │   ├── configuration_pi0.py
+│   │   │   │   │   ├── modeling_pi0.py
+│   │   │   │   │   └── processor_pi0.py
+│   │   │   │   ├── pi05
+│   │   │   │   │   ├── README.md -> ../../../../docs/source/policy_pi05_README.md
+│   │   │   │   │   ├── __init__.py
+│   │   │   │   │   ├── configuration_pi05.py
+│   │   │   │   │   ├── modeling_pi05.py
+│   │   │   │   │   └── processor_pi05.py
+│   │   │   │   ├── pi0_fast
+│   │   │   │   │   ├── __init__.py
+│   │   │   │   │   ├── configuration_pi0_fast.py
+│   │   │   │   │   ├── modeling_pi0_fast.py
+│   │   │   │   │   └── processor_pi0_fast.py
+│   │   │   │   ├── pi_gemma.py
+│   │   │   │   ├── pretrained.py
+│   │   │   │   ├── rtc
+│   │   │   │   │   ├── README.md -> ../../../../docs/source/policy_rtc_README.md
+│   │   │   │   │   ├── __init__.py
+│   │   │   │   │   ├── action_interpolator.py
+│   │   │   │   │   ├── action_queue.py
+│   │   │   │   │   ├── configuration_rtc.py
+│   │   │   │   │   ├── debug_tracker.py
+│   │   │   │   │   ├── debug_visualizer.py
+│   │   │   │   │   ├── latency_tracker.py
+│   │   │   │   │   └── modeling_rtc.py
+│   │   │   │   ├── sac
+│   │   │   │   │   ├── configuration_sac.py
+│   │   │   │   │   ├── modeling_sac.py
+│   │   │   │   │   ├── processor_sac.py
+│   │   │   │   │   └── reward_model
+│   │   │   │   │       ├── configuration_classifier.py
+│   │   │   │   │       ├── modeling_classifier.py
+│   │   │   │   │       └── processor_classifier.py
+│   │   │   │   ├── sarm
+│   │   │   │   │   ├── README.md -> ../../../../docs/source/policy_sarm_README.md
+│   │   │   │   │   ├── compute_rabc_weights.py
+│   │   │   │   │   ├── configuration_sarm.py
+│   │   │   │   │   ├── modeling_sarm.py
+│   │   │   │   │   ├── processor_sarm.py
+│   │   │   │   │   └── sarm_utils.py
+│   │   │   │   ├── smolvla
+│   │   │   │   │   ├── README.md -> ../../../../docs/source/policy_smolvla_README.md
+│   │   │   │   │   ├── configuration_smolvla.py
+│   │   │   │   │   ├── modeling_smolvla.py
+│   │   │   │   │   ├── processor_smolvla.py
+│   │   │   │   │   └── smolvlm_with_expert.py
+│   │   │   │   ├── tdmpc
+│   │   │   │   │   ├── README.md -> ../../../../docs/source/policy_tdmpc_README.md
+│   │   │   │   │   ├── configuration_tdmpc.py
+│   │   │   │   │   ├── modeling_tdmpc.py
+│   │   │   │   │   └── processor_tdmpc.py
+│   │   │   │   ├── utils.py
+│   │   │   │   ├── vqbet
+│   │   │   │   │   ├── README.md -> ../../../../docs/source/policy_vqbet_README.md
+│   │   │   │   │   ├── configuration_vqbet.py
+│   │   │   │   │   ├── modeling_vqbet.py
+│   │   │   │   │   ├── processor_vqbet.py
+│   │   │   │   │   └── vqbet_utils.py
+│   │   │   │   ├── wall_x
+│   │   │   │   │   ├── README.md -> ../../../../docs/source/policy_walloss_README.md
+│   │   │   │   │   ├── __init__.py
+│   │   │   │   │   ├── configuration_wall_x.py
+│   │   │   │   │   ├── constant.py
+│   │   │   │   │   ├── modeling_wall_x.py
+│   │   │   │   │   ├── processor_wall_x.py
+│   │   │   │   │   ├── qwen_model
+│   │   │   │   │   │   ├── configuration_qwen2_5_vl.py
+│   │   │   │   │   │   └── qwen2_5_vl_moe.py
+│   │   │   │   │   └── utils.py
+│   │   │   │   └── xvla
+│   │   │   │       ├── __init__.py
+│   │   │   │       ├── action_hub.py
+│   │   │   │       ├── configuration_florence2.py
+│   │   │   │       ├── configuration_xvla.py
+│   │   │   │       ├── modeling_florence2.py
+│   │   │   │       ├── modeling_xvla.py
+│   │   │   │       ├── processor_xvla.py
+│   │   │   │       ├── soft_transformer.py
+│   │   │   │       └── utils.py
+│   │   │   ├── processor
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── batch_processor.py
+│   │   │   │   ├── converters.py
+│   │   │   │   ├── delta_action_processor.py
+│   │   │   │   ├── device_processor.py
+│   │   │   │   ├── env_processor.py
+│   │   │   │   ├── factory.py
+│   │   │   │   ├── gym_action_processor.py
+│   │   │   │   ├── hil_processor.py
+│   │   │   │   ├── migrate_policy_normalization.py
+│   │   │   │   ├── normalize_processor.py
+│   │   │   │   ├── observation_processor.py
+│   │   │   │   ├── pipeline.py
+│   │   │   │   ├── policy_robot_bridge.py
+│   │   │   │   ├── relative_action_processor.py
+│   │   │   │   ├── rename_processor.py
+│   │   │   │   └── tokenizer_processor.py
+│   │   │   ├── rl
+│   │   │   │   ├── actor.py
+│   │   │   │   ├── buffer.py
+│   │   │   │   ├── crop_dataset_roi.py
+│   │   │   │   ├── eval_policy.py
+│   │   │   │   ├── gym_manipulator.py
+│   │   │   │   ├── joint_observations_processor.py
+│   │   │   │   ├── learner.py
+│   │   │   │   ├── learner_service.py
+│   │   │   │   ├── process.py
+│   │   │   │   ├── queue.py
+│   │   │   │   └── wandb_utils.py
+│   │   │   ├── robots
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── bi_openarm_follower
+│   │   │   │   │   ├── __init__.py
+│   │   │   │   │   ├── bi_openarm_follower.py
+│   │   │   │   │   └── config_bi_openarm_follower.py
+│   │   │   │   ├── bi_so_follower
+│   │   │   │   │   ├── __init__.py
+│   │   │   │   │   ├── bi_so_follower.py
+│   │   │   │   │   └── config_bi_so_follower.py
+│   │   │   │   ├── config.py
+│   │   │   │   ├── earthrover_mini_plus
+│   │   │   │   │   ├── __init__.py
+│   │   │   │   │   ├── config_earthrover_mini_plus.py
+│   │   │   │   │   ├── earthrover_mini_plus.mdx -> ../../../../docs/source/earthrover_mini_plus.mdx
+│   │   │   │   │   └── robot_earthrover_mini_plus.py
+│   │   │   │   ├── hope_jr
+│   │   │   │   │   ├── __init__.py
+│   │   │   │   │   ├── config_hope_jr.py
+│   │   │   │   │   ├── hope_jr.mdx -> ../../../../docs/source/hope_jr.mdx
+│   │   │   │   │   ├── hope_jr_arm.py
+│   │   │   │   │   └── hope_jr_hand.py
+│   │   │   │   ├── koch_follower
+│   │   │   │   │   ├── __init__.py
+│   │   │   │   │   ├── config_koch_follower.py
+│   │   │   │   │   ├── koch.mdx -> ../../../../docs/source/koch.mdx
+│   │   │   │   │   └── koch_follower.py
+│   │   │   │   ├── lekiwi
+│   │   │   │   │   ├── __init__.py
+│   │   │   │   │   ├── config_lekiwi.py
+│   │   │   │   │   ├── lekiwi.mdx -> ../../../../docs/source/lekiwi.mdx
+│   │   │   │   │   ├── lekiwi.py
+│   │   │   │   │   ├── lekiwi_client.py
+│   │   │   │   │   └── lekiwi_host.py
+│   │   │   │   ├── omx_follower
+│   │   │   │   │   ├── __init__.py
+│   │   │   │   │   ├── config_omx_follower.py
+│   │   │   │   │   └── omx_follower.py
+│   │   │   │   ├── openarm_follower
+│   │   │   │   │   ├── __init__.py
+│   │   │   │   │   ├── config_openarm_follower.py
+│   │   │   │   │   └── openarm_follower.py
+│   │   │   │   ├── reachy2
+│   │   │   │   │   ├── __init__.py
+│   │   │   │   │   ├── configuration_reachy2.py
+│   │   │   │   │   └── robot_reachy2.py
+│   │   │   │   ├── robot.py
+│   │   │   │   ├── so_follower
+│   │   │   │   │   ├── __init__.py
+│   │   │   │   │   ├── config_so_follower.py
+│   │   │   │   │   ├── robot_kinematic_processor.py
+│   │   │   │   │   ├── so100.md -> ../../../../docs/source/so100.mdx
+│   │   │   │   │   ├── so101.md -> ../../../../docs/source/so101.mdx
+│   │   │   │   │   └── so_follower.py
+│   │   │   │   ├── unitree_g1
+│   │   │   │   │   ├── __init__.py
+│   │   │   │   │   ├── config_unitree_g1.py
+│   │   │   │   │   ├── g1_kinematics.py
+│   │   │   │   │   ├── g1_utils.py
+│   │   │   │   │   ├── gr00t_locomotion.py
+│   │   │   │   │   ├── holosoma_locomotion.py
+│   │   │   │   │   ├── run_g1_server.py
+│   │   │   │   │   ├── unitree_g1.py
+│   │   │   │   │   └── unitree_sdk2_socket.py
+│   │   │   │   └── utils.py
+│   │   │   ├── scripts
+│   │   │   │   ├── __pycache__
+│   │   │   │   │   └── lerobot_info.cpython-312.pyc
+│   │   │   │   ├── augment_dataset_quantile_stats.py
+│   │   │   │   ├── convert_dataset_v21_to_v30.py
+│   │   │   │   ├── lerobot_calibrate.py
+│   │   │   │   ├── lerobot_dataset_viz.py
+│   │   │   │   ├── lerobot_edit_dataset.py
+│   │   │   │   ├── lerobot_eval.py
+│   │   │   │   ├── lerobot_find_cameras.py
+│   │   │   │   ├── lerobot_find_joint_limits.py
+│   │   │   │   ├── lerobot_find_port.py
+│   │   │   │   ├── lerobot_imgtransform_viz.py
+│   │   │   │   ├── lerobot_info.py
+│   │   │   │   ├── lerobot_record.py
+│   │   │   │   ├── lerobot_replay.py
+│   │   │   │   ├── lerobot_setup_can.py
+│   │   │   │   ├── lerobot_setup_motors.py
+│   │   │   │   ├── lerobot_teleoperate.py
+│   │   │   │   ├── lerobot_train.py
+│   │   │   │   └── lerobot_train_tokenizer.py
+│   │   │   ├── teleoperators
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── bi_openarm_leader
+│   │   │   │   │   ├── __init__.py
+│   │   │   │   │   ├── bi_openarm_leader.py
+│   │   │   │   │   └── config_bi_openarm_leader.py
+│   │   │   │   ├── bi_so_leader
+│   │   │   │   │   ├── __init__.py
+│   │   │   │   │   ├── bi_so_leader.py
+│   │   │   │   │   └── config_bi_so_leader.py
+│   │   │   │   ├── config.py
+│   │   │   │   ├── gamepad
+│   │   │   │   │   ├── __init__.py
+│   │   │   │   │   ├── configuration_gamepad.py
+│   │   │   │   │   ├── gamepad_utils.py
+│   │   │   │   │   └── teleop_gamepad.py
+│   │   │   │   ├── homunculus
+│   │   │   │   │   ├── __init__.py
+│   │   │   │   │   ├── config_homunculus.py
+│   │   │   │   │   ├── homunculus_arm.py
+│   │   │   │   │   ├── homunculus_glove.py
+│   │   │   │   │   └── joints_translation.py
+│   │   │   │   ├── keyboard
+│   │   │   │   │   ├── __init__.py
+│   │   │   │   │   ├── configuration_keyboard.py
+│   │   │   │   │   └── teleop_keyboard.py
+│   │   │   │   ├── koch_leader
+│   │   │   │   │   ├── __init__.py
+│   │   │   │   │   ├── config_koch_leader.py
+│   │   │   │   │   └── koch_leader.py
+│   │   │   │   ├── omx_leader
+│   │   │   │   │   ├── __init__.py
+│   │   │   │   │   ├── config_omx_leader.py
+│   │   │   │   │   └── omx_leader.py
+│   │   │   │   ├── openarm_leader
+│   │   │   │   │   ├── __init__.py
+│   │   │   │   │   ├── config_openarm_leader.py
+│   │   │   │   │   └── openarm_leader.py
+│   │   │   │   ├── openarm_mini
+│   │   │   │   │   ├── __init__.py
+│   │   │   │   │   ├── config_openarm_mini.py
+│   │   │   │   │   └── openarm_mini.py
+│   │   │   │   ├── phone
+│   │   │   │   │   ├── __init__.py
+│   │   │   │   │   ├── config_phone.py
+│   │   │   │   │   ├── phone_processor.py
+│   │   │   │   │   └── teleop_phone.py
+│   │   │   │   ├── reachy2_teleoperator
+│   │   │   │   │   ├── __init__.py
+│   │   │   │   │   ├── config_reachy2_teleoperator.py
+│   │   │   │   │   └── reachy2_teleoperator.py
+│   │   │   │   ├── so_leader
+│   │   │   │   │   ├── __init__.py
+│   │   │   │   │   ├── config_so_leader.py
+│   │   │   │   │   ├── so100.md -> ../../../../docs/source/so100.mdx
+│   │   │   │   │   ├── so101.md -> ../../../../docs/source/so101.mdx
+│   │   │   │   │   └── so_leader.py
+│   │   │   │   ├── teleoperator.py
+│   │   │   │   ├── unitree_g1
+│   │   │   │   │   ├── __init__.py
+│   │   │   │   │   ├── config_unitree_g1.py
+│   │   │   │   │   ├── exo_calib.py
+│   │   │   │   │   ├── exo_ik.py
+│   │   │   │   │   ├── exo_serial.py
+│   │   │   │   │   └── unitree_g1.py
+│   │   │   │   └── utils.py
+│   │   │   ├── templates
+│   │   │   │   └── lerobot_modelcard_template.md
+│   │   │   ├── transport
+│   │   │   │   ├── services.proto
+│   │   │   │   ├── services_pb2.py
+│   │   │   │   ├── services_pb2_grpc.py
+│   │   │   │   └── utils.py
+│   │   │   ├── types.py
+│   │   │   └── utils
+│   │   │       ├── constants.py
+│   │   │       ├── control_utils.py
+│   │   │       ├── decorators.py
+│   │   │       ├── device_utils.py
+│   │   │       ├── errors.py
+│   │   │       ├── hub.py
+│   │   │       ├── import_utils.py
+│   │   │       ├── io_utils.py
+│   │   │       ├── logging_utils.py
+│   │   │       ├── rabc.py
+│   │   │       ├── random_utils.py
+│   │   │       ├── robot_utils.py
+│   │   │       ├── rotation.py
+│   │   │       ├── train_utils.py
+│   │   │       ├── transition.py
+│   │   │       ├── utils.py
+│   │   │       └── visualization_utils.py
+│   │   └── lerobot.egg-info
+│   │       ├── PKG-INFO
+│   │       ├── SOURCES.txt
+│   │       ├── dependency_links.txt
+│   │       ├── entry_points.txt
+│   │       ├── requires.txt
+│   │       └── top_level.txt
+│   ├── tests
+│   │   ├── __init__.py
+│   │   ├── artifacts
+│   │   │   ├── cameras
+│   │   │   │   ├── image_128x128.png
+│   │   │   │   ├── image_160x120.png
+│   │   │   │   ├── image_320x180.png
+│   │   │   │   ├── image_480x270.png
+│   │   │   │   └── test_rs.bag
+│   │   │   ├── datasets
+│   │   │   │   ├── lerobot
+│   │   │   │   │   ├── aloha_sim_insertion_human
+│   │   │   │   │   │   ├── frame_0.safetensors
+│   │   │   │   │   │   ├── frame_1.safetensors
+│   │   │   │   │   │   ├── frame_250.safetensors
+│   │   │   │   │   │   ├── frame_251.safetensors
+│   │   │   │   │   │   ├── frame_498.safetensors
+│   │   │   │   │   │   └── frame_499.safetensors
+│   │   │   │   │   ├── pusht
+│   │   │   │   │   │   ├── frame_0.safetensors
+│   │   │   │   │   │   ├── frame_1.safetensors
+│   │   │   │   │   │   ├── frame_159.safetensors
+│   │   │   │   │   │   ├── frame_160.safetensors
+│   │   │   │   │   │   ├── frame_80.safetensors
+│   │   │   │   │   │   └── frame_81.safetensors
+│   │   │   │   │   └── xarm_lift_medium
+│   │   │   │   │       ├── frame_0.safetensors
+│   │   │   │   │       ├── frame_1.safetensors
+│   │   │   │   │       ├── frame_12.safetensors
+│   │   │   │   │       ├── frame_13.safetensors
+│   │   │   │   │       ├── frame_23.safetensors
+│   │   │   │   │       └── frame_24.safetensors
+│   │   │   │   └── save_dataset_to_safetensors.py
+│   │   │   ├── image_transforms
+│   │   │   │   ├── default_transforms.safetensors
+│   │   │   │   ├── save_image_transforms_to_safetensors.py
+│   │   │   │   └── single_transforms.safetensors
+│   │   │   └── policies
+│   │   │       ├── aloha_sim_insertion_human_act_
+│   │   │       │   ├── actions.safetensors
+│   │   │       │   ├── grad_stats.safetensors
+│   │   │       │   ├── output_dict.safetensors
+│   │   │       │   └── param_stats.safetensors
+│   │   │       ├── aloha_sim_insertion_human_act_1000_steps
+│   │   │       │   ├── actions.safetensors
+│   │   │       │   ├── grad_stats.safetensors
+│   │   │       │   ├── output_dict.safetensors
+│   │   │       │   └── param_stats.safetensors
+│   │   │       ├── pusht_diffusion_
+│   │   │       │   ├── actions.safetensors
+│   │   │       │   ├── grad_stats.safetensors
+│   │   │       │   ├── output_dict.safetensors
+│   │   │       │   └── param_stats.safetensors
+│   │   │       ├── save_policy_to_safetensors.py
+│   │   │       ├── xarm_lift_medium_tdmpc_use_mpc
+│   │   │       │   ├── actions.safetensors
+│   │   │       │   ├── grad_stats.safetensors
+│   │   │       │   ├── output_dict.safetensors
+│   │   │       │   └── param_stats.safetensors
+│   │   │       └── xarm_lift_medium_tdmpc_use_policy
+│   │   │           ├── actions.safetensors
+│   │   │           ├── grad_stats.safetensors
+│   │   │           ├── output_dict.safetensors
+│   │   │           └── param_stats.safetensors
+│   │   ├── async_inference
+│   │   │   ├── test_e2e.py
+│   │   │   ├── test_helpers.py
+│   │   │   ├── test_policy_server.py
+│   │   │   └── test_robot_client.py
+│   │   ├── cameras
+│   │   │   ├── test_opencv.py
+│   │   │   ├── test_reachy2_camera.py
+│   │   │   └── test_realsense.py
+│   │   ├── configs
+│   │   │   ├── test_default.py
+│   │   │   └── test_plugin_loading.py
+│   │   ├── conftest.py
+│   │   ├── datasets
+│   │   │   ├── test_aggregate.py
+│   │   │   ├── test_compute_stats.py
+│   │   │   ├── test_dataset_metadata.py
+│   │   │   ├── test_dataset_reader.py
+│   │   │   ├── test_dataset_tools.py
+│   │   │   ├── test_dataset_utils.py
+│   │   │   ├── test_dataset_writer.py
+│   │   │   ├── test_datasets.py
+│   │   │   ├── test_delta_timestamps.py
+│   │   │   ├── test_image_transforms.py
+│   │   │   ├── test_image_writer.py
+│   │   │   ├── test_lerobot_dataset.py
+│   │   │   ├── test_quantiles_dataset_integration.py
+│   │   │   ├── test_sampler.py
+│   │   │   ├── test_streaming.py
+│   │   │   ├── test_streaming_video_encoder.py
+│   │   │   ├── test_subtask_dataset.py
+│   │   │   └── test_visualize_dataset.py
+│   │   ├── envs
+│   │   │   └── test_envs.py
+│   │   ├── fixtures
+│   │   │   ├── constants.py
+│   │   │   ├── dataset_factories.py
+│   │   │   ├── files.py
+│   │   │   ├── hub.py
+│   │   │   └── optimizers.py
+│   │   ├── mocks
+│   │   │   ├── mock_dynamixel.py
+│   │   │   ├── mock_feetech.py
+│   │   │   ├── mock_motors_bus.py
+│   │   │   ├── mock_robot.py
+│   │   │   ├── mock_serial_patch.py
+│   │   │   └── mock_teleop.py
+│   │   ├── motors
+│   │   │   ├── test_damiao.py
+│   │   │   ├── test_dynamixel.py
+│   │   │   ├── test_feetech.py
+│   │   │   └── test_motors_bus.py
+│   │   ├── optim
+│   │   │   ├── test_optimizers.py
+│   │   │   └── test_schedulers.py
+│   │   ├── policies
+│   │   │   ├── groot
+│   │   │   │   ├── test_groot_lerobot.py
+│   │   │   │   └── test_groot_vs_original.py
+│   │   │   ├── hilserl
+│   │   │   │   └── test_modeling_classifier.py
+│   │   │   ├── multi_task_dit
+│   │   │   │   └── test_multi_task_dit.py
+│   │   │   ├── pi0_fast
+│   │   │   │   └── test_pi0_fast_original_vs_lerobot.py
+│   │   │   ├── pi0_pi05
+│   │   │   │   ├── test_pi0.py
+│   │   │   │   ├── test_pi05.py
+│   │   │   │   ├── test_pi05_original_vs_lerobot.py
+│   │   │   │   ├── test_pi05_rtc.py
+│   │   │   │   ├── test_pi0_original_vs_lerobot.py
+│   │   │   │   └── test_pi0_rtc.py
+│   │   │   ├── rtc
+│   │   │   │   ├── test_action_interpolator.py
+│   │   │   │   ├── test_action_queue.py
+│   │   │   │   ├── test_configuration_rtc.py
+│   │   │   │   ├── test_debug_tracker.py
+│   │   │   │   ├── test_latency_tracker.py
+│   │   │   │   ├── test_modeling_rtc.py
+│   │   │   │   └── test_rtc_relative_actions.py
+│   │   │   ├── smolvla
+│   │   │   │   └── test_smolvla_rtc.py
+│   │   │   ├── test_policies.py
+│   │   │   ├── test_relative_actions.py
+│   │   │   ├── test_sac_config.py
+│   │   │   ├── test_sac_policy.py
+│   │   │   ├── test_sarm_processor.py
+│   │   │   ├── test_sarm_subtask_annotations.py
+│   │   │   ├── test_sarm_utils.py
+│   │   │   ├── wall_x
+│   │   │   │   └── test_wallx.py
+│   │   │   └── xvla
+│   │   │       └── test_xvla_original_vs_lerobot.py
+│   │   ├── processor
+│   │   │   ├── test_act_processor.py
+│   │   │   ├── test_batch_conversion.py
+│   │   │   ├── test_batch_processor.py
+│   │   │   ├── test_classifier_processor.py
+│   │   │   ├── test_converters.py
+│   │   │   ├── test_device_processor.py
+│   │   │   ├── test_diffusion_processor.py
+│   │   │   ├── test_libero_processor.py
+│   │   │   ├── test_migration_detection.py
+│   │   │   ├── test_normalize_processor.py
+│   │   │   ├── test_observation_processor.py
+│   │   │   ├── test_pipeline.py
+│   │   │   ├── test_pipeline_from_pretrained_helpers.py
+│   │   │   ├── test_policy_robot_bridge.py
+│   │   │   ├── test_rename_processor.py
+│   │   │   ├── test_sac_processor.py
+│   │   │   ├── test_smolvla_processor.py
+│   │   │   ├── test_tdmpc_processor.py
+│   │   │   ├── test_tokenizer_processor.py
+│   │   │   └── test_vqbet_processor.py
+│   │   ├── rl
+│   │   │   ├── test_actor.py
+│   │   │   ├── test_actor_learner.py
+│   │   │   ├── test_learner_service.py
+│   │   │   └── test_queue.py
+│   │   ├── robots
+│   │   │   ├── test_reachy2.py
+│   │   │   ├── test_so100_follower.py
+│   │   │   └── test_unitree_g1.py
+│   │   ├── scripts
+│   │   │   └── test_edit_dataset_parsing.py
+│   │   ├── teleoperators
+│   │   │   ├── test_reachy2_teleoperator.py
+│   │   │   └── test_unitree_g1_teleoperator.py
+│   │   ├── test_available.py
+│   │   ├── test_cli_peft.py
+│   │   ├── test_control_robot.py
+│   │   ├── training
+│   │   │   ├── test_multi_gpu.py
+│   │   │   └── test_visual_validation.py
+│   │   ├── transport
+│   │   │   └── test_transport_utils.py
+│   │   ├── utils
+│   │   │   ├── test_encoding_utils.py
+│   │   │   ├── test_io_utils.py
+│   │   │   ├── test_logging_utils.py
+│   │   │   ├── test_process.py
+│   │   │   ├── test_random_utils.py
+│   │   │   ├── test_replay_buffer.py
+│   │   │   ├── test_train_utils.py
+│   │   │   └── test_visualization_utils.py
+│   │   └── utils.py
+│   └── uv.lock
+├── robot_utils
+│   ├── IMPORTANT_MEMORY.md
+│   ├── README.md
+│   ├── WORKSPACE_INSTRUCTIONS.md
+│   ├── data_collection
+│   │   ├── README.md
+│   │   ├── config
+│   │   │   ├── camera_serials.yaml
+│   │   │   └── opencv_cameras.yaml
+│   │   ├── data_collection
+│   │   │   ├── __init__.py
+│   │   │   ├── camera_config.py
+│   │   │   ├── episode_trigger.py
+│   │   │   ├── opencv_camera_node.py
+│   │   │   └── recorder.py
+│   │   ├── docs
+│   │   │   ├── 1. data_collection_instructions.md
+│   │   │   ├── cameras.md
+│   │   │   ├── curriculum_data_collection.md
+│   │   │   ├── data_format.md
+│   │   │   ├── data_inspection.md
+│   │   │   ├── data_preparation_protocol.md
+│   │   │   ├── diffusion_policy_task_config_guide.md
+│   │   │   ├── diffusion_policy_training_guide.md
+│   │   │   ├── diffusion_policy_training_pitfalls.md
+│   │   │   ├── fr3_new_machine_training_handoff.md
+│   │   │   ├── gripper_action_labeling.md
+│   │   │   ├── opencv_realsense_changes.md
+│   │   │   ├── opencv_realsense_data_collection_start.md
+│   │   │   ├── training_log.md
+│   │   │   └── troubleshooting_robot_crash_during_collection.md
+│   │   ├── launch
+│   │   │   ├── dual_realsense.launch.py
+│   │   │   └── opencv_cameras.launch.py
+│   │   ├── package.xml
+│   │   ├── resource
+│   │   │   └── data_collection
+│   │   ├── scripts
+│   │   │   ├── collect_verify_train.sh
+│   │   │   ├── convert_to_dp_zarr.py
+│   │   │   ├── inspect_dataset.py
+│   │   │   ├── merge_zarr.py
+│   │   │   ├── relabel_gripper.py
+│   │   │   ├── replay_zarr_mujoco.py
+│   │   │   ├── trajectory_viz.py
+│   │   │   ├── verify_dataset.py
+│   │   │   ├── visualize_dataset.py
+│   │   │   ├── visualize_trajectories.py
+│   │   │   └── zarr_replay.py
+│   │   ├── setup.cfg
+│   │   ├── setup.py
+│   │   ├── start.sh
+│   │   ├── test
+│   │   │   └── test_camera_config.py
+│   │   └── tests
+│   │       └── test_dataset_integrity.py
+│   ├── docs
+│   │   ├── container_setup.md
+│   │   └── troubleshooting_container_restart.md
+│   ├── handeye_calibration
+│   │   ├── README.md
+│   │   ├── docs
+│   │   │   ├── charuco params.md
+│   │   │   ├── get_realtime_tf_issue.md
+│   │   │   ├── handeye_calibration_notes.md
+│   │   │   └── verify_results.md
+│   │   ├── handeye_calibration
+│   │   │   ├── __init__.py
+│   │   │   ├── detect_charuco_marker.py
+│   │   │   ├── follow_marker.py
+│   │   │   ├── pub_handeye_tf.py
+│   │   │   └── vis_marker_tf.py
+│   │   ├── launch
+│   │   │   └── handeye_calibration.launch.py
+│   │   ├── package.xml
+│   │   ├── resource
+│   │   │   └── handeye_calibration
+│   │   ├── setup.cfg
+│   │   ├── setup.py
+│   │   └── test
+│   │       ├── test_copyright.py
+│   │       ├── test_flake8.py
+│   │       └── test_pep257.py
+│   ├── liquid_pouring
+│   │   ├── MANIFEST.in
+│   │   ├── README.md
+│   │   ├── config
+│   │   │   └── pouring_params.yaml
+│   │   ├── docs
+│   │   │   ├── migration_notes.md
+│   │   │   ├── tutorial.md
+│   │   │   └── tutorial（复件）.md
+│   │   ├── launch
+│   │   │   ├── __pycache__
+│   │   │   │   ├── collect.launch.cpython-312.pyc
+│   │   │   │   └── pour.launch.cpython-312.pyc
+│   │   │   ├── collect.launch.py
+│   │   │   └── pour.launch.py
+│   │   ├── liquid_pouring
+│   │   │   ├── __init__.py
+│   │   │   ├── __pycache__
+│   │   │   │   ├── __init__.cpython-312.pyc
+│   │   │   │   ├── collect_node.cpython-312.pyc
+│   │   │   │   ├── config.cpython-312.pyc
+│   │   │   │   ├── controllers.cpython-312.pyc
+│   │   │   │   ├── displays.cpython-312.pyc
+│   │   │   │   ├── pour_node.cpython-312.pyc
+│   │   │   │   ├── processors.cpython-312.pyc
+│   │   │   │   ├── robot_driver.cpython-312.pyc
+│   │   │   │   └── serial_manager.cpython-312.pyc
+│   │   │   ├── collect_node.py
+│   │   │   ├── config.py
+│   │   │   ├── controllers.py
+│   │   │   ├── data
+│   │   │   │   └── scaler
+│   │   │   │       ├── oil
+│   │   │   │       │   ├── oil.csv
+│   │   │   │       │   └── oil.npy
+│   │   │   │       └── water
+│   │   │   │           ├── origin
+│   │   │   │           │   ├── water.csv
+│   │   │   │           │   └── water.npy
+│   │   │   │           └── revise
+│   │   │   │               ├── test.csv
+│   │   │   │               ├── train.csv
+│   │   │   │               ├── val.csv
+│   │   │   │               ├── water.csv
+│   │   │   │               ├── water.npy
+│   │   │   │               └── water_group.csv
+│   │   │   ├── displays.py
+│   │   │   ├── models
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── __pycache__
+│   │   │   │   │   ├── __init__.cpython-312.pyc
+│   │   │   │   │   ├── ablation_net.cpython-312.pyc
+│   │   │   │   │   ├── models.cpython-312.pyc
+│   │   │   │   │   └── module.cpython-312.pyc
+│   │   │   │   ├── ablation_net.py
+│   │   │   │   ├── models.py
+│   │   │   │   └── module.py
+│   │   │   ├── pour_node.py
+│   │   │   ├── processors.py
+│   │   │   ├── robot_driver.py
+│   │   │   └── serial_manager.py
+│   │   ├── package.xml
+│   │   ├── resource
+│   │   │   └── liquid_pouring
+│   │   ├── setup.cfg
+│   │   ├── setup.py
+│   │   └── 项目经历与面试准备2.md
+│   ├── moveit_robot_control
+│   │   ├── LICENSE
+│   │   ├── README.md
+│   │   ├── config
+│   │   │   ├── franka_fr3.yaml
+│   │   │   ├── ur10e.yaml
+│   │   │   └── ur5e.yaml
+│   │   ├── docs
+│   │   │   ├── 01_moveit_actions_overview.md
+│   │   │   ├── 02_moveit_movegroup_design_philosophy.md
+│   │   │   ├── 03_moveit_movegroup_action.md
+│   │   │   ├── 04_execute_trajectory_action.md
+│   │   │   ├── 05_movegroup_sequence_action.md
+│   │   │   ├── 06_hybrid_planner_actions.md
+│   │   │   ├── 07_pickup_place_actions.md
+│   │   │   ├── 08_moveit_qna.md
+│   │   │   ├── 09_constrained_planning.md
+│   │   │   ├── 10_servo_launch_debugging.md
+│   │   │   ├── franka真机连接配置.md
+│   │   │   ├── srv_00_services_overview.md
+│   │   │   ├── srv_01_planning_services.md
+│   │   │   ├── srv_02_kinematics_services.md
+│   │   │   ├── srv_03_scene_state_services.md
+│   │   │   ├── srv_04_planner_config_services.md
+│   │   │   ├── srv_05_warehouse_services.md
+│   │   │   ├── srv_06_map_geometry_services.md
+│   │   │   └── srv_07_misc_services.md
+│   │   ├── launch
+│   │   │   ├── fr3_moveit.launch.py
+│   │   │   ├── fr3_moveit_isaac.launch.py
+│   │   │   └── fr3_servo.launch.py
+│   │   ├── moveit_config
+│   │   │   ├── fr3.srdf.xacro
+│   │   │   ├── fr3_controllers.yaml
+│   │   │   ├── fr3_controllers_isaac.yaml
+│   │   │   ├── fr3_joint_limits.yaml
+│   │   │   ├── fr3_ros_controllers.yaml
+│   │   │   ├── fr3_ros_controllers_fake.yaml
+│   │   │   ├── fr3_servo_config.yaml
+│   │   │   ├── kinematics.yaml
+│   │   │   └── ompl_planning.yaml
+│   │   ├── moveit_robot_control
+│   │   │   ├── __init__.py
+│   │   │   ├── __pycache__
+│   │   │   │   ├── test_motion_ur10e.cpython-312.pyc
+│   │   │   │   └── visualizer.cpython-312.pyc
+│   │   │   ├── constraints.py
+│   │   │   ├── moveit_robot.py
+│   │   │   ├── planning_scene.py
+│   │   │   ├── servo_keyboard.py
+│   │   │   ├── test_motion.py
+│   │   │   ├── test_motion_ur10e.py
+│   │   │   ├── test_scene.py
+│   │   │   ├── utils.py
+│   │   │   └── visualizer.py
+│   │   ├── package.xml
+│   │   ├── resource
+│   │   │   └── moveit_robot_control
+│   │   ├── rviz
+│   │   │   └── moveit.rviz
+│   │   ├── setup.cfg
+│   │   ├── setup.py
+│   │   ├── test
+│   │   │   ├── test_copyright.py
+│   │   │   ├── test_flake8.py
+│   │   │   └── test_pep257.py
+│   │   └── urdf
+│   │       └── fr3.urdf.xacro
+│   ├── near_wall_pouring
+│   │   ├── config
+│   │   │   ├── joint_limits.yaml
+│   │   │   ├── kinematics.yaml
+│   │   │   └── near_wall_pouring_servo.yaml
+│   │   ├── docs
+│   │   │   ├── tcp_and_coordinate_notes.md
+│   │   │   ├── troubleshooting_build.md
+│   │   │   └── tutorial.md
+│   │   ├── launch
+│   │   │   └── near_wall_pouring_servo.launch.py
+│   │   ├── near_wall_pouring
+│   │   │   ├── __init__.py
+│   │   │   ├── __pycache__
+│   │   │   │   ├── __init__.cpython-312.pyc
+│   │   │   │   ├── pour_node.cpython-312.pyc
+│   │   │   │   └── return_home.cpython-312.pyc
+│   │   │   ├── pour_node.py
+│   │   │   ├── return_home.py
+│   │   │   ├── return_home_node.py
+│   │   │   └── test_twist_publisher.py
+│   │   ├── note.txt
+│   │   ├── package.xml
+│   │   ├── resource
+│   │   │   └── near_wall_pouring
+│   │   ├── setup.cfg
+│   │   ├── setup.py
+│   │   ├── srdf
+│   │   │   └── near_wall_pouring.srdf.xacro
+│   │   ├── urdf
+│   │   │   └── near_wall_pouring.urdf.xacro
+│   │   └── 项目经历与面试准备.md
+│   └── 教程备份
+│       ├── troubleshooting_container_restart.md
+│       ├── 容器启用.md
+│       ├── 液体倾倒
+│       │   ├── migration_notes.md
+│       │   ├── tutorial.md
+│       │   └── tutorial（复件）.md
+│       └── 近壁倾倒
+│           ├── troubleshooting_build.md
+│           └── tutorial.md
+├── src.txt
+└── ur_msgs
+    ├── CHANGELOG.rst
+    ├── CMakeLists.txt
+    ├── CONTRIBUTING.md
+    ├── LICENSE
+    ├── README.md
+    ├── action
+    │   ├── FollowJointTrajectoryUntil.action
+    │   ├── SendScript.action
+    │   └── ToolContact.action
+    ├── msg
+    │   ├── Analog.msg
+    │   ├── Digital.msg
+    │   ├── FrictionModelParameters.msg
+    │   ├── IOStates.msg
+    │   ├── MasterboardDataMsg.msg
+    │   ├── RobotModeDataMsg.msg
+    │   ├── RobotStateRTMsg.msg
+    │   └── ToolDataMsg.msg
+    ├── package.xml
+    └── srv
+        ├── GetRobotSoftwareVersion.srv
+        ├── SetAnalogOutput.srv
+        ├── SetForceMode.srv
+        ├── SetFrictionModelParameters.srv
+        ├── SetGravity.srv
+        ├── SetIO.srv
+        ├── SetPayload.srv
+        └── SetSpeedSliderFraction.srv
+
+356 directories, 1682 files
