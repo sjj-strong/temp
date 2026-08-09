@@ -12,6 +12,7 @@ from enum import Enum, auto
 import rclpy
 from control_msgs.action import ParallelGripperCommand
 from rclpy.action import ActionClient
+from rclpy.executors import SingleThreadedExecutor
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Bool, Float64MultiArray
@@ -248,7 +249,10 @@ class TeleopNode(Node):
         if not fut.done():
             return
         if self._switch_phase == "list":
-            controllers = ControllerSwitcher.list_result(fut)
+            try:
+                controllers = ControllerSwitcher.list_result(fut)
+            except Exception:
+                controllers = {}                       # 异常 → 视为未加载，走 load 路径
             if self._fwd_ctrl not in controllers:
                 self._switch_phase = "load"
                 self._switch_future = self._switcher.load_controller(self._fwd_ctrl)
@@ -256,14 +260,22 @@ class TeleopNode(Node):
                 self._switch_phase = "switch"
                 self._switch_future = self._switcher.switch([self._fwd_ctrl], [self._traj_ctrl])
         elif self._switch_phase == "load":
-            if fut.result() is not None and fut.result().ok:
+            try:
+                load_ok = fut.result() is not None and fut.result().ok
+            except Exception:
+                load_ok = False
+            if load_ok:
                 self._switch_phase = "switch"
                 self._switch_future = self._switcher.switch([self._fwd_ctrl], [self._traj_ctrl])
             else:
                 self.get_logger().error("加载 forward_position_controller 失败")
                 self._log_state(State.ARMED)
         elif self._switch_phase == "switch":
-            if ControllerSwitcher.switch_ok(fut):
+            try:
+                ok = ControllerSwitcher.switch_ok(fut)
+            except Exception:
+                ok = False
+            if ok:
                 self.get_logger().info("[teleop] 控制器切换完成 → ACTIVE")
                 self._publish_demo(True)
                 self._publish_status(True)
@@ -344,9 +356,23 @@ class TeleopNode(Node):
         if self._restore_on_exit and self._state in (State.ACTIVE, State.INACTIVE, State.SWITCHING):
             fut = self._switcher.switch([self._traj_ctrl], [self._fwd_ctrl])
             if fut is not None:
-                deadline = time.time() + 5.0
-                while not ControllerSwitcher.switch_ok(fut) and time.time() < deadline:
-                    time.sleep(0.1)
+                executor = SingleThreadedExecutor()
+                executor.add_node(self)
+                try:
+                    deadline = time.time() + 5.0
+                    while rclpy.ok() and not fut.done() and time.time() < deadline:
+                        executor.spin_once(timeout_sec=0.1)
+                finally:
+                    executor.shutdown()
+                ok = False
+                if fut.done():
+                    try:
+                        ok = ControllerSwitcher.switch_ok(fut)
+                    except Exception:
+                        ok = False
+                self.get_logger().info(
+                    f"[teleop] 退出恢复切回 trajectory controller {'成功' if ok else '失败/未确认'}"
+                )
 
 
 def main():
