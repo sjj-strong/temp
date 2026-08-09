@@ -990,25 +990,30 @@ residual_process_check pgrep_exit=1 count=0 assertion_exit=0 status=PASS
 
 ## 2026-08-09 — Stage 5：unified Mock hardware、FT300、夹爪与 UR trajectory
 
-- live 环境：沙箱外，`ROS_DOMAIN_ID=96`、`ROS_HOME=/tmp/ur10e-task5-main-ros-home`；基础查询阶段 `ROS_LOG_DIR=/tmp/ur10e-task5-main-query-log`，action 阶段切换为 `/tmp/ur10e-task5-main-action-log`
+- live 环境：沙箱外，三个 shell 均使用 `ROS_DOMAIN_ID=96` 与 `ROS_HOME=/tmp/ur10e-task5-main-ros-home`；launch、query、action shell 的 `ROS_LOG_DIR` 分别为 `/tmp/ur10e-task5-main-launch-log`、`/tmp/ur10e-task5-main-query-log`、`/tmp/ur10e-task5-main-action-log`
 - 总体结果：brief 要求的自动 live 断言全部 **PASS**；任务状态为 **DONE_WITH_CONCERNS**，因为 RViz mimic 人工视觉未执行，且保留若干不影响必需 position/wrench 断言的观察警告。
 - 历史边界：此前沙箱内 `ROS_DOMAIN_ID=95` 的尝试被 DDS/socket `Operation not permitted` 阻塞；以下结论仅来自本次沙箱外补验，不覆盖或隐藏该失败历史。
 
 ### 启动与基础命令
 
-执行环境与 launch：
+launch shell：
+
+```bash
+source /ros2_ws/install/setup.bash
+export ROS_DOMAIN_ID=96
+export ROS_HOME=/tmp/ur10e-task5-main-ros-home
+export ROS_LOG_DIR=/tmp/ur10e-task5-main-launch-log
+ros2 launch ur10e_robotiq_description mock_control.launch.py
+```
+
+launch 运行期间，在独立 query shell 执行：
 
 ```bash
 source /ros2_ws/install/setup.bash
 export ROS_DOMAIN_ID=96
 export ROS_HOME=/tmp/ur10e-task5-main-ros-home
 export ROS_LOG_DIR=/tmp/ur10e-task5-main-query-log
-ros2 launch ur10e_robotiq_description mock_control.launch.py
-```
 
-launch 运行期间执行：
-
-```bash
 ros2 control list_hardware_components --controller-manager /controller_manager \
   > /tmp/ur10e_task5_hardware.txt
 ros2 control list_hardware_interfaces --controller-manager /controller_manager \
@@ -1122,13 +1127,16 @@ wrench:
   torque: {x: 0.0, y: 0.0, z: 0.0}
 ```
 
-结果：类型、frame 与六个有限零值全部满足 fake mode 契约（**PASS**）。`ros2 topic echo` 同时报告一次 `A message was lost`；命令仍退出 `0` 且取得一条完整有效消息，故记录为 QoS/采样警告，不改变消息内容断言。
+结果：类型、frame 与六个有限零值全部满足 fake mode 契约（**PASS**）。wrench echo 报告一次 `A message was lost`；命令仍退出 `0` 且取得一条完整有效消息，故记录为 QoS/采样警告，不改变消息内容断言。
 
 ### ParallelGripperCommand Open、Mid、Close
 
 逐目标执行，并在每个 goal 后采集 joint state：
 
 ```bash
+source /ros2_ws/install/setup.bash
+export ROS_DOMAIN_ID=96
+export ROS_HOME=/tmp/ur10e-task5-main-ros-home
 export ROS_LOG_DIR=/tmp/ur10e-task5-main-action-log
 
 ros2 action send_goal /robotiq_gripper_controller/gripper_cmd \
@@ -1194,6 +1202,8 @@ robotiq_85_right_knuckle_joint            -0.4      -0.7929
 
 结果：五个 mimic joint 按预期正负号与幅值同步（自动数值检查 **PASS**）。RViz mimic links 人工视觉：**未执行**。
 
+消息采集警告汇总：wrench echo 一次，initial/Open/Mid/Close 四份 joint-state echo 各一次，总计五次 `A message was lost`；五条命令均退出 `0` 并各自取得一条完整消息，因此不改变上述内容与 position 断言。
+
 观察警告：Close action result（Open/Mid 也出现同类格式）的 `state.name` 为空数组，effort 为极小非零值 `6.3541539735668e-310`；各 `/joint_states` 的六个夹爪 effort 为 `.nan`。这些字段不属于 brief 的必需 position/reached_goal 断言，故不改变上述 PASS，但不能据此声称 mock effort 有效。
 
 ### UR trajectory action 与六关节 position
@@ -1213,4 +1223,21 @@ wrist_3_joint:        0.0
 
 ### 停止与残留
 
-完成验证后停止 launch。日志显示 `robotiq_ft_sensor`、`ur`、`robotiq_2f85` 三个 hardware component 均 successful shutdown，`ros2_control_node`、`robot_state_publisher` 与 `trajectory_until_node` clean finish；残留进程计数为 `0`，清理断言退出码为 `0`（**PASS**）。停止期间出现一次 `pal_statistics` context error，记录为 shutdown 警告，不改变已经取得的 live 断言或残留进程结论。
+完成验证后停止 launch。日志显示 `robotiq_ft_sensor`、`ur`、`robotiq_2f85` 三个 hardware component 均 successful shutdown，`ros2_control_node`、`robot_state_publisher` 与 `trajectory_until_node` clean finish。随后执行：
+
+```bash
+pgrep -af '^/opt/ros/jazzy/lib/controller_manager/ros2_control_node|^/opt/ros/jazzy/lib/controller_manager/spawner|^/opt/ros/jazzy/lib/robot_state_publisher/robot_state_publisher|^/opt/ros/jazzy/lib/ur_robot_driver/trajectory_until_node' \
+  > /tmp/ur10e_task5_residual.txt
+pgrep_exit=$?
+process_count=$(wc -l < /tmp/ur10e_task5_residual.txt)
+test "$pgrep_exit" -eq 1 && test "$process_count" -eq 0
+assertion_exit=$?
+```
+
+实际输出：
+
+```text
+task5_residual pgrep_exit=1 count=0 assertion_exit=0 status=PASS
+```
+
+结果：残留进程为 `0`，清理断言退出码为 `0`（**PASS**）。停止期间出现一次 `pal_statistics` context error，记录为 shutdown 警告，不改变已经取得的 live 断言或残留进程结论。
