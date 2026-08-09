@@ -54,10 +54,10 @@ src/ur10e_robotiq/
 | 连接 | 参数 | 临时默认值 | 含义 |
 | --- | --- | --- | --- |
 | `tool0 -> FT300` | `ft_xyz`, `ft_rpy` | `0 0 0`, `0 0 0` | FT300 macro 的外部安装变换 |
-| `FT300 sensor -> 2F-85 base` | `gripper_xyz`, `gripper_rpy` | `0 0 0`, `0 0 0` | 2F-85 macro 的外部安装变换 |
+| `FT300 sensor -> 2F-85 base` | `gripper_xyz`, `gripper_rpy` | `0 0 0`, `-3.1415 0 0` | 2F-85 macro 的外部安装变换；默认绕 X 轴翻转夹爪 |
 | `2F-85 base -> gripper_tcp` | `tcp_xyz`, `tcp_rpy` | `0 0 0.15`, `0 0 0` | 夹爪中心参考点 |
 
-这些默认值只支持结构、TF、Mock 与 MoveIt 流程验证，不能用于实机安装、负载计算或碰撞安全。文档会以“临时、未标定参数”标记，并给出替换命令。
+这些默认值只支持结构、TF、Mock 与 MoveIt 流程验证，不能用于实机安装、负载计算或碰撞安全。文档会以“临时、未标定参数”标记，并给出替换命令。`gripper_rpy="-3.1415 0 0"` 只在组合 Xacro 中定义默认值；display、Mock control 与 MoveIt 均继承该单一真源，不在 launch 中重复硬编码安装姿态。
 
 `include_ros2_control:=false` 时只输出模型；`include_ros2_control:=true` 时连续输出 UR、FT300 与 2F-85 的三个 `<ros2_control>` 元素。
 
