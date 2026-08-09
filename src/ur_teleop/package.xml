@@ -19,6 +19,7 @@
   <depend>python3-numpy</depend>
   <depend>trajectory_msgs</depend>
   <depend>cv_bridge</depend>
+  <!-- lerobot 可选：record 模式需要，source /opt/lerobot_venv/bin/activate（纯逻辑模块不依赖） -->
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>
