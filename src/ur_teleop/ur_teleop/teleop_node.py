@@ -316,7 +316,7 @@ class TeleopNode(Node):
             return
         if not self._gripper_probed:
             self._gripper_probed = True
-            if self._gripper_action is None or not self._gripper_action.server_is_available():
+            if self._gripper_action is None or not self._gripper_action.server_is_ready():
                 self.get_logger().warn("[teleop] 夹爪 action server 不存在，禁用夹爪 FSM")
                 self._gripper.enabled = False
                 return

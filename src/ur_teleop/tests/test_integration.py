@@ -25,6 +25,10 @@ from ur_teleop.controller_switcher import ControllerSwitcher
 from ur_teleop.home_node import HomeNode
 from ur_teleop.teleop_node import TeleopNode, State
 
+# stdbuf -oL 对 Python 的管道 stdout 无效（Python 在 io 层缓冲，LD_PRELOAD 不生效）；
+# 必须在任何子进程 spawn 前设置，ros2 topic echo 的输出才能逐行到达测试侧。
+os.environ["PYTHONUNBUFFERED"] = "1"
+
 pytestmark = [
     pytest.mark.integration,
     pytest.mark.skipif("AMENT_PREFIX_PATH" not in os.environ,
@@ -139,8 +143,10 @@ def _sweep_orphaned_control_nodes():
 def _sweep(tmp_path):
     """清扫本测试可能残留的子进程：pytest 被外部终止（超时/断电）时 finally
     不会执行，残留的 fake_master（锁存 sine 发布）会污染后续测试的 VERIFY_HOME。
-    tmp_path 出现在 stack 各进程的 cmdline（config_file:=...），fake 按路径匹配；
-    均为本仓库测试独占进程，误杀风险为零。"""
+    tmp_path 出现在 stack 各进程的 cmdline（config_file:=...），fake 按路径匹配。
+    注意 pkill -f tests/fake_master.py 会命中同一仓库的并行测试运行（同路径），
+    误杀风险并非绝对为零；孤儿 CM 清扫以组长存活判别，用户 mock 栈（组长存活）
+    不受影响。"""
     subprocess.run(["pkill", "-9", "-f", str(tmp_path)], capture_output=True)
     subprocess.run(["pkill", "-9", "-f", "tests/fake_master.py"], capture_output=True)
     _sweep_orphaned_control_nodes()
@@ -246,10 +252,6 @@ def _wait_status(value, timeout=25.0):
         return got is not None and str(value).lower() in got.lower()
     finally:
         echo.close()
-
-
-def _wait_status_true(timeout=25.0):
-    return _wait_status("true", timeout)
 
 
 def _enable_and_wait(timeout=60.0):
@@ -361,19 +363,24 @@ def test_record_one_episode(tmp_path):
     recorder = procs[-1]
     try:
         time.sleep(20.0)
-        recorder.stdin.write("enter\n")
+        # KeyboardReader 把 '\n' 映射为 enter → 只写换行字节即开始 episode。
+        # 注意其余按键必须单字节写入、不带 '\n'：'d\n' 会被读成 d + enter，
+        # 丢弃后立刻又开新 episode，Q 时 finalize 会把新 episode 保存（实测 48 帧）。
+        recorder.stdin.write("\n")
         recorder.stdin.flush()                 # 开始 episode 1 + 发 /teleop/enable
         assert _enable_and_wait(), "Enter 后未进入 ACTIVE（重试发布 enable）"
         time.sleep(3.0)                        # 录 ~150 帧
-        recorder.stdin.write("d\n")
+        recorder.stdin.write("d")
         recorder.stdin.flush()                 # 丢弃
         time.sleep(1.0)
-        recorder.stdin.write("q\n")
+        recorder.stdin.write("q")
         recorder.stdin.flush()                 # 退出 + finalize
         recorder.wait(timeout=15.0)
         # 本地布局（lerobot 0.5.x 显式 root）：<root>/meta/info.json 在 create 时
         # 即落盘；repo_id 仅是元数据，不存在 <root>/test/ur_teleop_it 目录
         assert (root / "meta" / "info.json").exists(), "数据集 meta/info.json 未创建"
+        # D 丢弃后 0 episode 保存：data/chunk-000 仅在 save_episode 时创建
+        assert not (root / "data" / "chunk-000").exists(), "丢弃的 episode 不应落盘"
         log = recorder.stdout.read()
         assert "finalize" in log.lower(), f"recorder 日志未见 finalize:\n{log[-2000:]}"
     finally:
@@ -849,10 +856,6 @@ def test_estop_freezes_then_resumes(tmp_path):
         _sweep(tmp_path)
 
 
-@pytest.mark.xfail(reason="包内 bug: teleop_node.py _gripper_tick 调用 rclpy "
-                          "ActionClient.server_is_available()（Jazzy 中不存在，"
-                          "应为 server_is_ready()）→ 首次探测抛 AttributeError；"
-                          "待 Task 12 修复，本测试记录预期行为（探测→禁用）")
 def test_gripper_probe_disables_fsm_without_action_server(tmp_path, monkeypatch):
     """A14: gripper.enabled=true 且无 action server → 首次 _gripper_tick 探测后禁用，不抛异常。"""
     cfg_path = tmp_path / "ur_teleop.yaml"
@@ -969,14 +972,16 @@ def test_record_save_episode(tmp_path):
     recorder = procs[-1]
     try:
         time.sleep(20.0)
-        recorder.stdin.write("enter\n")
+        # KeyboardReader 把 '\n' 映射为 enter → 只写换行字节即开始 episode；
+        # s/q 单字节写入（'s\n' 会保存后又开新 episode，Q 时被 finalize 保存）
+        recorder.stdin.write("\n")
         recorder.stdin.flush()                 # 开始 episode 1 + 发 /teleop/enable
         assert _enable_and_wait(), "Enter 后未进入 ACTIVE（重试发布 enable）"
         time.sleep(3.0)                        # 录 ≥ min_frames 帧
-        recorder.stdin.write("s\n")
+        recorder.stdin.write("s")
         recorder.stdin.flush()                 # 保存 episode
         time.sleep(1.0)
-        recorder.stdin.write("q\n")
+        recorder.stdin.write("q")
         recorder.stdin.flush()                 # 退出 + finalize
         recorder.wait(timeout=15.0)
         # 本地布局（lerobot 0.5.x 显式 root）：info.json 在 create 时落盘，
