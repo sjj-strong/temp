@@ -21,6 +21,7 @@ setup(
     license="Apache-2.0",
     entry_points={
         "console_scripts": [
+            "home_node = ur_teleop.home_node:main",
             "teleop_node = ur_teleop.teleop_node:main",
             "data_recorder = ur_teleop.data_recorder:main",
         ],
