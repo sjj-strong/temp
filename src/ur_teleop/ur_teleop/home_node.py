@@ -140,15 +140,25 @@ def main():
             node.get_logger().info(f"Alicia home -> {node._master_home}（夹爪开）")
             deadline = time.time() + node._move_timeout
             ok_verified = False
+            hold_since = None
             while rclpy.ok() and time.time() < deadline:
                 executor.spin_once(timeout_sec=0.05)
                 node.publish_alicia_home()          # 持续命令，直到到位
                 if node.at_home():
-                    ok_verified = True
-                    break
+                    hold_since = hold_since if hold_since is not None else time.time()
+                    if time.time() - hold_since >= node._verify_duration:
+                        ok_verified = True
+                        break
+                else:
+                    hold_since = None
             if not ok_verified:
+                m, s = node.master_q(), node.slave_q()
                 node.get_logger().error(
-                    "到位超时（未在 move_timeout 内验证双臂位于 home）。"
+                    f"到位超时（未在 move_timeout 内验证双臂位于 home）。"
+                    f"master 目标={node._master_home}, "
+                    f"当前={m if m is not None else '无 /joint_states'}; "
+                    f"UR 目标={node._slave_home}, "
+                    f"当前={s if s is not None else '无 /joint_states'}. "
                     "可用 teleop.launch force_home:=true 跳过验证。"
                 )
                 rc = 1
