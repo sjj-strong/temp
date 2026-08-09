@@ -44,6 +44,7 @@ class DataRecorderNode(Node):
         self._camera_frames = {}
         self._enable_sent = False
         self._ee_warned = False
+        self._missing_cam_warned = set()
 
         self._features, _, _ = self._builder.features()
         self._joint_sub = self.create_subscription(JointState, "/joint_states", self._joint_cb, 10)
@@ -151,6 +152,12 @@ class DataRecorderNode(Node):
     def _start_episode(self):
         if self._recording:
             return
+        missing = [name for name in self._cameras if name not in self._camera_frames]
+        if missing:
+            self.get_logger().error(
+                f"相机未收到帧，拒绝开始 episode: {missing}。检查相机 topic 后重新按 Enter")
+            return
+        self._missing_cam_warned = set()
         self._init_dataset()
         if not self._enable_sent:
             self._enable_pub.publish(Bool(data=True))
@@ -171,6 +178,7 @@ class DataRecorderNode(Node):
             self._episode_count += 1
             self.get_logger().info(f"Episode {self._episode_count} 已保存（{self._frame_count} 帧）")
         self._recording = False
+        self._missing_cam_warned = set()
 
     def _discard_episode(self):
         if not self._recording:
@@ -178,6 +186,7 @@ class DataRecorderNode(Node):
         self._dataset.clear_episode_buffer()
         self.get_logger().info(f"Episode 已丢弃（{self._frame_count} 帧）")
         self._recording = False
+        self._missing_cam_warned = set()
 
     def _record_frame(self):
         with self._lock:
@@ -194,8 +203,13 @@ class DataRecorderNode(Node):
             return
         for cam_name, cam_cfg in self._cameras.items():
             img = cameras.get(cam_name)
-            if img is not None:
-                frame[f"observation.images.{cam_cfg.get('image_key', cam_name)}"] = img
+            if img is None:
+                if cam_name not in self._missing_cam_warned:
+                    self._missing_cam_warned.add(cam_name)
+                    self.get_logger().warn(
+                        f"相机 {cam_name} 无帧，本 episode 该相机的图像帧将被跳过")
+                continue
+            frame[f"observation.images.{cam_cfg.get('image_key', cam_name)}"] = img
         try:
             self._dataset.add_frame(frame)
             self._frame_count += 1
