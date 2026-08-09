@@ -457,3 +457,132 @@ GREEN 结果：两份 Xacro、两次 `check_urdf` 和全部 XPath 检查退出�
 | mock `robotiq_85_base_joint` 姿态断言 | `0` | `rpy="-3.1415 0 0"` | **PASS** |
 
 累积结果：`overall_exit=0`，**PASS**。
+
+## 2026-08-09 — Stage 3 动态补验（沙箱外）
+
+本节使用主 Agent 在沙箱外、当前 Head 上启动 Display 后采集的 live 证据，补充并更新前述 Stage 3 中因沙箱受限而标为“未执行”的自动检查。人工 GUI 操作没有执行，相关状态不变。
+
+### Launch 生命周期
+
+launch 日志：
+
+```text
+/root/.ros/log/2026-08-09-20-11-42-949654-ros2-container-370015/launch.log
+```
+
+关键输出：
+
+```text
+[INFO] [robot_state_publisher-1]: process started with pid [370038]
+[INFO] [joint_state_publisher_gui-2]: process started with pid [370039]
+[INFO] [rviz2-3]: process started with pid [370040]
+[robot_state_publisher]: Robot initialized
+[joint_state_publisher]: Got description, configuring robot
+[rviz2]: OpenGl version: 4.6 (GLSL 4.6)
+```
+
+采样结束后用 Ctrl-C 停止 launch。`robot_state_publisher` 与 `rviz2` 均报告 `process has finished cleanly`；`joint_state_publisher_gui` 收到 SIGINT，launch 记录退出码 `-2`。结果：三个规定节点真实启动、JSP 获得模型描述、RViz 建立 OpenGL 上下文，RSP/RViz 干净结束（**PASS**）；GUI 的 `-2` 是 Ctrl-C 采样终止结果，不是启动失败。
+
+### `/robot_description` live 数据
+
+证据文件：
+
+```text
+/tmp/ur10e_live_robot_description_full.txt | 23796 bytes
+```
+
+实际关键内容：
+
+```xml
+<joint name="robotiq_85_base_joint" type="fixed">
+  <parent link="ft300_sensor"/>
+  <child link="robotiq_85_base_link"/>
+  <origin rpy="-3.1415 0 0" xyz="0 0 0"/>
+</joint>
+```
+
+该 live 描述中未出现 `<ros2_control>`。结果：`/robot_description` 可观察，夹爪安装关节及目标 RPY 正确，display 模式无控制块（**PASS**）。
+
+### `/joint_states` live 数据
+
+证据文件：
+
+```text
+/tmp/ur10e_live_joint_states.txt | 509 bytes
+```
+
+消息包含 12 个关节：
+
+- 6 个 UR 关节：`shoulder_pan_joint`、`shoulder_lift_joint`、`elbow_joint`、`wrist_1_joint`、`wrist_2_joint`、`wrist_3_joint`
+- 6 个 Robotiq 关节：`robotiq_85_left_knuckle_joint`、`robotiq_85_right_knuckle_joint`、左右 inner knuckle 与左右 finger tip joints
+
+12 个 position 均为 `0.0`，`velocity` 与 `effort` 数组为空。结果：JSP GUI 确实发布完整机械臂与夹爪 joint state（**PASS**）。
+
+### TF live 采样
+
+安装变换证据：
+
+```text
+/tmp/ur10e_live_mount_tf.txt | 1650 bytes
+ft300_sensor -> robotiq_85_base_link
+Translation: [0.000, 0.000, 0.000]
+RPY (radian): [-3.142, -0.000, 0.000]
+```
+
+TCP 变换证据：
+
+```text
+/tmp/ur10e_live_tcp_tf.txt | 1691 bytes
+world -> gripper_tcp
+Translation: [1.184, 0.482, 0.061]
+RPY (radian): [-1.571, 0.000, -0.000]
+```
+
+两次 `tf2_echo` 初始等待 frame 后都连续收到多帧有效 transform。用于限定采样时长的命令最终退出码均为 `124`。判定：变换数据本身 **PASS**；采样命令为 **timeout 124（预期采样终止）**，不能将命令总退出码记为 0。
+
+### `view_frames`
+
+`ros2 run tf2_tools view_frames` 退出码为 `0`，生成：
+
+```text
+/ros2_ws/frames_2026-08-09_20.17.20.pdf | 19438 bytes
+/ros2_ws/frames_2026-08-09_20.17.20.gv  | 5005 bytes
+```
+
+`.gv` 明确包含以下链路：
+
+```text
+world -> base_link -> ... -> tool0 -> ft300_mounting_plate -> ft300_sensor
+ft300_sensor -> robotiq_85_base_link -> gripper_tcp
+```
+
+同时包含夹爪左右 knuckle、inner knuckle、finger 与 finger tip 分支。结果：TF tree 从 `world` 连通至 `gripper_tcp`，机械臂、FT300 与 2F-85 框架均在同一棵树中（**PASS**）。
+
+### RViz 警告与人工项
+
+RViz 日志 `/root/.ros/log/rviz2_370040_1786277503124.log` 在成功建立 OpenGL 4.6 后反复出现：
+
+```text
+Message Filter dropping message: frame '' ...
+reason 'the frame id of the message is empty'
+```
+
+`/joint_states` 证据中的 `header.frame_id` 确实为空。该信息记录为 **已知警告**；本次运行日志不是 pristine，不能称为无警告 PASS。它不否定 `/joint_states` 已发布或 TF tree 已连通的独立证据。
+
+### 动态补验状态表
+
+| 检查项 | 状态 | 实际证据 |
+|---|---|---|
+| 三个 display 节点启动 | **PASS** | launch log；RSP 初始化、JSP 获得 description、RViz OpenGL 4.6 |
+| `/robot_description` live echo | **PASS** | 23796-byte 完整输出，含三组件、目标安装 RPY，且无 `<ros2_control>` |
+| `/joint_states` live topic | **PASS** | 12 个关节：6 UR + 6 Robotiq |
+| `ft300_sensor -> robotiq_85_base_link` | **数据 PASS**；timeout 124 | 连续有效变换，零平移，RPY `[-3.142,-0.000,0.000]` |
+| `world -> gripper_tcp` | **数据 PASS**；timeout 124 | 连续有效变换，平移 `[1.184,0.482,0.061]`，RPY `[-1.571,0,-0]` |
+| `view_frames` | **PASS** | exit 0；PDF/GV 均存在，GV 包含 `gripper_tcp` |
+| launch 安全终止 | **PASS（带说明）** | Ctrl-C 后 RSP/RViz 干净结束；GUI 收到 SIGINT，exit -2 |
+| RViz 运行日志 | **警告** | 反复丢弃 `frame_id=''` 的 message，不能称 pristine |
+| RViz 人工确认同时显示 UR10e、FT300、2F-85 | **未执行** | 有 live description/TF 自动证据，但没有人工视觉验收记录 |
+| GUI 拖动 UR 六轴观察运动 | **未执行** | 没有人工拖动 |
+| GUI 拖动主动夹爪关节观察五个 mimic 同步 | **未执行** | joint_states/TF 可用，但没有人工拖动与视觉同步验收 |
+
+动态自动验收结论：live description、joint states、安装 TF、TCP TF 和完整 frame graph 均取得有效证据（**PASS**）。Stage 3 总状态保持 **DONE_WITH_CONCERNS**：剩余 concerns 为 RViz 空 frame message-filter 警告，以及三项人工视觉/拖动检查未执行。
