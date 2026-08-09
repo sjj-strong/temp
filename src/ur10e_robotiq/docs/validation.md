@@ -1232,6 +1232,8 @@ pgrep_exit=$?
 process_count=$(wc -l < /tmp/ur10e_task5_residual.txt)
 test "$pgrep_exit" -eq 1 && test "$process_count" -eq 0
 assertion_exit=$?
+printf 'task5_residual pgrep_exit=%s count=%s assertion_exit=%s status=%s\n' "$pgrep_exit" "$process_count" "$assertion_exit" "$([ "$assertion_exit" -eq 0 ] && printf PASS || printf FAIL)"
+exit "$assertion_exit"
 ```
 
 实际输出：
