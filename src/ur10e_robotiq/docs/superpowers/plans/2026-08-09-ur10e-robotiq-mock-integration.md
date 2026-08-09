@@ -455,9 +455,9 @@ Run:
 
 ```bash
 ros2 action list -t
-ros2 action send_goal /robotiq_gripper_controller/gripper_cmd control_msgs/action/GripperCommand "{command: {position: 0.0, max_effort: 0.0}}" --feedback
-ros2 action send_goal /robotiq_gripper_controller/gripper_cmd control_msgs/action/GripperCommand "{command: {position: 0.4, max_effort: 0.0}}" --feedback
-ros2 action send_goal /robotiq_gripper_controller/gripper_cmd control_msgs/action/GripperCommand "{command: {position: 0.7929, max_effort: 0.0}}" --feedback
+ros2 action send_goal /robotiq_gripper_controller/gripper_cmd control_msgs/action/ParallelGripperCommand "{command: {name: [robotiq_85_left_knuckle_joint], position: [0.0], velocity: [], effort: []}}" --feedback
+ros2 action send_goal /robotiq_gripper_controller/gripper_cmd control_msgs/action/ParallelGripperCommand "{command: {name: [robotiq_85_left_knuckle_joint], position: [0.4], velocity: [], effort: []}}" --feedback
+ros2 action send_goal /robotiq_gripper_controller/gripper_cmd control_msgs/action/ParallelGripperCommand "{command: {name: [robotiq_85_left_knuckle_joint], position: [0.7929], velocity: [], effort: []}}" --feedback
 ros2 topic echo --once /joint_states
 ```
 
