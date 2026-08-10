@@ -93,6 +93,8 @@ ros2 launch ur_teleop teleop.launch.py
 # 状态到 ARMED 后按 Enter → rviz 中 mock UR 跟随主臂
 ```
 
+rviz 显示模型：**默认组合模型**（`ur10e_robotiq_ft` 包，UR + FT300 + Robotiq 2F-85 完整装配，含 gripper_tcp 参考帧）——ur 官方 `ur_description` 只有纯 UR。组合模型的 xacro 复用官方 `ur_ros2_control` 宏，sim 下带 mock 硬件（含夹爪关节），real 下带真机插件；`ur10e_robotiq_ft` 未安装时自动回退官方纯 UR 模型。切换方式与细节见 `docs/launch.md`「rviz 模型：URDF 描述文件来源」。
+
 ### real（真机）
 
 ```bash

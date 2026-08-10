@@ -27,6 +27,16 @@ def _yaml_default(config_file: str, *path: str, fallback: str):
         return fallback
 
 
+def _description_launchfile():
+    """rviz 模型：优先 ur10e_robotiq_ft 组合模型（UR+FT300+2F-85），未安装则回退官方纯 UR。"""
+    try:
+        return os.path.join(get_package_share_directory("ur10e_robotiq_ft"),
+                            "launch", "rsp.launch.py")
+    except Exception:
+        return os.path.join(get_package_share_directory("ur_robot_driver"),
+                            "launch", "ur_rsp.launch.py")
+
+
 def generate_launch_description():
     pkg_share = get_package_share_directory("ur_teleop")
     config_file = os.path.join(pkg_share, "config", "ur_teleop.yaml")
@@ -49,6 +59,8 @@ def generate_launch_description():
         DeclareLaunchArgument("ftdi_id", default_value=ftdi_default),
         DeclareLaunchArgument("launch_rviz", default_value=rviz_default),
         DeclareLaunchArgument("ur_type", default_value=ur_type_default),
+        DeclareLaunchArgument("description_launchfile",
+                              default_value=_description_launchfile()),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
                 os.path.join(get_package_share_directory("ur_robot_driver"),
@@ -61,6 +73,7 @@ def generate_launch_description():
                 "mock_sensor_commands": "false",
                 "launch_dashboard_client": "false",
                 "launch_rviz": "false",
+                "description_launchfile": LaunchConfiguration("description_launchfile"),
                 "initial_joint_controller": "scaled_joint_trajectory_controller",
                 "activate_joint_controller": "true",
             }.items(),

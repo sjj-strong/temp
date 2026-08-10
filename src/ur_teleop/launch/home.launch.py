@@ -22,6 +22,16 @@ def _yaml_default(config_file: str, *path: str, fallback: str):
         return fallback
 
 
+def _description_launchfile():
+    """与 cell.launch.py 同一默认：ur10e_robotiq_ft 组合模型，未安装回退官方纯 UR。"""
+    try:
+        return os.path.join(get_package_share_directory("ur10e_robotiq_ft"),
+                            "launch", "rsp.launch.py")
+    except Exception:
+        return os.path.join(get_package_share_directory("ur_robot_driver"),
+                            "launch", "ur_rsp.launch.py")
+
+
 def generate_launch_description():
     pkg_share = get_package_share_directory("ur_teleop")
     config_file = os.path.join(pkg_share, "config", "ur_teleop.yaml")
@@ -42,6 +52,8 @@ def generate_launch_description():
         DeclareLaunchArgument("launch_rviz",
                               default_value=_yaml_default(config_file, "cell", "launch_rviz",
                                                          fallback="true")),
+        DeclareLaunchArgument("description_launchfile",
+                              default_value=_description_launchfile()),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
                 os.path.join(pkg_share, "launch", "cell.launch.py")
@@ -53,6 +65,7 @@ def generate_launch_description():
                 "gripper_port": LaunchConfiguration("gripper_port"),
                 "ftdi_id": LaunchConfiguration("ftdi_id"),
                 "launch_rviz": LaunchConfiguration("launch_rviz"),
+                "description_launchfile": LaunchConfiguration("description_launchfile"),
             }.items(),
         ),
         Node(
