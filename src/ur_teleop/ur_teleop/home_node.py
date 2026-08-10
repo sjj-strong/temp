@@ -42,7 +42,8 @@ class HomeNode(rclpy.node.Node):
         self._move_duration = float(home.get("move_duration_s", 8.0))
         self._verify_duration = float(home.get("verify_duration_s", 2.0))
 
-        self._joint_states: JointState | None = None
+        self._ur_states: JointState | None = None
+        self._alicia_states: JointState | None = None
         self._joint_sub = self.create_subscription(JointState, "/joint_states", self._joint_cb, 10)
         self._cmd_pub = self.create_publisher(JointState, "/joint_commands", 10)
         self._traj_client = ActionClient(
@@ -50,22 +51,27 @@ class HomeNode(rclpy.node.Node):
         )
 
     def _joint_cb(self, msg: JointState):
-        self._joint_states = msg
+        # 双臂各自发布 /joint_states（UR cell 与 alicia_d_driver 交织在同一话题），
+        # 逐侧更新各自保留，避免整包覆盖导致另一侧瞬时缺失（同 teleop_node）。
+        names = set(msg.name)
+        if all(n in names for n in UR_JOINT_NAMES):
+            self._ur_states = msg
+        if all(n in names for n in ALICIA_JOINT_NAMES):
+            self._alicia_states = msg
 
-    def _q(self, names: list[str]) -> list[float] | None:
-        js = self._joint_states
-        if js is None or not all(n in js.name for n in names):
+    def _q(self, src: JointState | None, names: list[str]) -> list[float] | None:
+        if src is None or not all(n in src.name for n in names):
             return None
-        return [js.position[js.name.index(n)] for n in names]
+        return [src.position[src.name.index(n)] for n in names]
 
     def slave_q(self) -> list[float] | None:
-        return self._q(UR_JOINT_NAMES)
+        return self._q(self._ur_states, UR_JOINT_NAMES)
 
     def master_q(self) -> list[float] | None:
-        return self._q(ALICIA_JOINT_NAMES)
+        return self._q(self._alicia_states, ALICIA_JOINT_NAMES)
 
     def cell_ready(self) -> bool:
-        return self.slave_q() is not None and self._traj_client.server_is_available()
+        return self.slave_q() is not None and self._traj_client.server_is_ready()
 
     def publish_alicia_home(self):
         msg = JointState()
@@ -74,21 +80,34 @@ class HomeNode(rclpy.node.Node):
         self._cmd_pub.publish(msg)
 
     def send_ur_home_trajectory(self, executor) -> bool:
-        """Send home trajectory; poll async action via executor; log contrast on failure."""
-        goal = FollowJointTrajectory.Goal()
-        goal.trajectory = JointTrajectory()
-        goal.trajectory.joint_names = UR_JOINT_NAMES
-        pt = JointTrajectoryPoint()
-        pt.positions = self._slave_home
-        pt.time_from_start = Duration(seconds=self._move_duration)
-        goal.trajectory.points = [pt]
+        """Send home trajectory; poll async action via executor; log contrast on failure.
 
-        self.get_logger().info(f"UR home trajectory -> {self._slave_home}")
-        future = self._traj_client.send_goal_async(goal)
-        deadline = time.time() + 10.0
-        while rclpy.ok() and not future.done() and time.time() < deadline:
-            executor.spin_once(timeout_sec=0.1)
-        if not future.done() or future.result() is None or not future.result().accepted:
+        Action server 在控制器 configure 时即被发现，而 trajectory 控制器在
+        activate 前会 REJECT goal（cell 启动的 activation 窗口 ~1-2 s）→
+        未接受即重试，直到接受或总窗口超时（cell 快速启动时实测第一发必被拒）。
+        """
+        accept_deadline = time.time() + 10.0
+        accepted = False
+        while rclpy.ok() and time.time() < accept_deadline:
+            goal = FollowJointTrajectory.Goal()
+            goal.trajectory = JointTrajectory()
+            goal.trajectory.joint_names = UR_JOINT_NAMES
+            pt = JointTrajectoryPoint()
+            pt.positions = self._slave_home
+            pt.time_from_start = Duration(seconds=self._move_duration).to_msg()
+            goal.trajectory.points = [pt]
+
+            self.get_logger().info(f"UR home trajectory -> {self._slave_home}")
+            future = self._traj_client.send_goal_async(goal)
+            deadline = min(time.time() + 5.0, accept_deadline)
+            while rclpy.ok() and not future.done() and time.time() < deadline:
+                executor.spin_once(timeout_sec=0.1)
+            if future.done() and future.result() is not None and future.result().accepted:
+                accepted = True
+                break
+            self.get_logger().warn("UR home goal 未接受（控制器可能尚未激活），重试...")
+            time.sleep(0.5)
+        if not accepted:
             self._log_home_failure("UR home trajectory rejected/timed out")
             return False
         result_future = future.result().get_result_async()

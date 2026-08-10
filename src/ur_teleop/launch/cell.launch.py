@@ -36,6 +36,7 @@ def generate_launch_description():
     grip_default = _yaml_default(config_file, "cell", "gripper_port", fallback="/dev/ttyUSB1")
     ftdi_default = _yaml_default(config_file, "cell", "ftdi_id", fallback="")
     rviz_default = _yaml_default(config_file, "cell", "launch_rviz", fallback="true")
+    ur_type_default = _yaml_default(config_file, "cell", "ur_type", fallback="ur10e")
 
     sim = LaunchConfiguration("sim")
     is_sim = PythonExpression(["'", sim, "' == 'true'"])          # "false" 字符串真值陷阱防护
@@ -47,13 +48,14 @@ def generate_launch_description():
         DeclareLaunchArgument("gripper_port", default_value=grip_default),
         DeclareLaunchArgument("ftdi_id", default_value=ftdi_default),
         DeclareLaunchArgument("launch_rviz", default_value=rviz_default),
+        DeclareLaunchArgument("ur_type", default_value=ur_type_default),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
                 os.path.join(get_package_share_directory("ur_robot_driver"),
                              "launch", "ur_control.launch.py")
             ),
             launch_arguments={
-                "ur_type": "ur10e",
+                "ur_type": LaunchConfiguration("ur_type"),
                 "robot_ip": LaunchConfiguration("robot_ip"),
                 "use_mock_hardware": sim,
                 "mock_sensor_commands": "false",

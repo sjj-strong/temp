@@ -37,7 +37,7 @@ source /opt/lerobot_venv/bin/activate
 
 ## 2. 关键配置：`config/ur_teleop.yaml`
 
-单一配置入口（合并了旧版五个 yaml）。缺失键解析时报错，不静默默认。launch 参数优先、yaml 兜底。各键含义：
+单一配置入口（合并了旧版五个 yaml）。必需键缺失解析时报错；可选键带默认值（见下表默认列）。launch 参数优先、yaml 兜底。各键含义：
 
 | 键 | 含义 |
 |---|---|
@@ -78,7 +78,7 @@ source /opt/lerobot_venv/bin/activate
 
 ## 3. 两阶段使用流程
 
-**阶段 1**（home.launch.py）：启动 cell（持续运行）+ 移双臂到 home 并验证 → 打印 READY 后退出（cell 保持运行）。
+**阶段 1**（home.launch.py）：启动 cell（持续运行）+ 移双臂到 home 并验证 → 打印 HOME REACHED 后退出（cell 保持运行）。
 **阶段 2**（teleop.launch.py）：连接已运行的 cell，teleop_node 状态机 WAITING_CELL → VERIFY_HOME → SETTLING → CAPTURE_OFFSET → ARMED（Enter 门控）→ ACTIVE；`mode=record` 时同时拉起 data_recorder。
 
 ### sim（主臂真实，UR 端 mock + rviz）
@@ -88,7 +88,7 @@ source /opt/ros/jazzy/setup.bash
 source /ros2_ws/install/setup.bash
 
 ros2 launch ur_teleop home.launch.py
-# 看到 READY 后（cell 仍在运行）开第二个终端：
+# 看到 HOME REACHED 后（cell 仍在运行）开第二个终端：
 ros2 launch ur_teleop teleop.launch.py
 # 状态到 ARMED 后按 Enter → rviz 中 mock UR 跟随主臂
 ```
@@ -97,7 +97,7 @@ ros2 launch ur_teleop teleop.launch.py
 
 ```bash
 ros2 launch ur_teleop home.launch.py sim:=false robot_ip:=192.168.1.1 gripper_port:=/dev/ttyUSB1 ftdi_id:=<你的ftdi_id>
-# READY 后第二个终端：
+# HOME REACHED 后第二个终端：
 ros2 launch ur_teleop teleop.launch.py
 ```
 
@@ -158,7 +158,7 @@ colcon test --packages-select ur_teleop --python-testing pytest --event-handlers
 # 期望 35 passed
 ```
 
-**集成测试**（23 个，全栈冒烟：假主臂 + mock UR + home + teleop + record，约 4.5 分钟）。需已 source ROS 环境与工作区 install（套件 import `ur_teleop.config`），并激活 lerobot venv（套件用 `ROS_DOMAIN_ID=91` 自隔离）：
+**集成测试**（25 个，全栈冒烟：假主臂 + mock UR + home + teleop + record，约 5 分钟）。需已 source ROS 环境与工作区 install（套件 import `ur_teleop.config`），并激活 lerobot venv（隔离机制：模块级 `PYTHONUNBUFFERED` 保证子进程日志逐行可达；`tmp_path` 隔离配置文件与按路径进程清扫；孤儿 `controller_manager` 清扫）：
 
 ```bash
 source /opt/ros/jazzy/setup.bash
@@ -166,7 +166,7 @@ source /ros2_ws/install/setup.bash
 source /opt/lerobot_venv/bin/activate
 cd /ros2_ws
 python3 -m pytest src/ur_teleop/tests/test_integration.py -m integration -p no:launch_testing -p no:launch_ros
-# 期望 23 passed
+# 期望 25 passed
 ```
 
 ## 7. 重构问题 → 修复对照表
@@ -187,5 +187,5 @@ python3 -m pytest src/ur_teleop/tests/test_integration.py -m integration -p no:l
 | 12 | launch 重复 | 三 launch 精简：cell 一次管理 rviz/URDF/控制器；删除 view/display/calibrate launch 与 `if False` 死代码 |
 | 13 | 配置死键 | 单一 yaml 只含被消费键（`master_joint_state_topic` 等已删）；`config.py` 缺失键解析报错 |
 | 14 | launch 把业务 YAML 当 ROS 参数文件传 | launch 仅传 `config_file` 字符串参数，节点内 `load_config` 自行解析 |
-| 15 | 零测试 | `tests/`：35 单测（joint_mapper / gripper_controller / offset / config / frame_builder / keyboard）+ 23 集成（`fake_master.py` 假主臂全栈冒烟） |
+| 15 | 零测试 | `tests/`：35 单测（joint_mapper / gripper_controller / offset / config / frame_builder / keyboard）+ 25 集成（`fake_master.py` 假主臂全栈冒烟） |
 | 16 | 依赖声明缺失 | `package.xml` depend 补全 yaml / numpy / cv_bridge / tf 等；lerobot 以注释说明可选（record 模式需要，`/opt/lerobot_venv`） |

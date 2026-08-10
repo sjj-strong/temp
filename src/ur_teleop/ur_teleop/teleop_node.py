@@ -75,6 +75,7 @@ class TeleopNode(Node):
         self._start_time = time.time()
         self._fatal_error = False
         self._e_stop = False
+        self._enable_pending = False           # ARMED 前收到的 enable 锁存（recorder 启动即发的场景）
         self._master_engaged = False
         self._last_master_stamp = 0.0
         self._master_q: list[float] | None = None
@@ -140,7 +141,8 @@ class TeleopNode(Node):
             self.get_logger().info("[teleop] enable 收到 — 开始控制")
             self._begin_switch()
         elif msg.data:
-            self.get_logger().info(f"[teleop] enable 收到但状态为 {self._state.name}，忽略")
+            self.get_logger().info(f"[teleop] enable 已收到但状态为 {self._state.name}，等待 ARMED 后执行")
+            self._enable_pending = True
 
     def _estop_cb(self, msg: Bool):
         self._e_stop = msg.data
@@ -230,6 +232,11 @@ class TeleopNode(Node):
         self._log_state(State.ARMED)
 
     def _armed(self):
+        if self._enable_pending:
+            self._enable_pending = False
+            self.get_logger().info("[teleop] enable 已在 ARMED 前收到 — 开始控制")
+            self._begin_switch()
+            return
         if self._mode == "teleop" and self._kb.read_key(0.0) == "enter":
             self.get_logger().info("[teleop] Enter 按下 — 开始")
             self._begin_switch()

@@ -185,12 +185,20 @@ class _OnceEcho:
     status/demonstration 是单次信号（teleop 仅在状态迁移时发布一次），
     每次轮询新建 --once echo 会因 DDS 发现延迟错过；本类在信号前订阅，
     next() 阻塞读取到消息或超时。
+
+    msg_type: 显式消息类型（如 std_msgs/msg/Bool）。不带类型时 echo 在
+    spawn 瞬间做一次非阻塞图查询，而新参与者的 DDS 发现尚未完成 →
+    常以 "Could not determine the type for the passed topic" 立即退出
+    （单次信号必丢）；显式类型跳过该查询，订阅确定性建立。
     """
 
-    def __init__(self, topic, field="data"):
+    def __init__(self, topic, field="data", msg_type=None):
+        cmd = ["ros2", "topic", "echo", topic]
+        if msg_type is not None:
+            cmd.append(msg_type)
+        cmd += ["--field", field, "--once"]
         self._p = subprocess.Popen(
-            ["ros2", "topic", "echo", topic, "--field", field, "--once"],
-            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
 
     def next(self, timeout):
         deadline = time.time() + timeout
@@ -200,9 +208,11 @@ class _OnceEcho:
             if not r:
                 return None
             line = self._p.stdout.readline()
-            if line:
-                return line.strip()
-            return None                       # EOF（echo 已退出）
+            if not line:
+                return None                   # EOF（echo 已退出）
+            if line.startswith("WARNING:"):
+                continue                      # ros2 echo 的发布者发现提示，非消息负载
+            return line.strip()
         return None
 
     def close(self):
@@ -246,7 +256,7 @@ class _LineEcho:
 
 def _wait_status(value, timeout=25.0):
     """等待 /teleop/status 的下一条消息为给定值（长驻 --once echo，事后订阅会错过）。"""
-    echo = _OnceEcho("/teleop/status")
+    echo = _OnceEcho("/teleop/status", msg_type="std_msgs/msg/Bool")
     try:
         got = echo.next(timeout)
         return got is not None and str(value).lower() in got.lower()
@@ -264,7 +274,7 @@ def _enable_and_wait(timeout=60.0):
       订阅完成前就已发生（稳定 ACTIVE 不再发布 status），靠指令流兜底。
     注：teleop 仅在 ACTIVE 发布映射指令（INACTIVE 的 hold 需要主臂超时，假主臂
     常驻时不会发生），故指令流可作为 ACTIVE 判据。"""
-    echo = _OnceEcho("/teleop/status")
+    echo = _OnceEcho("/teleop/status", msg_type="std_msgs/msg/Bool")
     cmd = _LineEcho("/forward_position_controller/commands")
     try:
         deadline = time.time() + timeout
@@ -789,16 +799,18 @@ def test_watchdog_inactive_then_recover(tmp_path):
     procs = _launch_stack(tmp_path)
     echoes = []
     try:
-        time.sleep(20.0)
-        # /demonstration 只在 ACTIVE 迁移时发布一次 → 在 enable 前订阅
-        demo = _OnceEcho("/demonstration")
+        # /demonstration 只在 ACTIVE 迁移时发布一次。echo 传显式类型（跳过
+        # spawn 时非阻塞图查询——新参与者 DDS 发现未完成会直接退出）并在
+        # t=0 订阅，留足匹配时间，等 ACTIVE 时捕获。
+        demo = _OnceEcho("/demonstration", msg_type="std_msgs/msg/Bool")
         echoes.append(demo)
+        time.sleep(20.0)                         # 等栈到 ARMED
         assert _enable_and_wait(), "enable 后未进入 ACTIVE（重试发布）"
         got_demo = demo.next(5.0)
         assert got_demo is not None and "true" in got_demo.lower(), \
             f"/demonstration 应为 true: {got_demo!r}"
         # status=false 也是单次信号 → 先订阅（给 DDS 匹配留时间），再杀 fake
-        e_false = _OnceEcho("/teleop/status")
+        e_false = _OnceEcho("/teleop/status", msg_type="std_msgs/msg/Bool")
         echoes.append(e_false)
         time.sleep(1.5)
         _kill_one(procs[2])                    # 杀掉 fake_master
@@ -808,7 +820,7 @@ def test_watchdog_inactive_then_recover(tmp_path):
             assert _wait_still_commands(6.0), \
                 "主臂断开后未发布 status=false，指令流也未冻结为 hold"
         # 恢复：订阅后再重启 fake
-        e_true = _OnceEcho("/teleop/status")
+        e_true = _OnceEcho("/teleop/status", msg_type="std_msgs/msg/Bool")
         echoes.append(e_true)
         time.sleep(1.0)
         procs[2] = _start(sys.executable, str(FAKE_MASTER))
@@ -928,7 +940,8 @@ def test_home_at_home_tolerance_boundary(home_node):
     m[3] = tol
     _inject_joints(node, master=m, slave=SLAVE_HOME)
     assert node.at_home(), "恰好 tol 应 True"
-    node._joint_states = None
+    node._ur_states = None
+    node._alicia_states = None
     assert not node.at_home(), "缺关节数据应 False"
 
 
@@ -993,5 +1006,62 @@ def test_record_save_episode(tmp_path):
         assert "已保存" in log, f"recorder 日志未见保存:\n{log[-2000:]}"
         assert "finalize" in log.lower(), f"recorder 日志未见 finalize:\n{log[-2000:]}"
     finally:
+        _kill(procs)
+        _sweep(tmp_path)
+
+
+# ============================================================================
+# 最终评审修复波（E/F）：home_node 子进程冒烟 + enable ARMED 前锁存回归
+# ============================================================================
+
+def test_home_node_subprocess_smoke(tmp_path):
+    """E（子进程）: home_node 对 mock cell 全流程冒烟 — 轨迹 + 验证 → exit 0。
+
+    此前 home_node 只能 in-process 白盒测 at_home/publish，cell_ready 的
+    server_is_available AttributeError 直到真跑 subprocess 才暴露（Jazzy 无
+    该方法）。本测试跑 home_node 完整 main()：等 cell 就绪 → 发 UR home
+    轨迹 → 发布 alicia home → 验证到位 → 打印 HOME REACHED → exit 0。"""
+    _sweep(tmp_path)
+    cfg_path = tmp_path / "ur_teleop.yaml"
+    cfg_path.write_text(CFG_BODY)              # home.slave = mock UR 初始位姿 → 轨迹即达
+    procs = [
+        _start("ros2", "launch", "ur_teleop", "cell.launch.py",
+               f"config_file:={cfg_path}", "sim:=true", "launch_rviz:=false"),
+        _start(sys.executable, str(FAKE_MASTER)),   # master 保持 home（zeros）直到 status=true
+        _start("ros2", "run", "ur_teleop", "home_node",
+               "--ros-args", "-p", f"config_file:={cfg_path}"),
+    ]
+    home = procs[-1]
+    try:
+        rc = home.wait(timeout=90.0)           # cell ~20 s + 轨迹 8 s + 验证 2 s
+        log = home.stdout.read()
+        assert rc == 0, f"home_node 应 exit 0，实际 {rc}；log:\n{log[-500:]}"
+        assert "HOME REACHED" in log, f"未见 HOME REACHED 消息；log:\n{log[-500:]}"
+    finally:
+        _kill(procs)
+        _sweep(tmp_path)
+
+
+def test_enable_single_pub_before_armed_latches(tmp_path):
+    """F（子进程）: ARMED 前单次 enable 不丢 — 锁存后 ARMED 自动切换 ACTIVE。
+
+    生产场景：data_recorder 启动即发一次 /teleop/enable（teleop 尚在
+    WAITING_CELL/VERIFY_HOME），无锁存时该信号被 _enable_cb 丢弃且 recorder
+    不再重发 → record 会话无法进入 ACTIVE。本测试只发布一次 enable，
+    之后不再重发，60 s 内必须到达 ACTIVE（status=true）。"""
+    _sweep(tmp_path)
+    procs = _launch_stack(tmp_path)
+    echo = _OnceEcho("/teleop/status", msg_type="std_msgs/msg/Bool")
+    try:
+        time.sleep(5.0)                        # 尚未 ARMED（~20 s），正是 recorder 发 enable 的时机
+        _pub_bool("/teleop/enable", True)      # 恰好一次，不重发——被测 bug 的关键
+        deadline = time.time() + 60.0
+        while time.time() < deadline:
+            got = echo.next(2.0)
+            if got is not None and "true" in got.lower():
+                return
+        assert False, "ARMED 前单次 enable 未生效：60 s 内未到 ACTIVE（status=true）"
+    finally:
+        echo.close()
         _kill(procs)
         _sweep(tmp_path)
