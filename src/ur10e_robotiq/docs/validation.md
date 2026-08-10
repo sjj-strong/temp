@@ -1396,3 +1396,136 @@ FINAL_AUDIT_EXIT_CODE=0
 ```
 
 结果：当前磁盘状态的目标包重建、安装前缀、语义接口、上游文件一致性与补丁空白检查全部通过（**PASS**）。本 Stage 未执行 Git 提交。
+
+## 2026-08-10 Task 7：组合 MoveIt、碰撞矩阵与 Mock 规划执行
+
+环境：Ubuntu 24.04、ROS 2 Jazzy。运行验证使用独立的
+`ROS_DOMAIN_ID=177` 和 `ROS_HOME=/tmp/ur10e-task7-main-ros-home`，完整日志位于该
+`ROS_HOME/log`。本节只记录实际执行结果；未连接真实机器人。
+
+### Collision matrix 与状态有效性
+
+将组合 Xacro 以 `include_ros2_control:=false` 展开后，使用官方无头 MoveIt Setup
+Assistant updater 对同一 URDF/SRDF 输入独立运行两次：
+
+```bash
+/opt/ros/jazzy/lib/moveit_setup_assistant/collisions_updater \
+  --urdf /tmp/ur10e-task7-matrix.VumwJg/ur10e_robotiq.urdf \
+  --srdf /tmp/ur10e-task7-matrix.VumwJg/input.srdf \
+  --output /tmp/ur10e-task7-matrix.VumwJg/generated-escalated-100000-a.srdf \
+  --trials 100000 --verbose
+
+/opt/ros/jazzy/lib/moveit_setup_assistant/collisions_updater \
+  --urdf /tmp/ur10e-task7-matrix.VumwJg/ur10e_robotiq.urdf \
+  --srdf /tmp/ur10e-task7-matrix.VumwJg/input.srdf \
+  --output /tmp/ur10e-task7-matrix.VumwJg/generated-escalated-100000-b.srdf \
+  --trials 100000 --verbose
+```
+
+两次命令均 exit `0`，`Adjacent`/`Never` 集合稳定一致：
+
+```text
+Adjacent links disabled: 17
+Never in collision: 79
+first_only=[] second_only=[]
+trials100000_pair_set_stable=PASS
+```
+
+额外 `--default` 检查和 `/check_state_validity` RED 均只报告以下两对夹爪内部
+contact；夹爪主动关节从 `0.0` 采样到 `0.7929` 时均复现：
+
+```text
+robotiq_85_left_finger_tip_link - robotiq_85_left_inner_knuckle_link
+robotiq_85_right_finger_tip_link - robotiq_85_right_inner_knuckle_link
+START_STATE_IN_COLLISION (-10)
+```
+
+最终 SRDF 精确加入这两对 `reason="Default"`。静态断言确认最终矩阵为
+`17 Adjacent + 79 Never + 2 Default = 98`，没有其它 `Default`。同时保留以下三对
+安装邻接碰撞豁免：
+
+```text
+wrist_3_link / ft300_mounting_plate: Adjacent
+ft300_mounting_plate / ft300_sensor: Adjacent
+ft300_sensor / robotiq_85_base_link: Adjacent
+```
+
+加入这两对后，同一运行系统返回：
+
+```text
+STATE_VALID=True
+STATE_CONTACTS=0
+```
+
+### MoveIt launch、RobotModel 与规划执行
+
+实际启动顺序为：
+
+```bash
+source /opt/ros/jazzy/setup.bash
+source /ros2_ws/install/setup.bash
+export ROS_DOMAIN_ID=177
+export ROS_HOME=/tmp/ur10e-task7-main-ros-home
+ros2 launch ur10e_robotiq_description mock_control.launch.py
+ros2 launch ur10e_robotiq_moveit_config ur10e_robotiq_moveit.launch.py launch_rviz:=true
+```
+
+`wait_for_robot_description` 收到 `/robot_description` 后退出；`move_group` 加载
+`ur10e_robotiq`、KDL、OMPL、`scaled_joint_trajectory_controller` 的
+`FollowJointTrajectory` 和 `robotiq_gripper_controller` 的
+`ParallelGripperCommand`。RViz 加载 RobotModel、PlanningScene、MotionPlanning、TF，
+初始 group 为 `ur_manipulator`，interactive marker 初始化成功。
+
+通过真实 `/move_action` 执行 UR joint goal：
+
+```text
+JOINT_GOAL_ACCEPTED=True
+JOINT_ERROR_CODE=1
+JOINT_PLANNED_POINTS=58
+JOINT_MAX_ERROR=0.000686
+```
+
+保持 `gripper_tcp` 当前姿态、沿 world Z 正向移动 `0.03 m` 的 pose goal：
+
+```text
+POSE_GOAL_ACCEPTED=True
+POSE_ERROR_CODE=1
+POSE_PLANNED_POINTS=169
+POSE_POSITION_ERROR=0.004693
+```
+
+夹爪首次规划产生 2 个轨迹点，但时间参数化按预期 RED：
+
+```text
+GRIPPER_CLOSE_ERROR_CODE=99999
+No acceleration limit was defined for joint robotiq_85_left_knuckle_joint!
+PlanningResponseAdapter 'AddTimeOptimalParameterization' failed with error code FAILURE
+```
+
+仅在组合 MoveIt 包 `joint_limits.yaml` 增加该主动关节
+`has_acceleration_limits: true`、`max_acceleration: 1.0`；保留 URDF velocity limit，
+且上游六个 UR joint limit 字典保持不变。重建后同一路径 GREEN：
+
+```text
+GRIPPER_CLOSE_ERROR_CODE=1
+GRIPPER_CLOSE_FINAL=0.792900
+GRIPPER_OPEN_ERROR_CODE=1
+GRIPPER_OPEN_FINAL=0.000889
+scaled_joint_trajectory_controller  active
+robotiq_gripper_controller          active
+```
+
+### 收尾复验与已知限制
+
+最终源码复验包括 `git diff --check`、launch `py_compile`、SRDF Xacro 展开/XML
+解析、全部 config YAML 解析、碰撞 pair 精确断言、UR joint limit 上游一致性、
+`ros2 launch ... --show-args`，以及 `/tmp/ur10e-task7-final-build` 隔离单包构建；
+全部 exit `0`，构建结果为 `1 package finished`。
+
+本次自动化运行没有人工目视确认 RViz 中三部分模型外观，也没有人工点击 GUI 的
+Plan/Execute；对应规划和执行路径已由真实 `/move_action` 覆盖。关闭时 RViz 正常退出，
+三个 hardware component 成功 deactivate/shutdown，精确检查本轮十个 PID 得到
+`TASK7_OWN_PID_RESIDUAL=0`。已知非阻塞现象为：SIGINT 后 `move_group` 在
+MoveItCpp/TrajectoryExecutionManager teardown 中 exit `-11`，
+`trajectory_until_node` exit `-2`，controller manager 输出 `pal_statistics`
+invalid-context 警告；Mock 未配置 Octomap 3D sensor，`/recognize_objects` 不可用。
