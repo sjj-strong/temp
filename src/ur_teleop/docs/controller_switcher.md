@@ -49,7 +49,7 @@ def switch_ok(future) -> bool:        # 成功且 future.result().ok 为真
             and future.result() is not None and future.result().ok)
 ```
 
-**静态方法契约（与集成测试 B 组锁定，test_integration.py:900-920）**：
+**静态方法契约（与集成测试 B 组锁定，test_integration.py:902-920）**：
 
 - 未完成（`not done`）或 `None` 或结果为 None → **不抛**，返回安全默认（`{}` / `False`）。
 - cancelled 或携带异常的 future → `future.result()` **会把 `concurrent.futures.CancelledError` / 原异常透传抛出**（不是吞掉）——因为 `done()` 为真时会调用 `result()`。**调用侧必须守卫**：teleop_node 所有解读点都包在 `try/except Exception` 里（list 异常视为未加载走 load 路径、switch 异常视为一次失败参与重试），异常从不逃逸出 `_tick`（集成测试 A4a/A4b）。

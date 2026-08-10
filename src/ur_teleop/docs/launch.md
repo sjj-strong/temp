@@ -7,11 +7,11 @@
 - `cell.launch.py`：UR cell（持久），sim/real 两模式，可被 home.launch 与 teleop.launch 复用（实际仅 home.launch include 它）。
 - `home.launch.py`：阶段 1 = cell + home_node（移双臂到 home 并验证后退出，cell 保持）。
 - `teleop.launch.py`：阶段 2 = teleop_node（+ mode=record 时 data_recorder），连接已运行的 cell，**不含 cell**。
-- 三个 launch 都以 `config_file` 为唯一必传参数（默认 `share/ur_teleop/config/ur_teleop.yaml`）；除 `config_file`/`mode`/`force_home`/`ur_type` 外，其余参数的默认值都来自 yaml（`_yaml_default` 机制）。
+- 三个 launch 都以 `config_file` 为唯一必传参数（默认 `share/ur_teleop/config/ur_teleop.yaml`）；除 `config_file`/`mode`/`force_home`/`description_launchfile` 外，其余参数的默认值都来自 yaml（`_yaml_default` 机制）。
 
 ## cell.launch.py
 
-职责：启动 UR 栈（ur_control.launch.py）、按形态附加组件、管理 rviz。sim/real 由 `sim` 参数（字符串）决定，判断用 `PythonExpression("'sim' == 'true'")` 而非直接取真值——规避 `"false"` 字符串在 Python 中为真的陷阱（cell.launch.py:42）。
+职责：启动 UR 栈（ur_control.launch.py）、按形态附加组件、管理 rviz。sim/real 由 `sim` 参数（字符串）决定，判断用 `PythonExpression("'sim' == 'true'")` 而非直接取真值——规避 `"false"` 字符串在 Python 中为真的陷阱（cell.launch.py:52）。
 
 包含关系：
 
@@ -28,7 +28,7 @@
 - `initial_joint_controller="scaled_joint_trajectory_controller"` + `activate_joint_controller="true"`：cell 启动即激活 trajectory 控制器——home_node 的 `follow_joint_trajectory` action 依赖它；teleop ACTIVE 时再切到 `forward_position_controller`。
 - 注意 cell 启动的控制器激活窗口约 1-2 s，期间 trajectory 控制器会 REJECT goal，故 home_node 有 10 s 接受重试（home_node.py:89-109）。
 
-参数声明（cell.launch.py:54-63）：
+参数声明（cell.launch.py:55-63）：
 
 | 参数 | 默认值来源 | 含义 |
 |---|---|---|

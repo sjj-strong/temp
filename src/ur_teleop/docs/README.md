@@ -38,7 +38,7 @@ ur_teleop/
 
 | 层 | 内容 | 职责与约束 |
 |---|---|---|
-| 节点层 | `home_node` / `teleop_node` / `data_recorder` | 进程边界：cell 之外仅此三进程；teleop 与 recorder 进程隔离（recorder 崩溃不影响遥操，已保存 episodes 保留）；全部单线程 executor，定时器驱动，回调不阻塞 |
+| 节点层 | `home_node` / `teleop_node` / `data_recorder` | 进程边界：cell 之外仅此三进程；teleop 与 recorder 进程隔离（recorder 崩溃不影响遥操，已保存 episodes 保留）；全部单线程 executor 且回调不阻塞：teleop_node 定时器驱动（`_tick`/`_gripper_tick`），home_node 主循环 `spin_once` 轮询，data_recorder 后台 spin 线程 + 主线程 sleep 周期循环 |
 | 纯逻辑层 | `joint_mapper` / `gripper_controller` / `offset` / `config` / `keyboard` / `frame_builder` | 无 rclpy 导入，可独立单测；输入输出均为纯数据 |
 | 协议层 | 话题 / 服务 / 动作（见 pipeline.md 清单） | teleop→recorder 仅 3 个话题（commands/status/enable），无请求-应答 |
 | 配置层 | `config/ur_teleop.yaml` + `config.py` | 单一入口；缺失必选键解析时 `ConfigError` 报错；launch 参数优先、yaml 兜底 |
@@ -54,7 +54,7 @@ ur_teleop/
 | [launch.md](launch.md) | 三个 launch 的职责、包含关系、参数表与「launch 参数 > yaml 默认」优先级机制 |
 | [config.md](config.md) | `config.py` 解析/校验逻辑、`ur_teleop.yaml` 全部键、Gripper 米 ↔ 0-1000 单位换算（对应 `config.py`） |
 | [joint_mapper.md](joint_mapper.md) | 映射公式 `ur_cmd = slave_home + sign·scale·(master − master_home)`、clamp 与 safety（对应 `joint_mapper.py`） |
-| [offset.md](offset.md) | 会话内 offset 捕获与应用、不写盘设计（对应 `offset.py`） |
+| [session_offset.md](session_offset.md) | 会话内 offset 捕获与应用、不写盘设计（对应 `offset.py`） |
 | [gripper_controller.md](gripper_controller.md) | 夹爪迟滞 FSM、死区阈值、开/合目标与指令信号（对应 `gripper_controller.py`） |
 | [keyboard.md](keyboard.md) | 非阻塞 stdin 单键读取（select）与 `'enter'` 归一化（对应 `keyboard.py`） |
 | [controller_switcher.md](controller_switcher.md) | controller_manager 三服务封装：list/load/switch、异步 Future 链、STRICT 切换（对应 `controller_switcher.py`） |

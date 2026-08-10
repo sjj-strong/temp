@@ -93,7 +93,7 @@ return max(lo, min(hi, value))        # 上下界双向 clamp
 
 ## 数据流 / 消费方
 
-1. teleop_node `_capture_offset`（teleop_node.py:219-227）：settle 完成后捕获 offset，构造 `JointMapper(build_mapping_config(self._cfg), self._offset.master_home, self._offset.slave_home)`——session 一旦 ARMED 后 mapper 固定，会话内不重建。
+1. teleop_node `_capture_offset`（teleop_node.py:219-232）：settle 完成后捕获 offset，构造 `JointMapper(build_mapping_config(self._cfg), self._offset.master_home, self._offset.slave_home)`——session 一旦 ARMED 后 mapper 固定，会话内不重建。
 2. `_active`（teleop_node.py:306）：`cmd = self._mapper.master_to_slave(self._master_q)`，结果经 `_publish_commands` 发往 `/forward_position_controller/commands`（6 维）与 `/teleop/commands`（6 维 + 夹爪信号）。
 
 ## 错误处理 / 已知边界

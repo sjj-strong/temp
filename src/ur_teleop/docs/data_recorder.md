@@ -7,7 +7,7 @@
 
 data_recorder 是**独立进程**（进程隔离：崩溃不影响 teleop，已保存 episodes 保留；spec §9"recorder 崩溃"行）。键盘单一归属权在 record 模式下移交给它：**第一个 Enter 同时开 episode 1 并发 `/teleop/enable`**，teleop_node 收到后开始控制（配合其 `enable_pending` 锁存，即使 enable 早于 ARMED 到达也不丢）。
 
-主循环结构（data_recorder.py:234-258）：`rclpy.spin` 跑在**独立后台线程**（订阅回调），主线程按 `recorder.fps` 周期做两件事——录制中则 `_record_frame()`（帧组装 + add_frame），然后非阻塞 `KeyboardReader.read_key(0.0)` 处理按键。定时器驱动与键盘轮询互不干扰。注意 `LeRobotDataset` 导入失败时构造直接抛 `RuntimeError`（data_recorder.py:29-30）。
+主循环结构（data_recorder.py:234-258）：`rclpy.spin` 跑在**独立后台线程**（订阅回调），主线程按 `recorder.fps` 周期做两件事——录制中则 `_record_frame()`（帧组装 + add_frame），然后非阻塞 `KeyboardReader.read_key(0.0)` 处理按键。无 ROS 定时器：主循环是 `period = 1.0/fps` 的 sleep 周期循环，后台 spin 线程与主循环键盘轮询互不干扰。注意 `LeRobotDataset` 导入失败时构造直接抛 `RuntimeError`（data_recorder.py:29-30）。
 
 ## 生命周期（按键语义）
 

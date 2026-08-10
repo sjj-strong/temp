@@ -1,6 +1,6 @@
 # teleop_node（阶段 2 核心状态机）
 
-> 路径：ur_teleop/teleop_node.py（404 行）
+> 路径：ur_teleop/teleop_node.py（405 行）
 > 职责：双臂 home 验证 → 静止 → 捕获 offset → Enter 门控 → 50 Hz 镜像映射发布 + 夹爪 FSM（常驻节点，Ctrl-C 退出）。
 
 ## 概述
@@ -54,11 +54,11 @@ ur_teleop 就绪 — mode=teleop, sim=true
 - 收到 `data=True` 但状态不是 ARMED → 打日志 `"[teleop] enable 已收到但状态为 <STATE>，等待 ARMED 后执行"` → 置 `_enable_pending = True` **锁存**；
 - `_armed()`（teleop_node.py:234-242）先消费锁存：`_enable_pending = False` → 打日志 `"[teleop] enable 已在 ARMED 前收到 — 开始控制"` → `_begin_switch()`，之后才看键盘。
 
-生产场景：data_recorder 启动即发一次 enable（teleop 尚在 WAITING_CELL/VERIFY_HOME），无锁存时该信号被丢弃且 recorder 不重发 → record 会话永远进不了 ACTIVE。对应回归测试 `test_enable_single_pub_before_armed_latches`（F 组：恰好发布一次 enable 后不再重发，60 s 内必须到 ACTIVE）。失败切换不循环：SWITCHING 各失败分支都回到 ARMED（等待人工重新 enable/Enter），不会自触发重试死循环。
+生产场景：data_recorder 在第一次 Enter 时发一次 enable（data_recorder.py:162-165，`_start_episode()` 内），此时 teleop 尚在 WAITING_CELL/VERIFY_HOME，无锁存时该信号被丢弃且 recorder 不重发 → record 会话永远进不了 ACTIVE。对应回归测试 `test_enable_single_pub_before_armed_latches`（F 组：恰好发布一次 enable 后不再重发，60 s 内必须到 ACTIVE）。失败切换不循环：SWITCHING 各失败分支都回到 ARMED（等待人工重新 enable/Enter），不会自触发重试死循环。
 
 ### watchdog（watchdog_timeout_s，默认 0.5 s）
 
-`_last_master_stamp` 在 `_joint_cb` 收到主臂数据时更新。`_active()`（teleop_node.py:299-304）里超时 → warn `"[teleop] 主臂数据超时 → INACTIVE（改发当前位置）"` + `_publish_status(False)` + 进 INACTIVE。`_inactive()`（teleop_node.py:309-317）里主臂恢复（时间戳新鲜）→ 日志 `"[teleop] 主臂恢复 → ACTIVE"` + `_publish_status(True)` + 回 ACTIVE；未恢复则**持续发当前位置**（`_slave_q`，无数据时全 0 兜底）避免跳变。watchdog 是唯一的主臂存活信号：Alicia 串口断开由 driver 自行重连，teleop 只感知数据流。
+`_last_master_stamp` 在 `_joint_cb` 收到主臂数据时更新。`_active()`（teleop_node.py:299-307）里超时 → warn `"[teleop] 主臂数据超时 → INACTIVE（改发当前位置）"` + `_publish_status(False)` + 进 INACTIVE。`_inactive()`（teleop_node.py:309-317）里主臂恢复（时间戳新鲜）→ 日志 `"[teleop] 主臂恢复 → ACTIVE"` + `_publish_status(True)` + 回 ACTIVE；未恢复则**持续发当前位置**（`_slave_q`，无数据时全 0 兜底）避免跳变。watchdog 是唯一的主臂存活信号：Alicia 串口断开由 driver 自行重连，teleop 只感知数据流。
 
 ### e_stop 冻结双 tick
 
@@ -84,7 +84,7 @@ in-flight future 未完成时 `_tick` **立即返回不阻塞**（A6 断言耗�
 
 ### 夹爪探测一次（server_is_ready）
 
-`_gripper_tick()`（teleop_node.py:321-329）首次运行做**一次性探测**：`_gripper_action is None` 或 `server_is_ready()` 失败 → warn `"[teleop] 夹爪 action server 不存在，禁用夹爪 FSM"` + `_gripper.enabled = False` + return；探测后置 `_gripper_probed=True`，后续 tick 直接走流程。探测失败不抛异常、不重试（A14 断言）。夹爪目标来自 `GripperController.update(_master_gripper_m)`（Alicia `Gripper` 米 → 迟滞 FSM → `GripperTarget.OPEN/CLOSED`，死区内返回 `UNKNOWN` 不动作），目标变化才发 action goal（`get_knuckle_command` rad + `max_effort`，goal 名字 `UR_GRIPPER_JOINT`），上一 goal 未完成时本 tick 跳过。
+`_gripper_tick()`（teleop_node.py:321-335）首次运行做**一次性探测**：`_gripper_action is None` 或 `server_is_ready()` 失败 → warn `"[teleop] 夹爪 action server 不存在，禁用夹爪 FSM"` + `_gripper.enabled = False` + return；探测后置 `_gripper_probed=True`，后续 tick 直接走流程。探测失败不抛异常、不重试（A14 断言）。夹爪目标来自 `GripperController.update(_master_gripper_m)`（Alicia `Gripper` 米 → 迟滞 FSM → `GripperTarget.OPEN/CLOSED`，死区内返回 `UNKNOWN` 不动作），目标变化才发 action goal（`get_knuckle_command` rad + `max_effort`，goal 名字 `UR_GRIPPER_JOINT`），上一 goal 未完成时本 tick 跳过。
 
 ### D3：双侧 /joint_states 按侧合并
 

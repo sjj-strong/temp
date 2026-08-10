@@ -33,7 +33,7 @@ class SessionOffset:
 
 ## 关键逻辑
 
-"捕获 → 应用"链在 teleop_node 中（teleop_node.py:219-227，`_capture_offset`）：
+"捕获 → 应用"链在 teleop_node 中（teleop_node.py:219-232，`_capture_offset`）：
 
 ```python
 self._offset.capture(list(self._master_q), list(self._slave_q))
