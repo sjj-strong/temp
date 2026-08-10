@@ -1649,3 +1649,171 @@ TASK6_REPRODUCIBLE_ASSERTIONS=PASS
 
 结果：Task 8 文档范围、接口名称、命令语法、相对链接、模型树、Mock 安全边界与历史
 验证可复现性全部 **PASS**。
+
+## 2026-08-10 — Task 9 全量构建、上游完整性与官方 UR 回归
+
+- 环境：Ubuntu 24.04，ROS 2 Jazzy。
+- 真机边界：没有启动 `ur_control.launch.py` 的真实 IP 模式，没有连接 UR10e、FT300
+  或 2F-85。
+- 总体结果：两个集成 `--packages-up-to` 构建与官方 UR 三包回归 **PASS**；原始
+  全工作区构建被无关 `gello` package 的 README 相对路径错误阻塞，因此该项保持
+  **FAIL（外部包）**。忽略且仅忽略 `gello` 的补充构建为 32 packages **PASS**。
+
+### 默认 build 目录兼容性恢复
+
+首次原样执行：
+
+```bash
+source /opt/ros/jazzy/setup.bash
+cd /ros2_ws
+colcon build --symlink-install --packages-up-to ur10e_robotiq_description
+```
+
+命令 exit `2`。`ur_dashboard_msgs` 的 2026-07-17 旧 build 产物为实体目录，
+`ament_cmake_python` 无法在同一路径创建 symlink：
+
+```text
+failed to create symbolic link '/ros2_ws/build/ur_dashboard_msgs/ament_cmake_python/ur_dashboard_msgs/ur_dashboard_msgs'
+because existing path cannot be removed: Is a directory
+```
+
+单包加 `--cmake-clean-cache` 仍 exit `2`，证明不是 CMake cache。只将四个明确的旧
+build 目录移动到可恢复备份 `/tmp/ur10e-task9-build-backup.eAatwa/`：
+
+```text
+ur_dashboard_msgs
+ur_msgs
+ur_robot_driver
+alicia_d_calibration
+```
+
+没有删除源码或 install；备份还保存了本轮 Python launch 生成并从 UR Driver
+上游工作树移出的 `ur_driver_launch_pycache`。
+
+### 两层集成构建
+
+恢复旧 UR build 目录后重新执行第一条原始命令，exit `0`：
+
+```text
+Finished <<< ur10e_robotiq_description [0.87s]
+Summary: 11 packages finished [1min 35s]
+```
+
+第二层执行：
+
+```bash
+source /opt/ros/jazzy/setup.bash
+cd /ros2_ws
+colcon build --symlink-install --packages-up-to ur10e_robotiq_moveit_config
+```
+
+exit `0`：
+
+```text
+Finished <<< ur10e_robotiq_description [0.23s]
+Finished <<< ur10e_robotiq_moveit_config [1.01s]
+Summary: 12 packages finished [3.20s]
+```
+
+两层构建只有上游 CMake、Boost policy 和 `tl_expected` 弃用警告，没有编译失败。
+
+### 全工作区构建与外部 blocker
+
+执行计划原始命令：
+
+```bash
+source /opt/ros/jazzy/setup.bash
+cd /ros2_ws
+colcon build --symlink-install
+```
+
+在恢复无关 `alicia_d_calibration` 的旧 build 目录后，命令继续进入源码构建，但最终
+exit `1`。唯一失败 package 为工作区外部项目 `gello`：
+
+```text
+File "/ros2_ws/build/gello/setup.py", line 3, in <module>
+  with open("README.md", "r") as fh:
+FileNotFoundError: [Errno 2] No such file or directory: 'README.md'
+Failed <<< gello [2.38s, exited with code 1]
+```
+
+没有修改不在本计划范围内的 `src/gello_software/setup.py`。为确认剩余工作区，补充
+执行：
+
+```bash
+source /opt/ros/jazzy/setup.bash
+cd /ros2_ws
+colcon build --symlink-install --packages-ignore gello
+```
+
+该命令 exit `0`：
+
+```text
+Finished <<< ur10e_robotiq_description [0.33s]
+Finished <<< ur10e_robotiq_moveit_config [0.43s]
+Summary: 32 packages finished [21.7s]
+```
+
+结论：两个集成包和 `gello` 以外的工作区均通过；由于计划要求的无忽略全工作区命令
+未 exit `0`，本记录不将其标记为 PASS。
+
+### 上游工作树完整性
+
+执行：
+
+```bash
+git -C /ros2_ws/src/Universal_Robots_ROS2_Driver status --short
+git -C /ros2_ws/src/Universal_Robots_ROS2_Description status --short
+git -C /ros2_ws/src/ros2_robotiq_gripper status --short
+git -C /ros2_ws/src/rq_fts_ros2_driver status --short
+```
+
+四条命令均 exit `0`。移走本轮生成的 `__pycache__` 后：
+
+- `Universal_Robots_ROS2_Driver`：无输出，与 Task 1 干净基线一致；
+- `Universal_Robots_ROS2_Description`：无输出，与 Task 1 干净基线一致；
+- `ros2_robotiq_gripper`：15 个既有 modified、9 个既有 untracked，与 Task 1
+  认可基线逐项一致，本任务未增加变化；
+- `rq_fts_ros2_driver`：既有 `?? docs/` 保持；另有 Task 1 后出现的用户改动
+  `M robotiq_ft_sensor_hardware/src/rq_sensor_com.cpp`，内容为串口输入清理与 buffer
+  边界保护。本任务没有修改、暂存或回退它。
+
+同时执行以下只读检查，exit `0` 且无输出：
+
+```bash
+find /ros2_ws/src/Universal_Robots_ROS2_Driver \
+  /ros2_ws/src/Universal_Robots_ROS2_Description \
+  /ros2_ws/src/ros2_robotiq_gripper \
+  /ros2_ws/src/rq_fts_ros2_driver \
+  -path '*/.git' -prune -o -iname '*ur10e_robotiq*' -print
+```
+
+结果：四个上游仓库内没有任何 `ur10e_robotiq` 路径（**PASS**）；保留并披露
+FT300 上游的并发用户改动。
+
+### 官方 UR package 回归
+
+执行：
+
+```bash
+source /opt/ros/jazzy/setup.bash
+source /ros2_ws/install/setup.bash
+ros2 pkg prefix ur_robot_driver
+ros2 pkg prefix ur_moveit_config
+cd /ros2_ws
+colcon build --symlink-install \
+  --packages-select ur_description ur_robot_driver ur_moveit_config
+```
+
+整组 exit `0`：
+
+```text
+/ros2_ws/install/ur_robot_driver
+/ros2_ws/install/ur_moveit_config
+Finished <<< ur_description [0.35s]
+Finished <<< ur_moveit_config [0.26s]
+Finished <<< ur_robot_driver [0.56s]
+Summary: 3 packages finished [1.23s]
+```
+
+结果：不连接真机的官方 package prefix 与三包构建回归 **PASS**。
