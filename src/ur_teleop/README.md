@@ -158,9 +158,10 @@ colcon test --packages-select ur_teleop --python-testing pytest --event-handlers
 # 期望 35 passed
 ```
 
-**集成测试**（25 个，全栈冒烟：假主臂 + mock UR + home + teleop + record，约 5 分钟）。需已 source ROS 环境与工作区 install（套件 import `ur_teleop.config`），并激活 lerobot venv（隔离机制：模块级 `PYTHONUNBUFFERED` 保证子进程日志逐行可达；`tmp_path` 隔离配置文件与按路径进程清扫；孤儿 `controller_manager` 清扫）：
+**集成测试**（25 个，全栈冒烟：假主臂 + mock UR + home + teleop + record，约 5 分钟）。需已 source ROS 环境与工作区 install（套件 import `ur_teleop.config`），并激活 lerobot venv。隔离机制：模块级 `PYTHONUNBUFFERED` 保证子进程日志逐行可达；`tmp_path` 隔离配置文件与按路径进程清扫；孤儿 `controller_manager` 清扫。**必须设独立 `ROS_DOMAIN_ID`**——套件内所有节点共享该 domain，若与本机常驻的 mock/真机栈同域，外来 `/joint_states` 会与套件假主臂/mock UR 交织，导致 home 验证超时等假失败：
 
 ```bash
+export ROS_DOMAIN_ID=77   # 与机器上常驻 ROS 栈隔离，任选空闲 id
 source /opt/ros/jazzy/setup.bash
 source /ros2_ws/install/setup.bash
 source /opt/lerobot_venv/bin/activate
