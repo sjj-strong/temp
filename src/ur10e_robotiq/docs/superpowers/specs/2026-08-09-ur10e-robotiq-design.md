@@ -84,7 +84,7 @@ src/ur10e_robotiq/
 - named state：沿用 UR 的 `home`、`up`、`test_configuration`，增加 `gripper` 的 `open`（0.0）和 `close`（0.7929）。
 - MoveIt controllers：`scaled_joint_trajectory_controller` 为默认 `FollowJointTrajectory`；`robotiq_gripper_controller` 为 `ParallelGripperCommand`。不加入任一 F/T broadcaster。
 
-组合 collision matrix 不复用裸 UR matrix 作为最终结果。通过当前组合模型重新生成并人工复查；只禁用明确的相邻/永不碰撞配对，重点检查 `tool0`、FT300、2F-85 base 与相邻手指 links。
+组合 collision matrix 不复用裸 UR matrix 作为最终结果。通过当前组合模型重新生成并人工复查；保留两次 100000-trial 生成结果中稳定一致的 `Adjacent`/`Never` 配对，并精确增加生成器报告为 `Default`、且导致全部夹爪状态无效的两对内部几何豁免：`robotiq_85_left_finger_tip_link`/`robotiq_85_left_inner_knuckle_link` 与 `robotiq_85_right_finger_tip_link`/`robotiq_85_right_inner_knuckle_link`。安装链必须保留 `wrist_3_link`/`ft300_mounting_plate`、`ft300_mounting_plate`/`ft300_sensor`、`ft300_sensor`/`robotiq_85_base_link` 的 `Adjacent` 豁免；不得增加任何其他非邻接 arm-to-gripper 豁免。
 
 ## 验证策略
 

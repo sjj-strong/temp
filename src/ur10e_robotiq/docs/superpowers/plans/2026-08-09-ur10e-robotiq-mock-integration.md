@@ -611,7 +611,14 @@ Set fixed frame `world`, add RobotModel, PlanningScene, MotionPlanning and TF di
 
 - [ ] **Step 3: 重新生成并审查组合 collision matrix**
 
-With flattened combined URDF loaded in MoveIt Setup Assistant, generate a collision matrix. Replace the SRDF disable-collision section only with pairs reported as `Adjacent` or `Never`; verify manually that the resulting list contains sensible handling for `tool0`/FT300, FT300/2F-85 base and adjacent finger links. Do not disable non-adjacent arm-to-gripper collisions merely to make a plan succeed.
+Flatten the combined URDF, then run the official headless MoveIt Setup Assistant updater twice with `--trials 100000`. Require both generated `Adjacent`/`Never` pair sets to be identical before replacing the SRDF section. Run one additional `--default` inspection and add exactly these two reported internal-gripper `Default` pairs:
+
+```xml
+<disable_collisions link1="robotiq_85_left_finger_tip_link" link2="robotiq_85_left_inner_knuckle_link" reason="Default"/>
+<disable_collisions link1="robotiq_85_right_finger_tip_link" link2="robotiq_85_right_inner_knuckle_link" reason="Default"/>
+```
+
+Before adding them, use `/check_state_validity` to record the RED result showing these exact contacts make the combined state invalid. After adding them, require the same state-validity request to return valid. Verify that the final list retains the installation-chain `Adjacent` pairs `wrist_3_link`/`ft300_mounting_plate`, `ft300_mounting_plate`/`ft300_sensor`, and `ft300_sensor`/`robotiq_85_base_link`. Do not add any other `Default` pair or any non-adjacent arm-to-gripper pair merely to make planning succeed.
 
 - [ ] **Step 4: 验证 MoveIt RobotModel 和 Planning**
 
