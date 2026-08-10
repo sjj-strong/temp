@@ -1278,11 +1278,16 @@ RED_EXIT_CODE=1
 /ros2_ws/src/Universal_Robots_ROS2_Driver/ur_moveit_config/config/ompl_planning.yaml
 ```
 
-`home`、`up`、`test_configuration` 的六轴值已完整复制。两条逐字节比较命令均退出 `0`：
+`home`、`up`、`test_configuration` 的六轴值已完整复制。Task 6 完成提交为
+`1553c58`；以下两条命令直接比较该提交中的组合配置与上游文件，均退出 `0`：
 
 ```bash
-cmp -s <upstream>/config/joint_limits.yaml <combined>/config/joint_limits.yaml
-cmp -s <upstream>/config/ompl_planning.yaml <combined>/config/ompl_planning.yaml
+git -C /ros2_ws show \
+  1553c58:src/ur10e_robotiq/ur10e_robotiq_moveit_config/config/joint_limits.yaml | \
+  cmp -s - /ros2_ws/src/Universal_Robots_ROS2_Driver/ur_moveit_config/config/joint_limits.yaml
+git -C /ros2_ws show \
+  1553c58:src/ur10e_robotiq/ur10e_robotiq_moveit_config/config/ompl_planning.yaml | \
+  cmp -s - /ros2_ws/src/Universal_Robots_ROS2_Driver/ur_moveit_config/config/ompl_planning.yaml
 ```
 
 初始 `disable_collisions` 仅保留上游 8 对 `reason="Adjacent"` 的 UR 相邻链路；排除上游 3 对 `Never`，未添加任何 FT/夹爪碰撞豁免。完整组合碰撞矩阵留待 Task 7 生成和检查。
@@ -1305,17 +1310,66 @@ robotiq_gripper_controller: ParallelGripperCommand / gripper_cmd
 
 ### YAML/XML/SRDF 真实解析
 
-执行：
+为使初始八对碰撞矩阵在 Task 7 修改后仍可复现，最终文档复验直接读取 Task 6
+提交 `1553c58` 的文件内容。执行：
 
 ```bash
-xacro ur10e_robotiq_moveit_config/srdf/ur10e_robotiq.srdf.xacro \
-  > /tmp/ur10e_robotiq_task6.srdf
-xacro ur10e_robotiq_description/urdf/ur10e_robotiq.urdf.xacro \
-  include_ros2_control:=false > /tmp/ur10e_robotiq_task6.urdf
-python3 <YAML safe_load + XML ElementTree + SRDF/URDF cross-check assertions>
+cd /ros2_ws
+python3 - <<'PY'
+import subprocess
+import xml.etree.ElementTree as ET
+import yaml
+
+base = 'src/ur10e_robotiq/ur10e_robotiq_moveit_config/'
+
+def show(relative):
+    return subprocess.check_output(
+        ['git', '-C', '/ros2_ws', 'show', f'1553c58:{base}{relative}'],
+        text=True,
+    )
+
+with open('/ros2_ws/src/Universal_Robots_ROS2_Driver/ur_moveit_config/config/joint_limits.yaml') as stream:
+    upstream_limits = yaml.safe_load(stream)
+with open('/ros2_ws/src/Universal_Robots_ROS2_Driver/ur_moveit_config/config/ompl_planning.yaml') as stream:
+    upstream_ompl = yaml.safe_load(stream)
+assert yaml.safe_load(show('config/joint_limits.yaml')) == upstream_limits
+assert yaml.safe_load(show('config/ompl_planning.yaml')) == upstream_ompl
+
+kinematics = yaml.safe_load(show('config/kinematics.yaml'))
+assert kinematics['ur_manipulator']['kinematics_solver'] == 'kdl_kinematics_plugin/KDLKinematicsPlugin'
+controllers = yaml.safe_load(show('config/moveit_controllers.yaml'))['moveit_simple_controller_manager']
+assert controllers['scaled_joint_trajectory_controller']['type'] == 'FollowJointTrajectory'
+assert controllers['robotiq_gripper_controller']['type'] == 'ParallelGripperCommand'
+
+srdf = ET.fromstring(show('srdf/ur10e_robotiq.srdf.xacro'))
+chain = srdf.find("./group[@name='ur_manipulator']/chain")
+assert chain.attrib == {'base_link': 'base_link', 'tip_link': 'gripper_tcp'}
+assert srdf.find("./group[@name='gripper']/joint").attrib['name'] == 'robotiq_85_left_knuckle_joint'
+states = {(node.attrib['group'], node.attrib['name']) for node in srdf.findall('group_state')}
+assert states == {
+    ('ur_manipulator', 'home'), ('ur_manipulator', 'up'),
+    ('ur_manipulator', 'test_configuration'), ('gripper', 'open'),
+    ('gripper', 'close'),
+}
+collisions = srdf.findall('disable_collisions')
+assert len(collisions) == 8
+assert {node.attrib['reason'] for node in collisions} == {'Adjacent'}
+assert all('ft300' not in str(node.attrib) and 'robotiq' not in str(node.attrib) for node in collisions)
+
+package = ET.fromstring(show('package.xml'))
+dependencies = {node.text for node in package.findall('exec_depend')}
+assert dependencies == {
+    'ur10e_robotiq_description', 'moveit_ros_move_group',
+    'moveit_ros_visualization', 'moveit_kinematics', 'moveit_planners',
+    'moveit_simple_controller_manager', 'moveit_configs_utils',
+    'warehouse_ros_sqlite', 'ur_robot_driver', 'xacro',
+}
+print('TASK6_REPRODUCIBLE_ASSERTIONS=PASS')
+PY
 ```
 
-整组退出码为 `0`。关键输出：
+该复现命令退出码为 `0`，输出 `TASK6_REPRODUCIBLE_ASSERTIONS=PASS`。Task 6
+实施时的原始解析输出为：
 
 ```text
 PASS package.xml: XML parsed; exact runtime dependency set found
@@ -1529,3 +1583,69 @@ Plan/Execute；对应规划和执行路径已由真实 `/move_action` 覆盖。�
 MoveItCpp/TrajectoryExecutionManager teardown 中 exit `-11`，
 `trajectory_until_node` exit `-2`，controller manager 输出 `pal_statistics`
 invalid-context 警告；Mock 未配置 Octomap 3D sensor，`/recognize_objects` 不可用。
+
+## 2026-08-10 — Task 8 项目文档验收
+
+- 环境：Ubuntu 24.04，ROS 2 Jazzy。
+- 范围：新增 README、架构、机器人描述、Mock 仿真、MoveIt、控制器、FT300 和排障
+  共 8 篇文档；同时把 Stage 6 的占位验证命令替换为可复现 `1553c58` 快照的完整命令。
+- 边界：本阶段没有启动新的 ROS live 系统，也没有连接真机；文档中的运行结果来自本文件
+  已记录的真实 Stage 2–7 验证。
+
+### 已实现行为与文档覆盖
+
+| 文档要求 | 真实证据位置 | 文档结果 |
+| --- | --- | --- |
+| build 与 package prefix | Stage 1、Stage 6、Task 7 | 已写入 Quick Start/Simulation |
+| Display、`check_urdf`、TF、mimic | Stage 2、Stage 3 | 已写入模型/Simulation/排障 |
+| 三个 hardware、interface、controller | Stage 4、Stage 5 | 已写入架构/Controllers |
+| FT300 fake wrench | Stage 5 | 已写入 FT300；明确六维零值不代表接触 |
+| ParallelGripperCommand | Stage 5 | 已写入 Simulation/Controllers |
+| MoveIt plan 与 execute | Task 7 | 已写入 MoveIt；保留 GUI 人工检查未执行说明 |
+| 单一 `/robot_description` 和 `/controller_manager` | Stage 4、Task 7 | 已写入 README/Architecture |
+
+### 文档与模型静态复验
+
+执行：
+
+```bash
+source /opt/ros/jazzy/setup.bash
+source /ros2_ws/install/setup.bash
+xacro /ros2_ws/src/ur10e_robotiq/ur10e_robotiq_description/urdf/ur10e_robotiq.urdf.xacro \
+  include_ros2_control:=false > /tmp/ur10e_task8_docs.urdf
+check_urdf /tmp/ur10e_task8_docs.urdf
+git -C /ros2_ws diff --check -- src/ur10e_robotiq/docs
+```
+
+三条命令均 exit `0`；`check_urdf` 输出 `Successfully Parsed XML`。随后以 Python
+标准库、PyYAML 和 `bash -n` 对当前磁盘中的 8 篇文档执行以下断言：
+
+- 8 个文件存在且非空，Markdown fence 成对；
+- 所有相对 Markdown 文件链接存在；所有 `bash` fence 语法通过；
+- README 的 Mock 首屏声明、系统版本、Quick Start、索引齐全；
+- Architecture 原样包含计划指定的四行拓扑及两个单一真源约束；
+- 当前 Xacro 展开为 26 links/25 joints，模型文档含 25 条 joint tree；
+- 六个安装参数、`gripper_rpy=-3.1415 0 0` 与“未标定”限制齐全；
+- Simulation、MoveIt、Controllers 和 FT300 的实际 package、launch、action、topic
+  与源码一致；
+- Troubleshooting 恰有 13 项，每项都有现象、检查命令、根因、解决方法；
+- 8 篇新文档不含 `<upstream>`、`python3 <YAML`、安装参数占位符、TODO 或 TBD。
+
+实际退出码为 `0`，输出：
+
+```text
+TASK8_DOC_ASSERTIONS=PASS files=8 links=PASS bash_syntax=PASS
+TASK8_URDF_COUNTS links=26 joints=25 documented_joints=25
+TASK8_TROUBLESHOOTING_CASES=13
+```
+
+Stage 6 两个历史上游配置比较命令和完整快照解析断言也在当前 HEAD 重新执行，均
+exit `0`：
+
+```text
+TASK6_CMP_REPRODUCTION=PASS
+TASK6_REPRODUCIBLE_ASSERTIONS=PASS
+```
+
+结果：Task 8 文档范围、接口名称、命令语法、相对链接、模型树、Mock 安全边界与历史
+验证可复现性全部 **PASS**。
