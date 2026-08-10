@@ -586,6 +586,7 @@ git -C /ros2_ws/src commit -m "feat: add combined robot MoveIt semantics"
 **Files:**
 - Create: `ur10e_robotiq_moveit_config/launch/ur10e_robotiq_moveit.launch.py`
 - Create: `ur10e_robotiq_moveit_config/config/moveit.rviz`
+- Modify: `ur10e_robotiq_moveit_config/config/joint_limits.yaml`
 - Modify: `ur10e_robotiq_moveit_config/srdf/ur10e_robotiq.srdf.xacro`
 - Modify: `docs/validation.md`
 
@@ -639,6 +640,16 @@ ros2 launch ur10e_robotiq_moveit_config ur10e_robotiq_moveit.launch.py launch_rv
 Expected: RViz RobotModel 显示三部分模型；Planning Group `ur_manipulator` 的 end-effector 为 `gripper_tcp`；joint goal 和无碰撞 pose goal 都能 Plan 成功。
 
 - [ ] **Step 5: 验证 Mock Execute 与 gripper MoveIt mapping**
+
+First record the RED MoveIt result where gripper planning produces a trajectory but `AddTimeOptimalParameterization` returns `FAILURE` because `robotiq_85_left_knuckle_joint` has no acceleration limit. Add only this combined-package override while retaining the URDF velocity limit:
+
+```yaml
+  robotiq_85_left_knuckle_joint:
+    has_acceleration_limits: true
+    max_acceleration: 1.0
+```
+
+Rebuild and require the same MoveIt gripper request to pass time parameterization before testing execution.
 
 In RViz, click `Plan & Execute` for one valid UR joint goal and one valid pose goal. Then execute `gripper` group `open` 和 `close` named state. In terminal C run:
 
