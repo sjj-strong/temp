@@ -40,6 +40,21 @@ def generate_launch_description():
         " ur_type:=ur10e",
         " tf_prefix:=",
         " robot_ip:=0.0.0.0",
+        " script_filename:=",
+        PathJoinSubstitution([
+            FindPackageShare("ur_client_library"),
+            "resources", "external_control.urscript",
+        ]),
+        " output_recipe_filename:=",
+        PathJoinSubstitution([
+            FindPackageShare("ur_robot_driver"),
+            "resources", "rtde_output_recipe.txt",
+        ]),
+        " input_recipe_filename:=",
+        PathJoinSubstitution([
+            FindPackageShare("ur_robot_driver"),
+            "resources", "rtde_input_recipe.txt",
+        ]),
         " use_mock_hardware:=", use_mock_hardware,
         " mock_sensor_commands:=", mock_sensor_commands,
         " | sed 's/calculate_dynamics\\\">true</calculate_dynamics\\\">false</g'",
