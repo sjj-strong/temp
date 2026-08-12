@@ -143,8 +143,8 @@ def generate_launch_description():
         # Sim 模式：将 parallel_gripper_action_controller spawn 到 UR 的
         # controller_manager，驱动 mock_components/GenericSystem 暴露的
         # robotiq_85_left_knuckle_joint 关节。
-        # -p 把 yaml 传给 controller_manager 使其能读到 type 与关节参数；
-        # controller_manager 将 type 以下部分转发给控制器节点自身。
+        # type 与关节参数已在 ur_controllers_sim.yaml 中定义，controller_manager
+        # 启动时即加载，spawner 无需再传 -p。
         Node(
             package="controller_manager",
             executable="spawner",
@@ -152,7 +152,6 @@ def generate_launch_description():
             arguments=[
                 "robotiq_gripper_controller",
                 "-c", "/controller_manager",
-                "-p", os.path.join(pkg_share, "config", "gripper_sim_controller.yaml"),
             ],
         ),
         IncludeLaunchDescription(

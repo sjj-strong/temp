@@ -10,7 +10,6 @@ setup(
         ("share/" + package_name, ["package.xml"]),
         ("share/" + package_name + "/config", [
             "config/ur_teleop.yaml",
-            "config/gripper_sim_controller.yaml",
             "config/ur_controllers_sim.yaml",
         ]),
         ("share/" + package_name + "/config/rviz", [
