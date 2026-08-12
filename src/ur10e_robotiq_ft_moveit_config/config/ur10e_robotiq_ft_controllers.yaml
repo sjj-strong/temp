@@ -1,0 +1,44 @@
+controller_manager:
+  ros__parameters:
+    robotiq_activation_controller:
+      type: robotiq_controllers/RobotiqActivationController
+    robotiq_gripper_trajectory_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+    robotiq_force_torque_sensor_broadcaster:
+      type: force_torque_sensor_broadcaster/ForceTorqueSensorBroadcaster
+
+robotiq_activation_controller:
+  ros__parameters:
+    default: true
+
+# MoveIt Simple Controller Manager supports FollowJointTrajectory but not the
+# Jazzy ParallelGripperCommand action used by the upstream gripper launch.
+robotiq_gripper_trajectory_controller:
+  ros__parameters:
+    joints:
+      - robotiq_85_left_knuckle_joint
+    command_interfaces:
+      - position
+    state_interfaces:
+      - position
+      - velocity
+    state_publish_rate: 50.0
+    action_monitor_rate: 20.0
+    allow_partial_joints_goal: false
+    constraints:
+      stopped_velocity_tolerance: 0.05
+      goal_time: 2.0
+      robotiq_85_left_knuckle_joint: { trajectory: 0.05, goal: 0.02 }
+
+robotiq_force_torque_sensor_broadcaster:
+  ros__parameters:
+    sensor_name: robotiq_ft_sensor
+    state_interface_names:
+      - force.x
+      - force.y
+      - force.z
+      - torque.x
+      - torque.y
+      - torque.z
+    frame_id: robotiq_ft_frame_id
+    topic_name: ft300_wrench
