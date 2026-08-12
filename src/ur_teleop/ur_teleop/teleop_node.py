@@ -263,12 +263,17 @@ class TeleopNode(Node):
                 controllers = ControllerSwitcher.list_result(fut)
             except Exception:
                 controllers = {}                       # 异常 → 视为未加载，走 load 路径
+            # 只对真正 active 的 trajectory controller 发起 deactivate；
+            # controller_stopper 可能在 teleop 启动前已将其切到 inactive。
+            deactivate = ([self._traj_ctrl]
+                          if controllers.get(self._traj_ctrl, "").startswith("active")
+                          else [])
             if self._fwd_ctrl not in controllers:
                 self._switch_phase = "load"
                 self._switch_future = self._switcher.load_controller(self._fwd_ctrl)
             else:
                 self._switch_phase = "switch"
-                self._switch_future = self._switcher.switch([self._fwd_ctrl], [self._traj_ctrl])
+                self._switch_future = self._switcher.switch([self._fwd_ctrl], deactivate)
         elif self._switch_phase == "load":
             try:
                 load_ok = fut.result() is not None and fut.result().ok
@@ -297,7 +302,9 @@ class TeleopNode(Node):
                     self._log_state(State.ARMED)
                 else:
                     self.get_logger().warn(f"[teleop] 切换失败（第 {self._switch_attempt} 次），重试...")
-                    self._switch_future = self._switcher.switch([self._fwd_ctrl], [self._traj_ctrl])
+                    # 重试前重新查询状态，避免重复 deactivate 已 inactive 的控制器
+                    self._switch_phase = "list"
+                    self._switch_future = self._switcher.list_controllers()
 
     def _active(self):
         if time.time() - self._last_master_stamp > self._watchdog_timeout:
