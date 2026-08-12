@@ -66,7 +66,7 @@ gripper_value_to_position(value: float, gripper_type: str = "50mm") -> float
 | `gripper_port` | str | `/dev/ttyUSB1` | 夹爪串口，real 模式 include robotiq_control 用（作 `com_port` 传入） | cell.launch.py（fallback `/dev/ttyUSB1`） |
 | `ftdi_id` | str | `""` | FT 传感器串口标识；real 模式 include rq_fts 驱动（`ft_sensor_standalone.launch.py`）用。**launch 参数名即 `ftdi_id`**（默认值 cell.launch.py:47，声明 59，传 ft_sensor_standalone 105） | cell.launch.py |
 | `launch_rviz` | bool | `true` | cell 端是否起 rviz（sim 模式且为 true 时） | cell.launch.py |
-| `description_launchfile` | str | 组合模型 rsp | rviz/controller_manager 的 URDF 来源——**launch 专属参数，无 yaml 键**；默认 `_description_launchfile()`（ur10e_robotiq_ft 组合模型，未安装回退官方 ur_rsp），见 launch.md「rviz 模型」 | cell.launch.py / home.launch.py |
+| `description_launchfile` | str | 组合模型 rsp | rviz/controller_manager 的 URDF 来源——**launch 专属参数，无 yaml 键**；默认 `_description_launchfile()`（ur10e_robotiq_ft_description 组合模型，未安装回退官方 ur_rsp），见 launch.md「rviz 模型」 | cell.launch.py / home.launch.py |
 
 ### home（必填段）
 

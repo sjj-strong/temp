@@ -92,11 +92,11 @@ Jazzy 的 `rclpy.duration.Duration` 是 pybind11 实现，不会隐式转换为 
 
 ## 话题 / 接口
 
-| 方向 | 名称 | 类型 | 说明 |
-|---|---|---|---|
-| 订阅 | `/joint_states` | `sensor_msgs/msg/JointState` | 双臂数据，按侧合并 |
-| 发布 | `/joint_commands` | `sensor_msgs/msg/JointState` | Alicia home：6 关节 + Gripper 夹爪值 |
-| Action | `/scaled_joint_trajectory_controller/follow_joint_trajectory` | `control_msgs/action/FollowJointTrajectory` | UR home 轨迹 |
+| 方向   | 名称                                                            | 类型                                          | 说明                                 |
+| ------ | --------------------------------------------------------------- | --------------------------------------------- | ------------------------------------ |
+| 订阅   | `/joint_states`                                               | `sensor_msgs/msg/JointState`                | 双臂数据，按侧合并                   |
+| 发布   | `/joint_commands`                                             | `sensor_msgs/msg/JointState`                | Alicia home：6 关节 + Gripper 夹爪值 |
+| Action | `/scaled_joint_trajectory_controller/follow_joint_trajectory` | `control_msgs/action/FollowJointTrajectory` | UR home 轨迹                         |
 
 `publish_alicia_home()`（home_node.py:76-80）的消息结构：
 
@@ -109,15 +109,15 @@ msg.position = home.master + [master_gripper_value]     # 0-1000，1000 = 开
 
 ## 配置键（home.*，ur_teleop.yaml）
 
-| 键 | 默认值 | 含义 |
-|---|---|---|
-| `home.master` | 必填 | Alicia 目标 home（6 维弧度） |
-| `home.slave` | 必填 | UR 目标 home（6 维弧度） |
-| `home.master_gripper_value` | 1000.0 | Alicia 夹爪命令值（0 关–1000 开） |
-| `home.at_home_tolerance_rad` | 0.05 | 双臂到位容差（弧度，逐关节 max） |
-| `home.move_timeout_s` | 30.0 | 轨迹 result 与到位验证的总时限 |
-| `home.move_duration_s` | 8.0 | 轨迹插值时长（`time_from_start`） |
-| `home.verify_duration_s` | 2.0 | 到位后需保持的时间 |
+| 键                             | 默认值 | 含义                                |
+| ------------------------------ | ------ | ----------------------------------- |
+| `home.master`                | 必填   | Alicia 目标 home（6 维弧度）        |
+| `home.slave`                 | 必填   | UR 目标 home（6 维弧度）            |
+| `home.master_gripper_value`  | 1000.0 | Alicia 夹爪命令值（0 关–1000 开）  |
+| `home.at_home_tolerance_rad` | 0.05   | 双臂到位容差（弧度，逐关节 max）    |
+| `home.move_timeout_s`        | 30.0   | 轨迹 result 与到位验证的总时限      |
+| `home.move_duration_s`       | 8.0    | 轨迹插值时长（`time_from_start`） |
+| `home.verify_duration_s`     | 2.0    | 到位后需保持的时间                  |
 
 启动方式：
 
@@ -128,12 +128,12 @@ ros2 run ur_teleop home_node --ros-args -p config_file:=/path/to/ur_teleop.yaml
 
 ## 错误处理
 
-| 场景 | 行为（日志原文） |
-|---|---|
-| cell 未就绪（30 s） | `error("cell 未就绪。请先运行 home.launch（含 cell）。")`，exit 1 |
-| 轨迹被拒/超时（accept 窗口） | warn `"UR home goal 未接受（控制器可能尚未激活），重试..."`；耗尽后 `_log_home_failure("UR home trajectory rejected/timed out")`，exit 1 |
-| 轨迹执行失败/超时 | `_log_home_failure("UR home trajectory failed, error_code=...")` 或 `"UR home trajectory timed out"`，exit 1 |
-| 到位超时 | `error("到位超时（未在 move_timeout 内验证双臂位于 home）。master 目标=…, 当前=…; UR 目标=…, 当前=…. 可用 teleop.launch force_home:=true 跳过验证。")`，exit 1 |
+| 场景                         | 行为（日志原文）                                                                                                                                                     |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| cell 未就绪（30 s）          | `error("cell 未就绪。请先运行 home.launch（含 cell）。")`，exit 1                                                                                                  |
+| 轨迹被拒/超时（accept 窗口） | warn`"UR home goal 未接受（控制器可能尚未激活），重试..."`；耗尽后 `_log_home_failure("UR home trajectory rejected/timed out")`，exit 1                          |
+| 轨迹执行失败/超时            | `_log_home_failure("UR home trajectory failed, error_code=...")` 或 `"UR home trajectory timed out"`，exit 1                                                     |
+| 到位超时                     | `error("到位超时（未在 move_timeout 内验证双臂位于 home）。master 目标=…, 当前=…; UR 目标=…, 当前=…. 可用 teleop.launch force_home:=true 跳过验证。")`，exit 1 |
 
 `_log_home_failure`（home_node.py:126-131）统一格式：`原因. 目标=<slave_home>, 当前=<slave_q 或 "无 /joint_states">. 请检查机器人与 cell；cell 保持运行。` —— 出错后 cell **不关**：可直接修复后重跑 home_node，或带 `force_home:=true` 启动阶段 2 跳过到位验证（teleop_node 的 `force_home` 参数把 `home.at_home_tolerance_rad` 置 `inf`，home 节点自身不消费该参数）。重跑时无需重启 home.launch：cell 已在跑，只重等 action server 发现 + 轨迹执行即可。
 

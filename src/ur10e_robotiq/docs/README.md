@@ -6,11 +6,11 @@
 
 本项目在一个机器人描述和一个 ros2_control controller manager 中组合以下设备：
 
-| 支持的组合部件 | 当前覆盖范围 |
-| --- | --- |
+| 支持的组合部件         | 当前覆盖范围                                                             |
+| ---------------------- | ------------------------------------------------------------------------ |
 | Universal Robots UR10e | 上游模型、`mock_components/GenericSystem`、轨迹控制与 MoveIt Mock 执行 |
-| Robotiq FT300 | 上游模型、fake SensorInterface、六维零值 wrench 软件链路 |
-| Robotiq 2F-85 | 上游模型、mimic 关节、`mock_components/GenericSystem` 与夹爪 action |
+| Robotiq FT300          | 上游模型、fake SensorInterface、六维零值 wrench 软件链路                 |
+| Robotiq 2F-85          | 上游模型、mimic 关节、`mock_components/GenericSystem` 与夹爪 action    |
 
 运行基线为 **Ubuntu 24.04 + ROS 2 Jazzy**，并使用 MoveIt 2、ros2_control、UR Driver 和对应的 Robotiq 上游包。当前范围不包含真实硬件、Gazebo/MuJoCo 接触动力学、力控或可编程 FT300 仿真。
 

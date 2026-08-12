@@ -2,13 +2,15 @@ mode: teleop            # teleop | record —— 配置文件配置模式
 sim: true               # cell 端：sim(mock+rviz) / real(真机+夹爪+FT)
 cell:
   ur_type: ur10e
-  robot_ip: 192.168.1.1
+  robot_ip: 169.254.138.15
   gripper_port: /dev/ttyUSB1     # real 模式，include robotiq_control 用
-  ftdi_id: ""                    # real 模式，include rq_fts 驱动用（launch 参数即 ftdi_id）
+  ftdi_id: "ttyUSB2"                    # real 模式，include rq_fts 驱动用（launch 参数即 ftdi_id）
   launch_rviz: true
+  alicia_port: "/dev/ttyACM0"                 # 空=自动检测；可指定如 /dev/ttyACM0
+  launch_alicia: true             # 主臂始终真实；纯 sim 无 Alicia 时设 false
 home:
-  master: [0.0, -1.2, 0.5, 0, 0, 0]     # 目标 home（用户提前设置，本包不处理含义）
-  slave:  [0.0, -1.57, 0.0, -1.57, 0.0, 0.0]
+  master: [0.01687378866674205, 0.009203884727313927, -0.3988350048502669, 0.4509903516383784, 0.05982525072754008, 0.06135923151542544]     # 目标 home（用户提前设置，本包不处理含义）
+  slave:  [1.6565685272216797, -1.3311004501632233, 1.6565685272216797, -2.150961538354391, -1.5582049528705042, 2.980346918106079]
   master_gripper_value: 1000
   at_home_tolerance_rad: 0.05
   settle_time_s: 2.0
@@ -19,8 +21,8 @@ home:
 mapping:
   alicia_joint_order: [Joint1, Joint2, Joint3, Joint4, Joint5, Joint6]
   ur_joint_order: [shoulder_pan_joint, shoulder_lift_joint, elbow_joint, wrist_1_joint, wrist_2_joint, wrist_3_joint]
-  sign: [1, 1, 1, 1, 1, 1]
-  scale: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+  sign: [1, -1, -1, -1, -1, -1]
+  scale: [1.2, 1.2, 1.2, 1.2, 1.2, 1.2]
 safety:
   clamp_margin_rad: 0.1
   limits:
@@ -31,11 +33,19 @@ safety:
     wrist_2_joint: [-6.283, 6.283]
     wrist_3_joint: [-6.283, 6.283]
 teleop:
-  command_rate_hz: 50
+  command_rate_hz: 300
   watchdog_timeout_s: 0.5
   restore_controller_on_exit: true
+ruckig:
+  control_hz:       500.0                                       # launch ruckig_control_hz 默认值；与 controller_manager 一致
+  max_velocity:     [2.0944, 2.0944, 3.1416, 3.1416, 3.1416, 3.1416]        # rad/s，每关节
+  max_acceleration: [0.80, 0.80, 0.80, 0.80, 0.80, 0.80]        # rad/s^2
+  max_jerk:         [4.0, 4.0, 4.0, 4.0, 4.0, 4.0]              # rad/s^3
 gripper:
-  enabled: false                 # sim 默认 false，real 设 true
+  enabled: true                  # 启用夹爪遥操作（sim + real）
+  # sim: controller 由 cell.launch 额外 spawn 到 UR controller_manager
+  # real: controller 由 robotiq_control.launch 的独立 robotiq_controller_manager 提供
+  # 两种模式下 action server 都是根级命名 /robotiq_gripper_controller/gripper_cmd
   action_server: /robotiq_gripper_controller/gripper_cmd
   close_threshold_m: 0.0125
   open_threshold_m: 0.005
@@ -44,8 +54,8 @@ gripper:
   max_effort: 50.0
 recorder:
   repo_id: my_user/ur_teleop
-  root: ""                       # 空 = HF_LEROBOT_HOME
-  fps: 50
+  root: "/ros2_ws/dataset"                       # 空 = HF_LEROBOT_HOME
+  fps: 60
   robot_type: ur10e_alicia_teleop
   use_videos: true
   ee_pose_source: tf             # tf | topic(/tcp_pose) | none

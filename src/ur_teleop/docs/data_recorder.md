@@ -41,7 +41,8 @@ recorder 主线程                  teleop_node 状态机
                                   … 完成 VERIFY_HOME/SETTLING/CAPTURE_OFFSET
                                   ARMED 消费锁存 → SWITCHING → ACTIVE
                                   → /teleop/status=true、/demonstration=true
-                                  → 50 Hz 发 /forward_position_controller/commands + /teleop/commands（7 维）
+                                  → 50 Hz 发 /ruckig/target_joint_positions（6 维映射目标）+ /teleop/commands（7 维）
+                                  → ruckig_node 500 Hz 平滑 → /forward_position_controller/commands → UR cell
 recorder 订阅 /teleop/commands → action 7 维帧数据
 ```
 
@@ -150,7 +151,7 @@ python -m ur_teleop.data_recorder --ros-args -p config_file:=/path/to/ur_teleop.
 
 两者都是子进程冒烟：mock cell + fake_master + teleop_node + 以 `python -m ur_teleop.data_recorder` 启动的 recorder（stdin 管道驱动按键，`\n` 即 Enter）。均需 lerobot venv（缺则 `pytest.skip`），断言本地显式 root 布局与日志。
 
-- **`test_record_one_episode`**（test_integration.py:350-398）：Enter → 断言 `_enable_and_wait()` 进入 ACTIVE（enable 由 recorder 的 Enter 先行发出，status 迁移可能先于测试订阅发生，靠 `/forward_position_controller/commands` 指令流兜底判定）→ 录 ~150 帧 → **D 丢弃** → Q finalize。断言 `meta/info.json` 存在（create 即落盘）且 **`data/chunk-000` 不存在**（D 负断言：被丢弃的 episode 不落盘，chunk 仅在 save_episode 时创建）、日志含 `finalize`；
+- **`test_record_one_episode`**（test_integration.py:350-398）：Enter → 断言 `_enable_and_wait()` 进入 ACTIVE（enable 由 recorder 的 Enter 先行发出，status 迁移可能先于测试订阅发生，靠 `/ruckig/target_joint_positions` 指令流兜底判定）→ 录 ~150 帧 → **D 丢弃** → Q finalize。断言 `meta/info.json` 存在（create 即落盘）且 **`data/chunk-000` 不存在**（D 负断言：被丢弃的 episode 不落盘，chunk 仅在 save_episode 时创建）、日志含 `finalize`；
 - **`test_record_save_episode`**（D 组，test_integration.py:962-1010）：Enter → ACTIVE → 录帧 → **S 保存** → Q finalize。断言 `data/chunk-000/file-000.parquet` 存在、日志含 `已保存` 与 `finalize`。
 
 按键驱动的两个实测陷阱（测试注释已记录）：`d\n` 会被读成丢弃 + 立即开新 episode（Q 时新 episode 被 finalize 保存，实测 48 帧）；`s\n` 同理会保存后又开新 episode。测试必须**单字节写按键、不带 `\n`**。

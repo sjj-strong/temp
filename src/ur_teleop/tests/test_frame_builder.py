@@ -1,6 +1,5 @@
 import math
 
-import numpy as np
 import pytest
 
 from ur_teleop.frame_builder import FrameBuilder

@@ -1,0 +1,22 @@
+# Sim 模式下 UR controller_manager 的夹爪控制器配置。
+# 在 mock 模式（use_mock_hardware:=true）下，组合 URDF 已通过
+# mock_components/GenericSystem 暴露 robotiq_85_left_knuckle_joint
+# 的 position command interface；此文件定义 GripperActionController
+# 来驱动该关节，由 cell.launch 在 sim:=true 时 spawn。
+controller_manager:
+  ros__parameters:
+    robotiq_gripper_controller:
+      type: parallel_gripper_action_controller/GripperActionController
+
+robotiq_gripper_controller:
+  ros__parameters:
+    joint: robotiq_85_left_knuckle_joint
+
+    # state_interfaces 必须与 hardware 导出的接口匹配：
+    # robotiq_driver 导出了 position + velocity 两个 state interface。
+    state_interfaces: ["position", "velocity"]
+
+    # mock 硬件不会真正 detect stall（velocity 恒为 0），必须禁用。
+    allow_stalling: false
+
+    goal_tolerance: 0.02

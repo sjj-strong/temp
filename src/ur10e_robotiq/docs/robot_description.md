@@ -45,13 +45,13 @@ world
 
 组合 Xacro 复用下列上游实现，不复制其 link、joint、惯量或硬件插件定义：
 
-| Macro | 上游 package 与文件 | 在组合模型中的职责 |
-| --- | --- | --- |
-| `xacro:ur_robot` | `ur_description/urdf/ur_macro.xacro` | UR10e link/joint、`base_link`、`flange`、`tool0` 与几何/惯量 |
-| `xacro:ur_ros2_control` | `ur_robot_driver/urdf/ur.ros2_control.xacro` | UR ros2_control；Mock 时选择 GenericSystem |
-| `xacro:robotiq_ft300` | `robotiq_ft_sensor_description/urdf/robotiq_ft300.urdf.xacro` | FT300 安装板、传感器模型与 `robotiq_ft_frame_id` |
-| `xacro:robotiq_fts_ros2_control` | `robotiq_ft_sensor_description/urdf/robotiq_fts.ros2_control.xacro` | FT300 六维 state interface 与 fake mode 硬件插件 |
-| `xacro:robotiq_gripper` | `robotiq_description/urdf/robotiq_2f_85_macro.urdf.xacro` | 2F-85 link/joint/mimic；内部 include `2f_85.ros2_control.xacro` |
+| Macro                              | 上游 package 与文件                                                   | 在组合模型中的职责                                                 |
+| ---------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `xacro:ur_robot`                 | `ur_description/urdf/ur_macro.xacro`                                | UR10e link/joint、`base_link`、`flange`、`tool0` 与几何/惯量 |
+| `xacro:ur_ros2_control`          | `ur_robot_driver/urdf/ur.ros2_control.xacro`                        | UR ros2_control；Mock 时选择 GenericSystem                         |
+| `xacro:robotiq_ft300`            | `robotiq_ft_sensor_description/urdf/robotiq_ft300.urdf.xacro`       | FT300 安装板、传感器模型与`robotiq_ft_frame_id`                  |
+| `xacro:robotiq_fts_ros2_control` | `robotiq_ft_sensor_description/urdf/robotiq_fts.ros2_control.xacro` | FT300 六维 state interface 与 fake mode 硬件插件                   |
+| `xacro:robotiq_gripper`          | `robotiq_description/urdf/robotiq_2f_85_macro.urdf.xacro`           | 2F-85 link/joint/mimic；内部 include`2f_85.ros2_control.xacro`   |
 
 `xacro:ur_robot` 还读取 `ur_description/config/$(arg ur_type)/` 下的 `joint_limits.yaml`、`default_kinematics.yaml`、`physical_parameters.yaml` 和 `visual_parameters.yaml`。集成文件本身只新增 `world`、三段外部安装关系、`gripper_tcp`，以及按模式启用的 ros2_control macro 调用。
 
@@ -59,14 +59,14 @@ world
 
 以下六个顶层 Xacro 参数及默认值均来自当前组合源码：
 
-| 连接 | 参数 | 默认值 |
-| --- | --- | --- |
-| `tool0 -> ft300_mounting_plate` | `ft_xyz` | `0 0 0` |
-| `tool0 -> ft300_mounting_plate` | `ft_rpy` | `0 0 0` |
-| `ft300_sensor -> robotiq_85_base_link` | `gripper_xyz` | `0 0 0` |
+| 连接                                     | 参数            | 默认值          |
+| ---------------------------------------- | --------------- | --------------- |
+| `tool0 -> ft300_mounting_plate`        | `ft_xyz`      | `0 0 0`       |
+| `tool0 -> ft300_mounting_plate`        | `ft_rpy`      | `0 0 0`       |
+| `ft300_sensor -> robotiq_85_base_link` | `gripper_xyz` | `0 0 0`       |
 | `ft300_sensor -> robotiq_85_base_link` | `gripper_rpy` | `-3.1415 0 0` |
-| `robotiq_85_base_link -> gripper_tcp` | `tcp_xyz` | `0 0 0.15` |
-| `robotiq_85_base_link -> gripper_tcp` | `tcp_rpy` | `0 0 0` |
+| `robotiq_85_base_link -> gripper_tcp`  | `tcp_xyz`     | `0 0 0.15`    |
+| `robotiq_85_base_link -> gripper_tcp`  | `tcp_rpy`     | `0 0 0`       |
 
 其中 `gripper_rpy=-3.1415 0 0` 使夹爪默认绕 X 轴翻转，并且只在组合 Xacro 中定义一次；现有三个 launch 不会重复覆盖该姿态。
 

@@ -17,15 +17,23 @@ def _yaml_default(config_file: str, *path: str, fallback: str):
             data = yaml.safe_load(f)
         for p in path:
             data = data[p]
-        return str(data)
+        # 同 cell.launch：yaml 布尔归一为小写，避免大小写失配。
+        return str(data).lower() if isinstance(data, bool) else str(data)
     except Exception:
         return fallback
 
 
 def _description_launchfile():
-    """与 cell.launch.py 同一默认：ur10e_robotiq_ft 组合模型，未安装回退官方纯 UR。"""
+    """与 cell.launch.py 相同：自包含 mock rsp。"""
+    pkg_share = get_package_share_directory("ur_teleop")
+    mock_rsp = os.path.join(pkg_share, "launch", "rsp_mock.launch.py")
+    if os.path.exists(mock_rsp):
+        return mock_rsp
+    wrapper = os.path.join(pkg_share, "launch", "rsp_wrapper.launch.py")
+    if os.path.exists(wrapper):
+        return wrapper
     try:
-        return os.path.join(get_package_share_directory("ur10e_robotiq_ft"),
+        return os.path.join(get_package_share_directory("ur10e_robotiq_ft_description"),
                             "launch", "rsp.launch.py")
     except Exception:
         return os.path.join(get_package_share_directory("ur_robot_driver"),
@@ -52,6 +60,12 @@ def generate_launch_description():
         DeclareLaunchArgument("launch_rviz",
                               default_value=_yaml_default(config_file, "cell", "launch_rviz",
                                                          fallback="true")),
+        DeclareLaunchArgument("alicia_port",
+                              default_value=_yaml_default(config_file, "cell", "alicia_port",
+                                                         fallback="")),
+        DeclareLaunchArgument("launch_alicia",
+                              default_value=_yaml_default(config_file, "cell", "launch_alicia",
+                                                         fallback="true")),
         DeclareLaunchArgument("description_launchfile",
                               default_value=_description_launchfile()),
         IncludeLaunchDescription(
@@ -65,6 +79,8 @@ def generate_launch_description():
                 "gripper_port": LaunchConfiguration("gripper_port"),
                 "ftdi_id": LaunchConfiguration("ftdi_id"),
                 "launch_rviz": LaunchConfiguration("launch_rviz"),
+                "alicia_port": LaunchConfiguration("alicia_port"),
+                "launch_alicia": LaunchConfiguration("launch_alicia"),
                 "description_launchfile": LaunchConfiguration("description_launchfile"),
             }.items(),
         ),

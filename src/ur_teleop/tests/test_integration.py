@@ -269,13 +269,13 @@ def _enable_and_wait(timeout=60.0):
 
     ACTIVE 判定双通道：
     - /teleop/status=true（状态迁移单次发布，信号前订阅的长驻 echo 捕获）；
-    - /forward_position_controller/commands 出现新数据（50 Hz 流）。record 测试
+    - /ruckig/target_joint_positions 出现新数据（50 Hz 流）。record 测试
       中 enable 由 recorder 的 Enter 先行发出，status 的 ACTIVE 迁移可能在测试
       订阅完成前就已发生（稳定 ACTIVE 不再发布 status），靠指令流兜底。
     注：teleop 仅在 ACTIVE 发布映射指令（INACTIVE 的 hold 需要主臂超时，假主臂
     常驻时不会发生），故指令流可作为 ACTIVE 判据。"""
     echo = _OnceEcho("/teleop/status", msg_type="std_msgs/msg/Bool")
-    cmd = _LineEcho("/forward_position_controller/commands")
+    cmd = _LineEcho("/ruckig/target_joint_positions")
     try:
         deadline = time.time() + timeout
         while time.time() < deadline:
@@ -318,8 +318,8 @@ def test_enter_gate_then_mirror(tmp_path):
 
         samples = []
         for _ in range(4):
-            ok, val = _topic_once("/forward_position_controller/commands", "data", timeout=5.0)
-            assert ok, "未收到 /forward_position_controller/commands"
+            ok, val = _topic_once("/ruckig/target_joint_positions", "data", timeout=5.0)
+            assert ok, "未收到 /ruckig/target_joint_positions"
             # 偶发的 DDS 重复投递会在行首拼入残留值 → 取末尾 6 维（teleop 只发 6 维）
             vals = [float(x) for x in re.findall(r"-?\d+\.?\d*", val)]
             samples.append(vals[-6:] if len(vals) >= 6 else vals)
@@ -750,7 +750,7 @@ def _wait_still_commands(timeout=6.0, settle=1.0):
 
     status=false 是单次信号、可能被 DDS 发现延迟错过；指令恒定是 INACTIVE
     的连续可观测行为，作为兜底判据。"""
-    echo = _LineEcho("/forward_position_controller/commands")
+    echo = _LineEcho("/ruckig/target_joint_positions")
     try:
         deadline = time.time() + timeout
         base, t0 = None, None
@@ -774,7 +774,7 @@ def _wait_moving_commands(timeout=8.0, move=0.01):
 
     status=true 是单次信号、可能被 DDS 发现延迟错过；指令变化是 ACTIVE 恢复
     的连续可观测行为，作为兜底判据。"""
-    echo = _LineEcho("/forward_position_controller/commands")
+    echo = _LineEcho("/ruckig/target_joint_positions")
     try:
         deadline = time.time() + timeout
         first = None
@@ -845,7 +845,7 @@ def test_estop_freezes_then_resumes(tmp_path):
     try:
         time.sleep(20.0)
         assert _enable_and_wait(), "enable 后未进入 ACTIVE（重试发布）"
-        echo = _LineEcho("/forward_position_controller/commands")
+        echo = _LineEcho("/ruckig/target_joint_positions")
         s1 = echo.next(8.0)
         assert s1 is not None, "ACTIVE 下未收到 commands"
         s2 = echo.next(2.0)

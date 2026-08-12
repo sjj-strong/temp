@@ -10,6 +10,8 @@ setup(
         ("share/" + package_name, ["package.xml"]),
         ("share/" + package_name + "/config", [
             "config/ur_teleop.yaml",
+            "config/gripper_sim_controller.yaml",
+            "config/ur_controllers_sim.yaml",
         ]),
         ("share/" + package_name + "/config/rviz", [
             "config/rviz/ur_teleop.rviz",
@@ -18,6 +20,7 @@ setup(
             "launch/cell.launch.py",
             "launch/home.launch.py",
             "launch/teleop.launch.py",
+            "launch/rsp_mock.launch.py",
         ]),
         ("share/ament_index/resource_index/packages", ["resource/ur_teleop"]),
     ],
@@ -32,6 +35,7 @@ setup(
             "home_node = ur_teleop.home_node:main",
             "teleop_node = ur_teleop.teleop_node:main",
             "data_recorder = ur_teleop.data_recorder:main",
+            "ruckig_node = ur_teleop.ruckig_node:main",
         ],
     },
 )

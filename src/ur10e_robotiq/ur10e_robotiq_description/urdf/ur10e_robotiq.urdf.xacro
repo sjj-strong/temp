@@ -39,7 +39,7 @@
   <xacro:robotiq_gripper
     name="robotiq_2f85"
     prefix=""
-    parent="ft300_sensor"
+    parent="robotiq_ft_frame_id"
     include_ros2_control="$(arg include_ros2_control)"
     use_fake_hardware="$(arg use_fake_hardware)">
     <origin xyz="$(arg gripper_xyz)" rpy="$(arg gripper_rpy)"/>

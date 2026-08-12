@@ -1,7 +1,7 @@
 # teleop_node（阶段 2 核心状态机）
 
 > 路径：ur_teleop/teleop_node.py（405 行）
-> 职责：双臂 home 验证 → 静止 → 捕获 offset → Enter 门控 → 50 Hz 镜像映射发布 + 夹爪 FSM（常驻节点，Ctrl-C 退出）。
+> 职责：双臂 home 验证 → 静止 → 捕获 offset → Enter 门控 → 50 Hz 镜像映射目标发布（ruckig_node 500 Hz 平滑下发 forward）+ 夹爪 FSM（常驻节点，Ctrl-C 退出）。
 
 ## 概述
 
@@ -16,7 +16,7 @@ ur_teleop 就绪 — mode=teleop, sim=true
 ============================================================
 ```
 
-数据流（spec §4.2）：Alicia `/joint_states`（Joint1-6 + Gripper）→ teleop_node 映射 → `/forward_position_controller/commands`（6 维）→ UR cell；同时 `/teleop/commands`（7 维）+ `/teleop/status` → data_recorder；recorder 以 `/teleop/enable` 应答（record 模式键盘唯一归属）。
+数据流（spec §4.2）：Alicia `/joint_states`（Joint1-6 + Gripper）→ teleop_node 映射 → `/ruckig/target_joint_positions`（6 维映射目标，UR 序）→ ruckig_node（500 Hz Ruckig OTG 平滑）→ `/forward_position_controller/commands` → UR cell；同时 `/teleop/commands`（7 维）+ `/teleop/status` → data_recorder；recorder 以 `/teleop/enable` 应答（record 模式键盘唯一归属）。teleop 不再直接写 forward controller——该话题由 ruckig_node 唯一发布。
 
 ## 状态机
 
@@ -97,14 +97,14 @@ in-flight future 未完成时 `_tick` **立即返回不阻塞**（A6 断言耗�
 | 订阅 | `/joint_states` | `sensor_msgs/msg/JointState` | 主/从双臂，按侧合并 |
 | 订阅 | `/teleop/enable` | `std_msgs/msg/Bool` | 边沿触发（record 模式由 recorder 发布） |
 | 订阅 | `/teleop/e_stop` | `std_msgs/msg/Bool` | 冻结标志：置位冻结 `_tick` + `_gripper_tick` |
-| 发布 | `/forward_position_controller/commands` | `std_msgs/msg/Float64MultiArray` | **6 维**映射指令，仅 ACTIVE/INACTIVE 时 50 Hz 发布 |
+| 发布 | `/ruckig/target_joint_positions` | `std_msgs/msg/Float64MultiArray` | **6 维**映射目标（UR 序），仅 ACTIVE/INACTIVE 时 50 Hz 发布；ruckig_node 据此 500 Hz 平滑下发 `/forward_position_controller/commands` |
 | 发布 | `/teleop/commands` | `std_msgs/msg/Float64MultiArray` | **7 维** = 6 关节 + 夹爪指令信号（`get_gripper_command_signal`） |
 | 发布 | `/teleop/status` | `std_msgs/msg/Bool` | ACTIVE=true，仅状态迁移时发一次 |
 | 发布 | `/demonstration` | `std_msgs/msg/Bool` | ACTIVE 置 true（Alicia 拖拽模式），shutdown 置 false |
 | Action | `<gripper.action_server>` | `control_msgs/action/ParallelGripperCommand` | 夹爪 goal（`gripper.enabled` 时创建） |
 | Service | `/controller_manager/{list_controllers,load_controller,switch_controller}` | controller_manager_msgs | `ControllerSwitcher` 异步调用 |
 
-`_publish_commands()`（teleop_node.py:346-352）双发：fwd 6 维给 UR cell；`/teleop/commands` 7 维给 recorder（第 7 维是夹爪指令信号，不参与映射）。`_publish_status` / `_publish_demo` 都是单次发布（状态迁移时发一次），集成测试用长驻 `--once` echo 才能捕获。
+`_publish_commands()`（teleop_node.py `_publish_commands`）双发：映射目标 6 维给 ruckig_node（`/ruckig/target_joint_positions`）；`/teleop/commands` 7 维给 recorder（第 7 维是夹爪指令信号，不参与映射）。**teleop 不再直接写 `/forward_position_controller/commands`**——该话题由 ruckig_node 唯一发布。`_publish_status` / `_publish_demo` 都是单次发布（状态迁移时发一次），集成测试用长驻 `--once` echo 才能捕获。
 
 ## 配置键
 
@@ -112,7 +112,7 @@ in-flight future 未完成时 `_tick` **立即返回不阻塞**（A6 断言耗�
 
 | 段 | 键 | 默认值 | 消费处 |
 |---|---|---|---|
-| `teleop.` | `command_rate_hz` | 50 | `_tick` 定时器频率（1/rate） |
+| `teleop.` | `command_rate_hz` | 50 | `_tick` 定时器频率 = 映射目标发布频率（forward 实际下发由 ruckig_node 500 Hz） |
 | `teleop.` | `watchdog_timeout_s` | 0.5 | ACTIVE/INACTIVE 主臂超时判定 |
 | `teleop.` | `restore_controller_on_exit` | true | `shutdown()` 是否切回 trajectory 控制器 |
 | `home.` | `master` / `slave` | 必填 | VERIFY_HOME 目标 |
@@ -157,4 +157,4 @@ in-process 白盒用 `fsm_node` fixture（settle_time_s 加速为 0.1，不 spin
 - **A15** `test_shutdown_restore_without_controller_manager_is_prompt`：无 CM 时 `shutdown()` 立即返回不抛；
 - **F** `test_enable_single_pub_before_armed_latches`（子进程）：ARMED 前恰好一次 enable → 锁存 → 60 s 内 ACTIVE。
 
-另有两个全栈用例（test_integration.py:308-347）覆盖 Enter 门控与 VERIFY_HOME 拒绝：`test_enter_gate_then_mirror`（无 enable 不 ACTIVE；enable 后 50 Hz 映射、clamp 生效、跟随正弦）与 `test_verify_home_rejects_off_home_master`（`fake_master --off-home` 时停在 VERIFY_HOME 不进 ACTIVE）。
+另有两个全栈用例（test_integration.py:308-347）覆盖 Enter 门控与 VERIFY_HOME 拒绝：`test_enter_gate_then_mirror`（无 enable 不 ACTIVE；enable 后 50 Hz 映射目标发布到 `/ruckig/target_joint_positions`、clamp 生效、跟随正弦）与 `test_verify_home_rejects_off_home_master`（`fake_master --off-home` 时停在 VERIFY_HOME 不进 ACTIVE）。

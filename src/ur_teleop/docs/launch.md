@@ -6,7 +6,7 @@
 
 - `cell.launch.py`：UR cell（持久），sim/real 两模式，可被 home.launch 与 teleop.launch 复用（实际仅 home.launch include 它）。
 - `home.launch.py`：阶段 1 = cell + home_node（移双臂到 home 并验证后退出，cell 保持）。
-- `teleop.launch.py`：阶段 2 = teleop_node（+ mode=record 时 data_recorder），连接已运行的 cell，**不含 cell**。
+- `teleop.launch.py`：阶段 2 = teleop_node + ruckig_node（+ mode=record 时 data_recorder），连接已运行的 cell，**不含 cell**。
 - 三个 launch 都以 `config_file` 为唯一必传参数（默认 `share/ur_teleop/config/ur_teleop.yaml`）；除 `config_file`/`mode`/`force_home`/`description_launchfile` 外，其余参数的默认值都来自 yaml（`_yaml_default` 机制）。
 
 ## cell.launch.py
@@ -45,10 +45,10 @@
 
 rviz（以及 controller_manager）读的是 **`/robot_description` 话题**（`std_msgs/String`，TRANSIENT_LOCAL QoS，由 robot_state_publisher 发布）。该话题的内容由 `description_launchfile` 决定，经 ur_control.launch.py 的 rsp include 链传递（ur_control 只显式传 `robot_ip`/`ur_type`，其余如 `use_mock_hardware` 走 launch config 继承）。
 
-默认取 **组合模型**（用户视角：ur 官方只有纯 UR，组合模型在 ur10e_robotiq_ft）：
+默认取 **组合模型**（用户视角：ur 官方只有纯 UR，组合模型在 ur10e_robotiq_ft_description）：
 
-- **`ur10e_robotiq_ft/launch/rsp.launch.py`**（默认）：xacro `ur10e_robotiq_ft.urdf.xacro` → **UR + FT300 + Robotiq 2F-85 完整装配**（连接链 `world → UR → tool0 → FT300 → ft300_sensor → 2F-85 → gripper_tcp`）。该 xacro 复用官方 `ur_ros2_control` 宏（ur_robot_driver/urdf/ur.ros2_control.xacro），与官方 `ur.urdf.xacro` 参数集一致——mock 模式下发 mock 硬件（UR + 夹爪两个 `mock_components/GenericSystem`，`/joint_states` 含夹爪关节、TF 完整），real 模式下发真机插件（URPositionHardwareInterface，夹爪仍由 robotiq_control.launch.py 独立管理）。
-- **官方 `ur_robot_driver/launch/ur_rsp.launch.py`**（回退）：纯 UR 模型。当 `ur10e_robotiq_ft` 包未安装时自动回退（`_description_launchfile()` 内 `get_package_share_directory` 抛异常即 fallback，cell.launch.py:30-37）。
+- **`ur10e_robotiq_ft_description/launch/rsp.launch.py`**（默认）：xacro `ur10e_robotiq_ft.urdf.xacro` → **UR + FT300 + Robotiq 2F-85 完整装配**（连接链 `world → UR → tool0 → FT300 → ft300_sensor → 2F-85 → gripper_tcp`）。该 xacro 复用官方 `ur_ros2_control` 宏（ur_robot_driver/urdf/ur.ros2_control.xacro），与官方 `ur.urdf.xacro` 参数集一致——mock 模式下发 mock 硬件（UR + 夹爪两个 `mock_components/GenericSystem`，`/joint_states` 含夹爪关节、TF 完整），real 模式下发真机插件（URPositionHardwareInterface，夹爪仍由 robotiq_control.launch.py 独立管理）。
+- **官方 `ur_robot_driver/launch/ur_rsp.launch.py`**（回退）：纯 UR 模型。当 `ur10e_robotiq_ft_description` 包未安装时自动回退（`_description_launchfile()` 内 `get_package_share_directory` 抛异常即 fallback，cell.launch.py:30-37）。
 
 显式指定：`ros2 launch ur_teleop cell.launch.py sim:=true description_launchfile:=/path/to/ur_rsp.launch.py`（home.launch.py 同参数）。
 
@@ -69,17 +69,20 @@ rviz（以及 controller_manager）读的是 **`/robot_description` 话题**（`
 
 ## teleop.launch.py
 
-职责：阶段 2。启动 teleop_node（常驻），`mode=record` 时由 `IfCondition` 门控同时拉起 data_recorder（teleop.launch.py:39-44）。**不含 cell**——WAITING_CELL 30 s 超时即提示先运行 home.launch。
+职责：阶段 2。启动 teleop_node（常驻）+ ruckig_node（常驻，500 Hz 平滑），`mode=record` 时由 `IfCondition` 门控额外拉起 data_recorder。**不含 cell**——WAITING_CELL 30 s 超时即提示先运行 home.launch。
 
-参数声明（teleop.launch.py:27-30）：
+ruckig_node 必须在 home 完成后启动：teleop.launch 连接的是已 home 的 cell，ruckig 从当前（已 home）UR `/joint_states` 初始化 Ruckig 状态，避免 home 阶段轨迹控制器移动机器人导致状态过期（切换到 forward 时首帧跳变）。teleop_node 把映射目标发到 `/ruckig/target_joint_positions`，ruckig_node 以 `ruckig_control_hz`（默认 500 Hz）平滑后下发 `/forward_position_controller/commands`——详见 ruckig_node.md。**不要同时用 `cell.launch … ruckig:=true`**，否则两个 ruckig_node 抢同一话题。
+
+参数声明：
 
 | 参数 | 默认值来源 | 含义 |
 |---|---|---|
 | `config_file` | `share/ur_teleop/config/ur_teleop.yaml` | 配置入口路径 |
 | `mode` | yaml 顶层 `mode`（兜底 `"teleop"`；`choices=["teleop", "record"]`） | 运行模式；同时门控 data_recorder |
 | `force_home` | `"false"`（硬编码，无 yaml 对应键） | `true` = 跳过 VERIFY_HOME（teleop_node 把 `at_home_tolerance_rad` 置 `inf`，teleop_node.py:64-65） |
+| `ruckig_control_hz` | yaml `ruckig.control_hz`（兜底 `"500.0"`） | ruckig_node OTG 频率，默认与 controller_manager 同频 500 Hz |
 
-`mode` 的读取与 cell 类参数不同：teleop.launch.py 内联 `yaml.safe_load(...).get("mode", "teleop")` 读默认值；teleop_node 收到 `mode` 参数后 `mode or cfg["mode"]` 兜底（launch 参数优先、yaml 兜底，teleop_node.py:67）。
+`mode` 与 `ruckig_control_hz` 的读取与 cell 类参数不同：teleop.launch.py 内联 `yaml.safe_load(...)` 一次性读 `mode`（兜底 `"teleop"`）与 `ruckig.control_hz`（兜底 `"500.0"`）作默认值；teleop_node 收到 `mode` 参数后 `mode or cfg["mode"]` 兜底（launch 参数优先、yaml 兜底，teleop_node.py:67）。
 
 ## 参数优先级：launch 参数 > yaml 默认
 
@@ -95,8 +98,9 @@ rviz（以及 controller_manager）读的是 **`/robot_description` 话题**（`
 | `ftdi_id` | `cell.ftdi_id` | `""` |
 | `launch_rviz` | `cell.launch_rviz` | `"true"` |
 | `ur_type` | `cell.ur_type`（仅 cell.launch.py） | `"ur10e"` |
-| `description_launchfile` | 组合模型 rsp（`ur10e_robotiq_ft`，未安装回退官方 `ur_rsp.launch.py`） | `_description_launchfile()` |
+| `description_launchfile` | 组合模型 rsp（`ur10e_robotiq_ft_description`，未安装回退官方 `ur_rsp.launch.py`） | `_description_launchfile()` |
 | `mode` | 顶层 `mode`（仅 teleop.launch.py，内联读取） | `"teleop"` |
+| `ruckig_control_hz` | `ruckig.control_hz`（仅 teleop.launch.py，内联读取） | `"500.0"` |
 
 **已知张力（`config_file:=` 只影响节点参数）**：`_yaml_default` 读的是**安装 share 的 yaml**（`get_package_share_directory("ur_teleop")/config/ur_teleop.yaml`），而 `config_file:=` 参数只传给节点（teleop_node / home_node / data_recorder 经 `load_config` 读取）。因此 `config_file:=/path/to/other.yaml` 会换掉节点配置，但 **launch 默认值（sim/robot_ip 等）仍取自 share 里的 yaml**。若同时想换 launch 默认，需显式传对应参数（如 `sim:=false robot_ip:=...`），不能指望 `config_file:=` 一并改变。这是当前实现的有意取舍：launch 参数显式且完整，yaml 仅作兜底默认。
 

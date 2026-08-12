@@ -8,6 +8,10 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 
+# setuptools console-script wrappers that land in the source tree when
+# installing outside colcon (see setup.cfg install_scripts = $base/lib/<pkg>)
+/src/ur_teleop/lib/
+
 # IDE / Editor
 .vscode/
 .idea/

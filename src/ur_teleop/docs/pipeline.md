@@ -6,7 +6,7 @@
 
 ## 概述
 
-UR10e 从臂 + Alicia-D 主臂遥操作：主臂关节 → 会话 offset 映射 → 从臂前向位置控制；sim/real 两种形态（sim = UR 端 mock + rviz，主臂始终真实）；teleop/record 两种模式（record 基于 lerobot 保存数据集）。所有编排由 `teleop_node` 的 8 态 FSM 驱动，进程间仅以话题/服务/动作通讯，无多线程拆解。
+UR10e 从臂 + Alicia-D 主臂遥操作：主臂关节 → 会话 offset 映射 → ruckig 在线轨迹平滑（500 Hz，与 controller_manager 同频）→ 从臂前向位置控制；sim/real 两种形态（sim = UR 端 mock + rviz，主臂始终真实）；teleop/record 两种模式（record 基于 lerobot 保存数据集）。所有编排由 `teleop_node` 的 8 态 FSM 驱动，进程间仅以话题/服务/动作通讯，无多线程拆解。
 
 ## 设计目标
 
@@ -26,7 +26,7 @@ UR10e 从臂 + Alicia-D 主臂遥操作：主臂关节 → 会话 offset 映射 
 │   │     ├── ur_control.launch.py（ur_robot_driver）                   │
 │   │     │      sim : use_mock_hardware=true（mock UR）                 │
 │   │     │      real: 真机 + dashboard                                  │
-│   │     │      └── description_launchfile（默认 ur10e_robotiq_ft 组合  │
+│   │     │      └── description_launchfile（默认 ur10e_robotiq_ft_description 组合  │
 │   │     │          模型 rsp：UR+FT300+2F-85，xacro 含官方 ros2_control │
 │   │     │          宏，mock/real 插件自动切换；未安装回退官方纯 UR）    │
 │   │     ├── rviz2（仅 sim 且 launch_rviz=true，-d ur_teleop.rviz）      │
@@ -39,6 +39,7 @@ UR10e 从臂 + Alicia-D 主臂遥操作：主臂关节 → 会话 offset 映射 
 ┌─────────────────────────────── 阶段 2 ───────────────────────────────┐
 │ teleop.launch.py（连接已运行的 cell，不含 cell）                       │
 │   ├── teleop_node（常驻）：WAITING_CELL → … → ACTIVE                  │
+│   ├── ruckig_node（常驻）：消费 teleop 映射目标，500 Hz 平滑后下发      │
 │   └── mode=record 时：data_recorder（常驻，键盘唯一归属）               │
 └──────────────────────────────────────────────────────────────────────┘
 ```
@@ -46,6 +47,7 @@ UR10e 从臂 + Alicia-D 主臂遥操作：主臂关节 → 会话 offset 映射 
 - **cell 生命周期**：由 `home.launch.py` 启动并持续运行；`teleop.launch.py` 不带 cell，teleop_node 在 WAITING_CELL 中等 `/joint_states` 与 `/controller_manager` 服务，30 s 超时明确报错「请先运行 home.launch」（teleop_node.py:156-164）。
 - **home_node 生命周期**：一次性进程。等 cell 就绪（从臂 `/joint_states` 出现 + trajectory action server 就绪，`cell_ready()`，home_node.py:73-74）→ 向 UR 发 home 轨迹（accept 未接受时 10 s 窗口内每 0.5 s 重试，见 launch.md/teleop 行为）→ 对 Alicia 持续发布 `/joint_commands` → 双臂在容差内保持 `verify_duration_s` 后打印 HOME REACHED 退出；失败退出非零码，cell 保持。
 - **teleop_node 生命周期**：常驻。8 态 FSM（见下），Ctrl-C 时执行退出恢复流程。
+- **ruckig_node 生命周期**：常驻，随 `teleop.launch.py` 启动（home 完成之后）。从当前（已 home）UR `/joint_states` 初始化 Ruckig 状态、目标=当前位置（启动不产生运动），随后以 500 Hz 把 `/ruckig/target_joint_positions` 平滑成 `/forward_position_controller/commands`。务必在 home 之后启动，否则 home 阶段轨迹控制器移动机器人会使 Ruckig 内部状态过期（详见 ruckig_node.md）。
 
 ## 话题 / 服务 / 动作清单
 
@@ -58,7 +60,8 @@ UR10e 从臂 + Alicia-D 主臂遥操作：主臂关节 → 会话 offset 映射 
 | `/teleop/status` | std_msgs/Bool | teleop_node → data_recorder | ACTIVE 时 true、INACTIVE 时 false | 录制门控 |
 | `/teleop/e_stop` | std_msgs/Bool | 外部急停输入 → teleop_node | 电平 | 冻结标志：关节指令与夹爪 FSM 均暂停 |
 | `/teleop/commands` | std_msgs/Float64MultiArray | teleop_node → data_recorder | 50 Hz（ACTIVE/INACTIVE） | 7 维 = 6 关节指令 + 夹爪指令信号 |
-| `/forward_position_controller/commands` | std_msgs/Float64MultiArray | teleop_node → UR cell | 50 Hz（ACTIVE/INACTIVE） | 6 维前向位置指令 |
+| `/ruckig/target_joint_positions` | std_msgs/Float64MultiArray | teleop_node → ruckig_node | 50 Hz（ACTIVE/INACTIVE） | 6 维映射目标（UR 序），ruckig 的平滑输入 |
+| `/forward_position_controller/commands` | std_msgs/Float64MultiArray | ruckig_node → UR cell | 500 Hz | 6 维 jerk-limited 平滑后的前向位置指令 |
 | `/scaled_joint_trajectory_controller/follow_joint_trajectory` | control_msgs/FollowJointTrajectory（action） | home_node → UR cell | home 阶段一次 | UR home 轨迹 |
 | `/robotiq_gripper_controller/gripper_cmd` | control_msgs/ParallelGripperCommand（action） | teleop_node → 夹爪控制器 | 10 Hz FSM（仅 real） | 夹爪开/合目标 |
 | `/controller_manager/list_controllers` | controller_manager_msgs/ListControllers（srv） | teleop_node → controller_manager | SWITCHING 阶段 | 检查 forward_position_controller 是否已加载 |
@@ -79,9 +82,12 @@ Alicia ──100 Hz /joint_states(Joint1..6 弧度 + Gripper 米)──> teleop_
    ur_cmd[i] = slave_home[i] + sign[i]·scale[i]·(master_q[m_i] − master_home[i])
                                         │ clamp 到 [limit_min+margin, limit_max−margin]
                                         ▼
-   _publish_commands（50 Hz 定时器 _tick，仅 ACTIVE 发映射指令）
-   ├── /forward_position_controller/commands（6 维）→ UR cell
+   _publish_commands（50 Hz 定时器 _tick，仅 ACTIVE/INACTIVE 发映射目标）
+   ├── /ruckig/target_joint_positions（6 维映射目标，UR 序）→ ruckig_node
    └── /teleop/commands（7 维 = 6 指令 + 夹爪指令信号）→ data_recorder（record 模式）
+
+   ruckig_node（500 Hz Ruckig OTG，jerk-limited）：按 max_velocity/acceleration/jerk
+        把目标平滑成轨迹 → /forward_position_controller/commands（6 维）→ UR cell
 
    夹爪（real）：10 Hz _gripper_tick —— GripperController 迟滞 FSM(master_gripper_m)
         → ParallelGripperCommand action → robotiq 夹爪
@@ -91,7 +97,7 @@ Alicia ──100 Hz /joint_states(Joint1..6 弧度 + Gripper 米)──> teleop_
 
 要点：
 
-- **50 Hz 指令发布时机**：`_tick` 定时器全程运行，但只有 ACTIVE 状态调用映射发布；INACTIVE 时同样 50 Hz 改发**当前位置**（`_slave_q`）避免跳变（teleop_node.py:299-317）。其余状态不发指令。
+- **指令链路与频率**：teleop `_tick` 50 Hz 全程运行，仅 ACTIVE/INACTIVE 发布——把映射目标（INACTIVE 时为当前位置 hold，避免跳变）发到 `/ruckig/target_joint_positions`。ruckig_node 以 500 Hz Ruckig OTG 把目标平滑成 jerk-limited 轨迹，下发 `/forward_position_controller/commands`（与 controller_manager 同频）；forward controller 无内建平滑，平滑完全由 ruckig 承担。teleop 与 ruckig 都仅在 teleop 处于 ACTIVE/INACTIVE 时才有数据流；其余状态两者均不发指令（teleop_node.py:299-317）。
 - **watchdog**：`_last_master_stamp` 在每次收到主臂 `/joint_states` 时刷新；超过 `teleop.watchdog_timeout_s`（默认 0.5 s）→ INACTIVE（`/teleop/status=false`），主臂恢复自动回 ACTIVE，无需重新 Enter。
 - **映射参数**：offset 在 CAPTURE_OFFSET 捕获（`SessionOffset`，不写盘）；映射使用 `mapping.*` + `safety.*` 合并后的配置（`build_mapping_config`，teleop_node.py:46-54）。公式与 clamp 细节见 joint_mapper.md。
 - **record 数据流**：teleop_node → `/teleop/commands`（7 维）+ `/teleop/status` → data_recorder；data_recorder → `/teleop/enable` → teleop_node。数据集已存在时以时间戳后缀新建 repo_id，不覆盖不追加。帧结构见 frame_builder.md。
@@ -112,7 +118,7 @@ WAITING_CELL → VERIFY_HOME → SETTLING → CAPTURE_OFFSET → ARMED ⇄ SWITC
 | `CAPTURE_OFFSET` | 捕获主/从实测为会话 offset（不写盘），构建 JointMapper |
 | `ARMED` | 等 Enter（teleop 模式）或 enable 锁存（record 模式） |
 | `SWITCHING` | list →（未加载则 load）→ switch（trajectory → forward_position）异步链，失败重试最多 5 次 |
-| `ACTIVE` | `/demonstration=true`、`/teleop/status=true`，50 Hz 映射发布 + 10 Hz 夹爪 FSM |
+| `ACTIVE` | `/demonstration=true`、`/teleop/status=true`，50 Hz 映射目标发布（ruckig 500 Hz 平滑下发 forward）+ 10 Hz 夹爪 FSM |
 | `INACTIVE` | 主臂数据超时：暂停映射（改发当前位置）、status=false；主臂恢复自动回 ACTIVE |
 
 关键转换与机制（实现为准，spec §5 基础上含最终修复）：
@@ -128,7 +134,7 @@ WAITING_CELL → VERIFY_HOME → SETTLING → CAPTURE_OFFSET → ARMED ⇄ SWITC
 
 | 模式 | 键盘归属 | 键 | 含义 |
 |---|---|---|---|
-| teleop（mode=teleop） | teleop_node | Enter | ARMED → ACTIVE（开始 50 Hz 控制） |
+| teleop（mode=teleop） | teleop_node | Enter | ARMED → ACTIVE（开始映射控制；teleop 50 Hz 喂目标，ruckig 500 Hz 平滑下发） |
 | record（mode=record） | data_recorder | Enter | 开始 episode 1 并发送 `/teleop/enable` |
 | record | data_recorder | `S` | 保存并结束当前 episode |
 | record | data_recorder | `D` | 丢弃当前 episode（重置 buffer） |

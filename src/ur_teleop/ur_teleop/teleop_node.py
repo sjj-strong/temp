@@ -88,6 +88,7 @@ class TeleopNode(Node):
         self._offset = SessionOffset()
         self._gripper = GripperController(cfg.get("gripper", {}))
         self._gripper_probed = False
+        self._gripper_probe_start = time.time()
         self._gripper_future = None
         self._switcher = ControllerSwitcher(self)
         self._switch_future = None
@@ -98,7 +99,9 @@ class TeleopNode(Node):
         self._joint_sub = self.create_subscription(JointState, "/joint_states", self._joint_cb, 10)
         self._enable_sub = self.create_subscription(Bool, "/teleop/enable", self._enable_cb, 10)
         self._estop_sub = self.create_subscription(Bool, "/teleop/e_stop", self._estop_cb, 10)
-        self._fwd_pub = self.create_publisher(Float64MultiArray, "/forward_position_controller/commands", 10)
+        # 映射后的 UR 目标发给 ruckig_node（500 Hz jerk-limited 平滑）→
+        # /forward_position_controller/commands。teleop 不再直接写 forward controller。
+        self._ruckig_target_pub = self.create_publisher(Float64MultiArray, "/ruckig/target_joint_positions", 10)
         self._cmd_pub = self.create_publisher(Float64MultiArray, "/teleop/commands", 10)
         self._status_pub = self.create_publisher(Bool, "/teleop/status", 10)
         self._demo_pub = self.create_publisher(Bool, "/demonstration", 10)
@@ -322,11 +325,18 @@ class TeleopNode(Node):
         if self._e_stop or not self._gripper.enabled:
             return
         if not self._gripper_probed:
-            self._gripper_probed = True
             if self._gripper_action is None or not self._gripper_action.server_is_ready():
-                self.get_logger().warn("[teleop] 夹爪 action server 不存在，禁用夹爪 FSM")
-                self._gripper.enabled = False
+                elapsed = time.time() - self._gripper_probe_start
+                if elapsed > 30.0:
+                    self.get_logger().warn(
+                        "[teleop] 夹爪 action server 30 s 仍未就绪，禁用夹爪 FSM"
+                    )
+                    self._gripper.enabled = False
+                    return
+                # 重试中，不阻塞 FSM 外的逻辑
                 return
+            self._gripper_probed = True
+            self.get_logger().info("[teleop] 夹爪 action server 已就绪")
         if self._gripper_future is not None and not self._gripper_future.done():
             return                                          # 上一个 goal 未完成，跳过本 tick
         with self._lock:
@@ -344,9 +354,10 @@ class TeleopNode(Node):
     # ---------- helpers ----------
 
     def _publish_commands(self, cmd: list[float]):
-        fwd = Float64MultiArray()
-        fwd.data = list(cmd)
-        self._fwd_pub.publish(fwd)
+        # 映射后的 UR 目标 → ruckig_node 平滑后下发 forward_position_controller。
+        target = Float64MultiArray()
+        target.data = list(cmd)
+        self._ruckig_target_pub.publish(target)
         tcmd = Float64MultiArray()
         tcmd.data = list(cmd) + [self._gripper.get_gripper_command_signal(self._gripper.current_target)]
         self._cmd_pub.publish(tcmd)

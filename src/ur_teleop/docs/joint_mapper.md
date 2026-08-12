@@ -54,7 +54,7 @@ ur_cmd[i] = clamp_to_limits(ur_joint_order[i], ur_cmd[i])
 ```
 
 - 输入长度必须等于 `len(alicia_joint_order)`，否则 `ValueError(f"Expected {N} master joints, got {M}")`。
-- 输出按 `ur_joint_order` 排列（与 `/forward_position_controller/commands` 的 6 维顺序一致）。
+- 输出按 `ur_joint_order` 排列（与 `/ruckig/target_joint_positions` 及 `/forward_position_controller/commands` 的 6 维顺序一致）。
 
 ### `_clamp(joint_name: str, value: float) -> float`（joint_mapper.py:60-66）
 
@@ -94,14 +94,14 @@ return max(lo, min(hi, value))        # 上下界双向 clamp
 ## 数据流 / 消费方
 
 1. teleop_node `_capture_offset`（teleop_node.py:219-232）：settle 完成后捕获 offset，构造 `JointMapper(build_mapping_config(self._cfg), self._offset.master_home, self._offset.slave_home)`——session 一旦 ARMED 后 mapper 固定，会话内不重建。
-2. `_active`（teleop_node.py:306）：`cmd = self._mapper.master_to_slave(self._master_q)`，结果经 `_publish_commands` 发往 `/forward_position_controller/commands`（6 维）与 `/teleop/commands`（6 维 + 夹爪信号）。
+2. `_active`（teleop_node.py:306）：`cmd = self._mapper.master_to_slave(self._master_q)`，结果经 `_publish_commands` 发往 `/ruckig/target_joint_positions`（6 维映射目标）与 `/teleop/commands`（6 维 + 夹爪信号）；forward controller 的实际下发由 `ruckig_node` 500 Hz 平滑承担，teleop 不再直写 forward。
 
 ## 错误处理 / 已知边界
 
 - 构造期 4 类 `ValueError` 属编程错误（配置已由 `load_config` + `build_mapping_config` 保证形状），节点内不捕获——mapper 构造失败即启动失败。
 - `master_to_slave` 长度不符属调用侧 bug，同样直接抛。
 - clamp 是纯数值截断，不检测"主臂相对 home 的偏移超限"这类物理合理性；超限部分被静默截断，无日志（调用方可通过对比输入输出发现）。
-- 无额外滤波/限速：50 Hz 下发的是 clamp 后的瞬时指令，跳变防护由 UR 端 forward controller 行为承担。
+- 平滑/限速：mapper 只产出 clamp 后的瞬时映射目标（不含滤波），但下游 `ruckig_node` 以 500 Hz Ruckig OTG 做 jerk-limited 平滑（受 `max_velocity/max_acceleration/max_jerk` 限制），跳变与尖峰由 ruckig 消除——`forward_position_controller` 本身无内建平滑。
 
 ## 测试覆盖（tests/test_joint_mapper.py）
 
