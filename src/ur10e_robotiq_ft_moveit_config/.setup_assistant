@@ -1,0 +1,31 @@
+moveit_setup_assistant_config:
+  urdf:
+    package: ""
+    relative_path: /ros2_ws/ur10e_robotiq_ft300.urdf
+  srdf:
+    relative_path: config/ur10e_robotiq_ft.srdf
+  package_settings:
+    author_name: sjj
+    author_email: 3141261071@qq.com
+    generated_timestamp: 1786426192
+  control_xacro:
+    command:
+      - position
+      - velocity
+      - effort
+    state:
+      - position
+      - velocity
+      - effort
+  modified_urdf:
+    xacros:
+      - control_xacro
+  control_xacro:
+    command:
+      - position
+      - velocity
+      - effort
+    state:
+      - position
+      - velocity
+      - effort
