@@ -12,10 +12,10 @@ home:
   master: [0.01687378866674205, 0.009203884727313927, -0.3988350048502669, 0.4509903516383784, 0.05982525072754008, 0.06135923151542544]     # 目标 home（用户提前设置，本包不处理含义）
   slave:  [1.6565685272216797, -1.3311004501632233, 1.6565685272216797, -2.150961538354391, -1.5582049528705042, 2.980346918106079]
   master_gripper_value: 1000
-  at_home_tolerance_rad: 0.05
+  at_home_tolerance_rad: 0.1   # 与控制器的 goal tolerance (0.1) 保持一致，避免控制器报告成功但 home_node 验证失败
   settle_time_s: 2.0
   settle_motion_threshold_rad: 0.01
-  move_timeout_s: 30.0
+  move_timeout_s: 60.0       # 含轨迹执行时间；0.2 rad/s 约束下 5 rad 位移约需 25 s
   move_duration_s: 8.0
   verify_duration_s: 2.0
 mapping:
@@ -33,7 +33,7 @@ safety:
     wrist_2_joint: [-6.283, 6.283]
     wrist_3_joint: [-6.283, 6.283]
 teleop:
-  command_rate_hz: 300
+  command_rate_hz: 500
   watchdog_timeout_s: 0.5
   restore_controller_on_exit: true
 ruckig:
