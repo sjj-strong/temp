@@ -98,12 +98,13 @@ rviz 显示模型：**默认组合模型**（`ur10e_robotiq_ft_description` 包�
 ### real（真机）
 
 ```bash
-ros2 launch ur_teleop home.launch.py sim:=false robot_ip:=192.168.1.1 gripper_port:=/dev/ttyUSB1 ftdi_id:=<你的ftdi_id>
+ros2 launch ur_teleop home.launch.py sim:=false robot_ip:=<你的UR-IP>
 # HOME REACHED 后第二个终端：
 ros2 launch ur_teleop teleop.launch.py
 ```
 
-> `sim`/`robot_ip`/`gripper_port`/`ftdi_id`/`launch_rviz` 只在 `home.launch.py`（含 cell）声明，launch 参数优先、yaml 兜底；也可直接改 yaml 里的 `sim`/`cell.*` 而不用传参。
+> `sim` 切换到 false 后`cell.launch.py` 会走真机分支：UR 用官方默认 bare 模型(真机驱动 + recipe 文件路径内置)，夹爪/FT300 各自启动独立的 controller_manager。
+> `robot_ip`/`gripper_port`/`ftdi_id`/`launch_rviz` 在 `home.launch.py` 声明，launch 参数优先、yaml 兜底。夹爪和 FT300 的端口如果 yaml 已配置正确则无需传参。
 
 ### record 模式
 

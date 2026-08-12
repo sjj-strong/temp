@@ -4,7 +4,7 @@ cell:
   ur_type: ur10e
   robot_ip: 169.254.138.15
   gripper_port: /dev/ttyUSB1     # real 模式，include robotiq_control 用
-  ftdi_id: "ttyUSB2"                    # real 模式，include rq_fts 驱动用（launch 参数即 ftdi_id）
+  ftdi_id: "ttyUSB3"                    # real 模式，include rq_fts 驱动用（launch 参数即 ftdi_id）
   launch_rviz: true
   alicia_port: "/dev/ttyACM0"                 # 空=自动检测；可指定如 /dev/ttyACM0
   launch_alicia: true             # 主臂始终真实；纯 sim 无 Alicia 时设 false
