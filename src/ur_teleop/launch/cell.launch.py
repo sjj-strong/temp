@@ -81,7 +81,7 @@ def generate_launch_description():
         DeclareLaunchArgument("alicia_port", default_value=alicia_default),
         DeclareLaunchArgument("launch_alicia", default_value=launch_alicia_default),
         DeclareLaunchArgument("ur_type", default_value=ur_type_default),
-        DeclareLaunchArgument("description_launchfile",
+        DeclareLaunchArgument("description_sim",
                               default_value=_description_launchfile()),
         # rviz2 必须放在 ur_control include 之前：后者传 launch_rviz:="false" 会把
         # 全局 LaunchConfiguration("launch_rviz") 改写成 "false"（launch 的
@@ -111,7 +111,7 @@ def generate_launch_description():
                 "mock_sensor_commands": "false",
                 "launch_dashboard_client": "false",
                 "launch_rviz": "false",
-                "description_launchfile": LaunchConfiguration("description_launchfile"),
+                "description_launchfile": LaunchConfiguration("description_sim"),
                 "initial_joint_controller": "scaled_joint_trajectory_controller",
                 "activate_joint_controller": "true",
                 "controllers_file": os.path.join(pkg_share, "config", "ur_controllers_sim.yaml"),
@@ -132,7 +132,12 @@ def generate_launch_description():
                 "launch_rviz": "false",
                 "initial_joint_controller": "scaled_joint_trajectory_controller",
                 "activate_joint_controller": "true",
-                # real 不传 description_launchfile，用 ur_control 默认
+                # 显式传 description_launchfile 防止 sim 分支通过
+                # LaunchConfiguration 全局改写漏到 real 分支（参见
+                # launch-arg-global-clobber memory）。
+                "description_launchfile": os.path.join(
+                    get_package_share_directory("ur_robot_driver"),
+                    "launch", "ur_rsp.launch.py"),
             }.items(),
         ),
         # Sim 模式：将 parallel_gripper_action_controller spawn 到 UR 的

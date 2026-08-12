@@ -23,23 +23,6 @@ def _yaml_default(config_file: str, *path: str, fallback: str):
         return fallback
 
 
-def _description_launchfile():
-    """与 cell.launch.py 相同：自包含 mock rsp。"""
-    pkg_share = get_package_share_directory("ur_teleop")
-    mock_rsp = os.path.join(pkg_share, "launch", "rsp_mock.launch.py")
-    if os.path.exists(mock_rsp):
-        return mock_rsp
-    wrapper = os.path.join(pkg_share, "launch", "rsp_wrapper.launch.py")
-    if os.path.exists(wrapper):
-        return wrapper
-    try:
-        return os.path.join(get_package_share_directory("ur10e_robotiq_ft_description"),
-                            "launch", "rsp.launch.py")
-    except Exception:
-        return os.path.join(get_package_share_directory("ur_robot_driver"),
-                            "launch", "ur_rsp.launch.py")
-
-
 def generate_launch_description():
     pkg_share = get_package_share_directory("ur_teleop")
     config_file = os.path.join(pkg_share, "config", "ur_teleop.yaml")
@@ -66,8 +49,6 @@ def generate_launch_description():
         DeclareLaunchArgument("launch_alicia",
                               default_value=_yaml_default(config_file, "cell", "launch_alicia",
                                                          fallback="true")),
-        DeclareLaunchArgument("description_launchfile",
-                              default_value=_description_launchfile()),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
                 os.path.join(pkg_share, "launch", "cell.launch.py")
@@ -81,7 +62,6 @@ def generate_launch_description():
                 "launch_rviz": LaunchConfiguration("launch_rviz"),
                 "alicia_port": LaunchConfiguration("alicia_port"),
                 "launch_alicia": LaunchConfiguration("launch_alicia"),
-                "description_launchfile": LaunchConfiguration("description_launchfile"),
             }.items(),
         ),
         Node(
