@@ -116,7 +116,7 @@ class DataRecorderNode(Node):
             import rclpy.time
             t = self._tf_buffer.lookup_transform(
                 self._rec.get("ee_pose_parent_frame", "base_link"),
-                self._rec.get("ee_pose_child_frame", "gripper_tcp"),
+                self._rec.get("ee_pose_child_frame", "tool0"),
                 rclpy.time.Time(),
                 timeout=rclpy.duration.Duration(seconds=0.5))
             tr, rot = t.transform.translation, t.transform.rotation

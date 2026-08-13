@@ -22,7 +22,7 @@ mapping:
   alicia_joint_order: [Joint1, Joint2, Joint3, Joint4, Joint5, Joint6]
   ur_joint_order: [shoulder_pan_joint, shoulder_lift_joint, elbow_joint, wrist_1_joint, wrist_2_joint, wrist_3_joint]
   sign: [1, -1, -1, -1, -1, -1]
-  scale: [1.2, 1.2, 1.2, 1.2, 1.2, 1.2]
+  scale: [0.8, 0.8, 0.8, 0.8, 0.8, 0.8]
 safety:
   clamp_margin_rad: 0.1
   limits:
@@ -54,14 +54,15 @@ gripper:
   max_effort: 50.0
 recorder:
   repo_id: my_user/ur_teleop
-  root: "/ros2_ws/dataset"                       # 空 = HF_LEROBOT_HOME
+  root: "/ros2_ws/dataset/testv1"                       # 空 = HF_LEROBOT_HOME
   fps: 60
   robot_type: ur10e_alicia_teleop
   use_videos: true
-  ee_pose_source: tf             # tf | topic(/tcp_pose) | none
-  ee_pose_topic: /tcp_pose
+  ee_pose_source: tf             # tf | topic(/tcp_pose_broadcaster/pose) | none
+  ee_pose_topic: /tcp_pose_broadcaster/pose
   ee_pose_parent_frame: base_link
-  ee_pose_child_frame: gripper_tcp
+  ee_pose_child_frame: tool0     # tool0 在 bare（real）与组合（sim）URDF 中都存在；
+                                 # gripper_tcp 只在组合模型里，real 下查不到 → NaN
   cameras: {}                    # {"wrist": {topic, image_key, height, width}}
   task: teleoperation
   min_frames_per_episode: 2
