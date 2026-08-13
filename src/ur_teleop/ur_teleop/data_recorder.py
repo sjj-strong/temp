@@ -241,12 +241,15 @@ def main():
     rclpy.init()
     node = DataRecorderNode()
     node.get_logger().info("=" * 60)
-    node.get_logger().info("Data Recorder 就绪 — Enter=开始 S=保存 D=丢弃 Q=退出")
+    node.get_logger().info(f"Data Recorder 就绪 — 录制频率 {node._fps} Hz")
+    node.get_logger().info("  键盘: Enter=开始  S=保存  D=丢弃  Q=退出")
     node.get_logger().info("=" * 60)
 
     spin_thread = threading.Thread(target=rclpy.spin, args=(node,), daemon=True)
     spin_thread.start()
     period = 1.0 / node._fps
+    hint_interval = 5.0          # 定期重印键盘提示，保证提示始终在终端可见
+    last_hint = 0.0
     try:
         while rclpy.ok():
             t0 = time.time()
@@ -262,6 +265,12 @@ def main():
             elif key == "q":
                 node.get_logger().info("Q 按下，退出")
                 break
+            if t0 - last_hint >= hint_interval:
+                last_hint = t0
+                state = "录制中" if node._recording else "待机"
+                print(f"[键盘] Enter=开始 S=保存 D=丢弃 Q=退出 | 状态: {state} "
+                      f"| episodes={node._episode_count} frames={node._frame_count} "
+                      f"| {node._fps} Hz", flush=True)
             time.sleep(max(0.0, period - (time.time() - t0)))
     except KeyboardInterrupt:
         pass

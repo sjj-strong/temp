@@ -403,8 +403,11 @@ class TeleopNode(Node):
 def main():
     rclpy.init()
     node = TeleopNode()
+    ruckig_hz = float(node._cfg.get("ruckig", {}).get("control_hz", 500.0))
     node.get_logger().info("=" * 60)
     node.get_logger().info(f"ur_teleop 就绪 — mode={node._mode}, sim={node._cfg['sim']}")
+    node.get_logger().info(
+        f"  控制频率: teleop 命令 {node._command_rate:g} Hz | ruckig 平滑 {ruckig_hz:g} Hz")
     node.get_logger().info("  等待双臂到位 → 静止 → offset → Enter 开始控制")
     node.get_logger().info("=" * 60)
     try:
