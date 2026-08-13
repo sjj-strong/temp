@@ -3,6 +3,7 @@ starts episode 1 AND sends /teleop/enable so teleop_node begins control
 (spec §6). Keys: Enter=开始 S=保存并结束 D=丢弃并重置 Q=退出并 finalize.
 """
 
+import os
 import sys
 import threading
 import time
@@ -225,6 +226,18 @@ class DataRecorderNode(Node):
 
 
 def main():
+    # ros2 launch 用 /usr/bin/python3 启动节点（console_scripts shebang），
+    # 而 lerobot 只装在 /opt/lerobot_venv。当前解释器缺 lerobot 时，用 venv
+    # python os.execv 原地重启本进程：PID 不变、launch 的日志捕获与进程管理
+    # 不受影响；环境变量（含 PYTHONPATH）与 ros args 原样继承。
+    # 注意：venv 的 python 是指向 /usr/bin/python3 的 symlink，realpath 比较
+    # 恒等，不能作为"已在 venv"的判据。UR_TELEOP_REEXEC 才是防无限重启的
+    # 唯一护栏（venv 损坏时第二次进入直接走下面的 RuntimeError）。
+    if LeRobotDataset is None and os.environ.get("UR_TELEOP_REEXEC") != "1":
+        venv_python = "/opt/lerobot_venv/bin/python"
+        if os.path.exists(venv_python):
+            os.environ["UR_TELEOP_REEXEC"] = "1"
+            os.execv(venv_python, [venv_python] + sys.argv)
     rclpy.init()
     node = DataRecorderNode()
     node.get_logger().info("=" * 60)
