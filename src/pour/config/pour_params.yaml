@@ -1,0 +1,43 @@
+# pour 运行参数 —— 全部配置都在这里,launch 可传参覆盖
+# (覆盖示例: ros2 launch pour pour.launch.py port:=/dev/ttyUSB1 target_weight:=100.0)
+
+scale_node:
+  ros__parameters:
+    # 电子秤串口端口(USB 转串口,需宿主机 -v /dev:/dev 挂载可见)
+    port: /dev/ttyUSB0
+    baudrate: 9600
+    # 串口读超时(秒)
+    timeout: 0.1
+    # 重量发布频率(Hz)
+    publish_rate: 10.0
+    # 重量话题
+    weight_topic: /scale/weight
+
+pour_control_node:
+  ros__parameters:
+    # 订阅的重量话题(与 scale_node.weight_topic 对应)
+    weight_topic: /scale/weight
+    # 速度指令话题(ros2_control 的 forward_velocity_controller)
+    cmd_topic: /forward_velocity_controller/commands
+    joint_state_topic: /joint_states
+    # 倾倒关节 = 第 6 关节 wrist3(0 基序号 5)
+    wrist_index: 5
+    # 速度方向(参考实现取负;安装方向不同可改)
+    velocity_sign: -1.0
+    # 控制频率(Hz)
+    control_rate: 9.0
+    # PD 参数
+    kp: 0.0045
+    kd: 0.06
+    # 输出速度限幅(rad/s)
+    joint_range: [-2.0, 2.0]
+    # 目标倾倒重量(g)
+    target_weight: 70.0
+    # 误差允许范围(g): |error| <= tolerance 即达标停止
+    tolerance: 1.0
+    # 近目标 kd 缩小 trick(默认关;开启后 |error|<=threshold 时 kd 换成 near_target_kd)
+    near_target_kd_enable: false
+    near_target_kd_threshold: 10.0
+    near_target_kd: 0.025
+    # 重量数据超时(秒):超时未收到新数据 → 发零速安全停
+    weight_timeout: 2.0
