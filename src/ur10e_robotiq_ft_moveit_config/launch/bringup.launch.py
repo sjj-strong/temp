@@ -118,7 +118,7 @@ def generate_launch_description():
         "friction_model_controller",
         "scaled_joint_trajectory_controller",
         "robotiq_activation_controller",
-        "robotiq_gripper_trajectory_controller",
+        "robotiq_gripper_controller",
         "robotiq_force_torque_sensor_broadcaster",
     ]
     controller_spawners = [

@@ -1,0 +1,3 @@
+# console_scripts 构建产物（setup.cfg script_dir=$base 时可能残留）
+# 参见 ur_teleop/.gitignore 同款处理
+lib/

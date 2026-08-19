@@ -98,7 +98,7 @@ rviz 显示模型：**默认组合模型**（`ur10e_robotiq_ft_description` 包�
 ### real（真机）
 
 ```bash
-ros2 launch ur_teleop home.launch.py sim:=false robot_ip:=<你的UR-IP>
+ros2 launch ur_teleop home.launch.py sim:=false
 # HOME REACHED 后第二个终端：
 ros2 launch ur_teleop teleop.launch.py
 ```

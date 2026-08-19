@@ -1,0 +1,36 @@
+[submodule "src/Alicia-D-SDK"]
+	path = src/Alicia-D-SDK
+	url = https://github.com/Synria-Robotics/Alicia-D-SDK.git
+[submodule "src/gello_software"]
+	path = src/gello_software
+	url = https://github.com/wuphilipp/gello_software.git
+[submodule "src/Alicia-D-ROS2"]
+	path = src/Alicia-D-ROS2
+	url = https://github.com/Synria-Robotics/Alicia-D-ROS2.git
+[submodule "src/Universal_Robots_Client_Library"]
+	path = src/Universal_Robots_Client_Library
+	url = https://github.com/UniversalRobots/Universal_Robots_Client_Library.git
+[submodule "src/Universal_Robots_ROS2_Description"]
+	path = src/Universal_Robots_ROS2_Description
+	url = https://github.com/UniversalRobots/Universal_Robots_ROS2_Description.git
+[submodule "src/Universal_Robots_ROS2_Driver"]
+	path = src/Universal_Robots_ROS2_Driver
+	url = https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver.git
+[submodule "src/lerobot"]
+	path = src/lerobot
+	url = https://github.com/huggingface/lerobot.git
+[submodule "src/robot_utils"]
+	path = src/robot_utils
+	url = git@github.com:OneOneLiu/robot_utils.git
+[submodule "src/ros2_robotiq_gripper"]
+	path = src/ros2_robotiq_gripper
+	url = https://github.com/PickNikRobotics/ros2_robotiq_gripper.git
+[submodule "src/rq_fts_ros2_driver"]
+	path = src/rq_fts_ros2_driver
+	url = https://github.com/panagelak/rq_fts_ros2_driver.git
+[submodule "src/serial"]
+	path = src/serial
+	url = https://github.com/tylerjw/serial.git
+[submodule "src/ur_msgs"]
+	path = src/ur_msgs
+	url = https://github.com/ros-industrial/ur_msgs.git

@@ -1,0 +1,96 @@
+# ============================================================
+# ur_teleop_rtde — Alicia-D → UR10e teleoperation (RTDE servoJ)
+# Single configuration entry point. All values are read by
+# ur_teleop_rtde/config.py (validated) at node startup.
+# ============================================================
+
+# teleop: 仅遥操作；record: 遥操作 + LeRobot 数据录制
+mode: teleop
+
+robot:
+  ur_type: ur10e
+  robot_ip: "192.168.1.10"
+
+# rviz 显示 cell（launch/cell.launch.py）的启动选项；遥操作控制本身不依赖 cell
+cell:
+  sim: true               # true=mock UR driver（离线 rviz）；false=真实 UR driver + FT300
+  launch_rviz: true       # 启动 rviz（组合模型：UR+FT300+2F-85）
+  ftdi_id: ""             # FT300 USB-FTDI 标识（"" = 自动探测）
+
+# 主臂(Alicia-D)与从臂(UR10e)的 home 位姿（6 关节，rad）
+home:
+  master: [0.0, -1.2, 0.5, 0.0, 0.0, 0.0]
+  slave: [0.0, -1.57, 0.0, -1.57, 0.0, 0.0]
+  at_home_tolerance_rad: 0.05
+  settle_time_s: 2.0
+  settle_motion_threshold_rad: 0.01
+  move_timeout_s: 30.0
+  move_speed_rad_s: 1.0          # RTDE moveJ 速度
+  move_accel_rad_s2: 1.0         # RTDE moveJ 加速度
+  verify_duration_s: 2.0
+
+# Alicia → UR 关节映射（JointMapper 复用 ur_teleop）
+mapping:
+  alicia_joint_order: [Joint1, Joint2, Joint3, Joint4, Joint5, Joint6]
+  ur_joint_order: [shoulder_pan_joint, shoulder_lift_joint, elbow_joint,
+                   wrist_1_joint, wrist_2_joint, wrist_3_joint]
+  sign: [1, 1, 1, 1, 1, 1]
+  scale: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+  # safety 嵌套在 mapping 下（JointMapper 契约：mapping_config["safety"]）
+  safety:
+    clamp_margin_rad: 0.1
+    limits:
+      shoulder_pan_joint: [-6.283, 6.283]
+      shoulder_lift_joint: [-6.283, 6.283]
+      elbow_joint: [-3.142, 3.142]
+      wrist_1_joint: [-6.283, 6.283]
+      wrist_2_joint: [-6.283, 6.283]
+      wrist_3_joint: [-6.283, 6.283]
+
+# RTDE servoJ 参数（GELLO 同款：dt=2ms → 500 Hz）
+rtde:
+  servoj_dt: 0.002
+  servoj_velocity: 0.5
+  servoj_acceleration: 0.5
+  servoj_lookahead: 0.2          # [0.03, 0.2]
+  servoj_gain: 100               # [100, 2000]
+  state_read_every_n: 5          # 每 N 个 servoJ 周期读一次实际状态
+  reconnect_attempts: 3
+  reconnect_delay_s: 1.0
+
+teleop:
+  command_rate_hz: 100           # Alicia 发布 100 Hz
+  state_publish_rate_hz: 50
+  watchdog_timeout_s: 0.5        # Alicia 数据超时 → SAFETY_HOLD
+
+# 夹爪：pyrobotiqgripper（串口直连，绕过 ROS2/RTDE）
+gripper:
+  enabled: true
+  com_port: "/dev/ttyUSB1"
+  speed: 255
+  force: 50                      # 闭合力（0-255），50 为夹取安全值
+  close_threshold_m: 0.0125      # Alicia 夹爪位置(米) → CLOSED
+  open_threshold_m: 0.005        # Alicia 夹爪位置(米) → OPEN
+  # 发布 gripper_state：True=开, False=合（来自 GripperController 滞回 FSM）
+
+# ============================================================
+# LeRobot 数据录制（record 模式）
+# 需要 source /opt/lerobot_venv/bin/activate
+# ============================================================
+recorder:
+  repo_id: my_user/ur_teleop_rtde
+  root: ""                        # "" = $HF_LEROBOT_HOME/{repo_id}
+  fps: 50
+  robot_type: ur10e_alicia_teleop
+  use_videos: true                # true=MP4, false=PNG
+  ee_pose_source: rtde            # rtde | none（RTDE getActualTCPPose）
+  state_threshold_rad: 0.4        # 夹爪关节 rad → 0/1 阈值
+  min_frames_per_episode: 2
+  cameras: {}                     # 可选：{name: {topic, image_key, height, width}}
+  task: teleoperation
+  # 特征开关（FrameBuilder 复用，均默认 true）
+  record_ur_joints: true
+  record_ur_ee_pose: true
+  record_ur_gripper: true
+  record_action_joints: true
+  record_action_gripper: true

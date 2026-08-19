@@ -22,3 +22,29 @@ __pycache__/
 # OS
 .DS_Store
 Thumbs.db
+
+# ================= 过程文件 / 生成物（不提交） =================
+
+# 数据录制与数据集
+dataset/
+*.bag
+*.bag.active
+*.db3
+
+# 帧图导出（rqt_graph 等生成物）
+frames_*.gv
+frames_*.pdf
+
+# 本地草稿笔记与临时文件
+prompt.md
+src.txt
+
+# 本地脚本（glm.sh 内含真实 API token，禁止提交）
+glm.sh
+
+# 根目录临时测试脚本与生成的 URDF
+test_keyboard.py
+test_servoj.py
+test_servoj_keyboard.py
+test.urdf
+ur10e_robotiq_ft300.urdf

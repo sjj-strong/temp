@@ -48,7 +48,7 @@ ros2 control list_controllers
 
 - `joint_state_broadcaster`
 - `scaled_joint_trajectory_controller`
-- `robotiq_gripper_trajectory_controller`
+- `robotiq_gripper_controller`
 - `robotiq_force_torque_sensor_broadcaster`
 
 ## 3. 真实硬件模式
@@ -90,24 +90,24 @@ MoveIt 中的 `ur_manipulator` 规划组控制 UR 六个关节；`gripper` 规�
 | 功能             | 接口                                                               |
 | ---------------- | ------------------------------------------------------------------ |
 | UR MoveIt 执行   | `/scaled_joint_trajectory_controller/follow_joint_trajectory`    |
-| 夹爪 MoveIt 执行 | `/robotiq_gripper_trajectory_controller/follow_joint_trajectory` |
+| 夹爪 MoveIt 执行 | `/robotiq_gripper_controller/gripper_cmd` |
 | 关节状态         | `/joint_states`                                                  |
 | FT300 wrench     | `/robotiq_force_torque_sensor_broadcaster/ft300_wrench`          |
 | FT300 测量坐标系 | `robotiq_ft_frame_id`                                            |
 
-夹爪使用单关节 `FollowJointTrajectory` controller，而不是官方 standalone launch 中的
-`ParallelGripperCommand` action。这是为了让 MoveIt Simple Controller Manager 可以直接执行夹爪规划。
+夹爪复用官方 `parallel_gripper_action_controller/GripperActionController`。MoveIt 将 `gripper`
+规划组的最终关节位置转换为 `ParallelGripperCommand`，由官方控制器完成开合、状态反馈与到位判定。
 
 UR 六轴使用官方 MoveIt 配置中的保守加速度上限 `5.0 rad/s²`；夹爪主动关节使用 `1.0 rad/s²`。
 这些限制是轨迹时间参数化的必需条件，首次真实硬件执行仍应在 RViz 中将速度与加速度缩放保持较低值。
 
-可单独测试夹爪轨迹接口：
+可直接测试官方夹爪 action；`0.0` 为打开，`0.8` 为闭合：
 
 ```bash
 ros2 action send_goal \
-  /robotiq_gripper_trajectory_controller/follow_joint_trajectory \
-  control_msgs/action/FollowJointTrajectory \
-  "{trajectory: {joint_names: [robotiq_85_left_knuckle_joint], points: [{positions: [0.0], time_from_start: {sec: 1}}]}}"
+  /robotiq_gripper_controller/gripper_cmd \
+  control_msgs/action/ParallelGripperCommand \
+  "{command: {name: [robotiq_85_left_knuckle_joint], position: [0.0], velocity: [], effort: []}}"
 ```
 
 ## 5. 常见问题
