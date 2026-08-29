@@ -33,6 +33,10 @@ if(BUILD_TESTING)
   target_link_libraries(test_reference_limiter Eigen3::Eigen)
   target_include_directories(test_reference_limiter PRIVATE include)
 
+  ament_add_gtest(test_cartesian_pose test/test_cartesian_pose.cpp)
+  target_link_libraries(test_cartesian_pose Eigen3::Eigen)
+  target_include_directories(test_cartesian_pose PRIVATE include)
+
   ament_add_gtest(test_wrench_safety test/test_wrench_safety.cpp)
   target_include_directories(test_wrench_safety PRIVATE include)
 
@@ -41,6 +45,8 @@ if(BUILD_TESTING)
   ament_add_gmock(test_load_controller test/test_load_controller.cpp)
   target_link_libraries(test_load_controller ${PROJECT_NAME})
   ament_target_dependencies(test_load_controller controller_manager ros2_control_test_assets)
+  set_tests_properties(test_load_controller PROPERTIES
+    ENVIRONMENT "AMENT_PREFIX_PATH=${CMAKE_INSTALL_PREFIX}:$ENV{AMENT_PREFIX_PATH}")
 endif()
 
 install(TARGETS ${PROJECT_NAME} LIBRARY DESTINATION lib)
