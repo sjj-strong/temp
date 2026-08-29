@@ -59,6 +59,32 @@ bool finite_and_nonnegative(const Vector6& values)
 {
   return std::all_of(values.begin(), values.end(), [](double value) { return std::isfinite(value) && value >= 0.0; });
 }
+
+bool finite_vector(const Vector6& values)
+{
+  return std::all_of(values.begin(), values.end(), [](double value) { return std::isfinite(value); });
+}
+
+double orientation_distance(const Eigen::Quaterniond& first, const Eigen::Quaterniond& second)
+{
+  return 2.0 * std::acos(std::clamp(std::abs(first.normalized().dot(second.normalized())), 0.0, 1.0));
+}
+
+bool chain_joint_order_matches(const KDL::Chain& chain, const std::vector<std::string>& joints, const std::string& tf_prefix)
+{
+  std::size_t joint_index = 0;
+  for (unsigned int segment_index = 0; segment_index < chain.getNrOfSegments(); ++segment_index) {
+    const KDL::Joint& joint = chain.getSegment(segment_index).getJoint();
+    if (joint.getType() == KDL::Joint::None) {
+      continue;
+    }
+    if (joint_index >= joints.size() || joint.getName() != tf_prefix + joints[joint_index]) {
+      return false;
+    }
+    ++joint_index;
+  }
+  return joint_index == joints.size();
+}
 }  // namespace
 
 controller_interface::CallbackReturn CartesianImpedanceController::on_init()
@@ -81,6 +107,8 @@ controller_interface::CallbackReturn CartesianImpedanceController::on_init()
     node.declare_parameter("linear_reference_speed", 0.05);
     node.declare_parameter("angular_reference_speed", 0.2);
     node.declare_parameter("command_timeout", 0.5);
+    node.declare_parameter("integral_reset_position_threshold", 0.005);
+    node.declare_parameter("integral_reset_orientation_threshold", 0.05);
     node.declare_parameter("use_coriolis", true);
     node.declare_parameter("workspace_min", std::vector<double>{ -1.2, -1.2, -0.1, -M_PI, -M_PI, -M_PI });
     node.declare_parameter("workspace_max", std::vector<double>{ 1.2, 1.2, 1.5, M_PI, M_PI, M_PI });
@@ -154,6 +182,8 @@ controller_interface::CallbackReturn CartesianImpedanceController::on_configure(
     linear_reference_speed_ = node.get_parameter("linear_reference_speed").as_double();
     angular_reference_speed_ = node.get_parameter("angular_reference_speed").as_double();
     command_timeout_ = node.get_parameter("command_timeout").as_double();
+    integral_reset_position_threshold_ = node.get_parameter("integral_reset_position_threshold").as_double();
+    integral_reset_orientation_threshold_ = node.get_parameter("integral_reset_orientation_threshold").as_double();
     use_coriolis_ = node.get_parameter("use_coriolis").as_bool();
     use_external_ft_ = node.get_parameter("use_external_ft").as_bool();
     ft_sensor_name_ = node.get_parameter("ft_sensor_name").as_string();
@@ -162,8 +192,10 @@ controller_interface::CallbackReturn CartesianImpedanceController::on_configure(
         !finite_and_nonnegative(integral_limit_) || !finite_and_nonnegative(max_wrench_) ||
         !finite_and_nonnegative(max_torque_) || !finite_and_nonnegative(max_torque_rate_) ||
         !finite_and_nonnegative(max_measured_wrench_) || !std::isfinite(linear_reference_speed_) ||
-        !std::isfinite(angular_reference_speed_) || !std::isfinite(command_timeout_) || linear_reference_speed_ < 0.0 ||
-        angular_reference_speed_ < 0.0 || command_timeout_ < 0.0) {
+        !std::isfinite(angular_reference_speed_) || !std::isfinite(command_timeout_) ||
+        !std::isfinite(integral_reset_position_threshold_) || !std::isfinite(integral_reset_orientation_threshold_) ||
+        linear_reference_speed_ < 0.0 || angular_reference_speed_ < 0.0 || command_timeout_ < 0.0 ||
+        integral_reset_position_threshold_ < 0.0 || integral_reset_orientation_threshold_ < 0.0) {
       throw std::runtime_error("limits, reference speeds, and command_timeout must be finite and non-negative");
     }
     for (std::size_t index = 0; index < joints_.size(); ++index) {
@@ -202,12 +234,21 @@ bool CartesianImpedanceController::configure_kinematics()
                  joints_.size());
     return false;
   }
+  if (!chain_joint_order_matches(tip_chain_, joints_, tf_prefix_)) {
+    RCLCPP_ERROR(get_node()->get_logger(), "Configured joint names and order must exactly match the KDL chain from %s to %s",
+                 base_frame_.c_str(), tip_frame_.c_str());
+    return false;
+  }
   tip_fk_ = std::make_unique<KDL::ChainFkSolverPos_recursive>(tip_chain_);
   jacobian_solver_ = std::make_unique<KDL::ChainJntToJacSolver>(tip_chain_);
   dynamics_solver_ = std::make_unique<KDL::ChainDynParam>(tip_chain_, KDL::Vector::Zero());
+  position_buffer_.resize(joints_.size());
+  velocity_buffer_.resize(joints_.size());
+  coriolis_buffer_.resize(joints_.size());
+  jacobian_buffer_.resize(joints_.size());
   if (use_external_ft_) {
     if (!tree.getChain(tf_prefix_ + base_frame_, tf_prefix_ + ft_frame_, sensor_chain_) ||
-        sensor_chain_.getNrOfJoints() != joints_.size()) {
+        sensor_chain_.getNrOfJoints() != joints_.size() || !chain_joint_order_matches(sensor_chain_, joints_, tf_prefix_)) {
       RCLCPP_ERROR(get_node()->get_logger(), "Cannot create a compatible KDL sensor chain from %s to %s", base_frame_.c_str(),
                    ft_frame_.c_str());
       return false;
@@ -278,10 +319,14 @@ bool CartesianImpedanceController::within_joint_and_workspace_limits(const KDL::
       return false;
     }
   }
-  const Eigen::Vector3d translation = pose.translation();
+  return within_workspace_limits(pose.translation());
+}
+
+bool CartesianImpedanceController::within_workspace_limits(const Eigen::Vector3d& position) const
+{
   for (std::size_t index = 0; index < 3; ++index) {
-    if (translation(static_cast<Eigen::Index>(index)) < workspace_min_[index] ||
-        translation(static_cast<Eigen::Index>(index)) > workspace_max_[index]) {
+    if (position(static_cast<Eigen::Index>(index)) < workspace_min_[index] ||
+        position(static_cast<Eigen::Index>(index)) > workspace_max_[index]) {
       return false;
     }
   }
@@ -293,7 +338,8 @@ void CartesianImpedanceController::target_callback(const geometry_msgs::msg::Pos
   const std::string base_frame = tf_prefix_ + base_frame_;
   if ((!message->header.frame_id.empty() && message->header.frame_id != base_frame) ||
       !std::isfinite(message->pose.position.x) || !std::isfinite(message->pose.position.y) ||
-      !std::isfinite(message->pose.position.z)) {
+      !std::isfinite(message->pose.position.z) ||
+      !within_workspace_limits(Eigen::Vector3d(message->pose.position.x, message->pose.position.y, message->pose.position.z))) {
     RCLCPP_WARN(get_node()->get_logger(), "Ignoring target_pose outside base frame or with non-finite position");
     return;
   }
@@ -315,10 +361,8 @@ void CartesianImpedanceController::target_callback(const geometry_msgs::msg::Pos
 
 controller_interface::CallbackReturn CartesianImpedanceController::on_activate(const rclcpp_lifecycle::State&)
 {
-  KDL::JntArray position(joints_.size());
-  KDL::JntArray velocity(joints_.size());
   Eigen::Isometry3d pose;
-  if (!read_joint_state(position, velocity) || !get_current_pose(position, pose)) {
+  if (!read_joint_state(position_buffer_, velocity_buffer_) || !get_current_pose(position_buffer_, pose)) {
     RCLCPP_ERROR(get_node()->get_logger(), "Cannot read a valid state while activating Cartesian impedance control");
     return CallbackReturn::ERROR;
   }
@@ -327,6 +371,7 @@ controller_interface::CallbackReturn CartesianImpedanceController::on_activate(c
   integral_error_.fill(0.0);
   previous_torque_.fill(0.0);
   last_target_sequence_ = 0;
+  has_last_target_pose_ = false;
   timed_out_ = false;
   target_buffer_.writeFromNonRT(PoseTarget{});
   write_zero_torque();
@@ -343,29 +388,34 @@ controller_interface::CallbackReturn CartesianImpedanceController::on_deactivate
 
 controller_interface::return_type CartesianImpedanceController::update(const rclcpp::Time& time, const rclcpp::Duration& period)
 {
-  KDL::JntArray position(joints_.size());
-  KDL::JntArray velocity(joints_.size());
   Eigen::Isometry3d current_pose;
-  if (!read_joint_state(position, velocity) || !get_current_pose(position, current_pose) ||
-      !within_joint_and_workspace_limits(position, current_pose)) {
+  if (!read_joint_state(position_buffer_, velocity_buffer_) || !get_current_pose(position_buffer_, current_pose) ||
+      !within_joint_and_workspace_limits(position_buffer_, current_pose)) {
     write_zero_torque();
     return controller_interface::return_type::ERROR;
   }
 
   const PoseTarget* target = target_buffer_.readFromRT();
-  const bool has_fresh_target = target != nullptr && target->valid &&
-                                (command_timeout_ == 0.0 || (time - target->received_time).seconds() <= command_timeout_);
+  const double target_age = target != nullptr && target->valid ? (time - target->received_time).seconds() : -1.0;
+  const bool has_fresh_target = target != nullptr && target->valid && target_age >= 0.0 &&
+                                (command_timeout_ == 0.0 || target_age <= command_timeout_);
   PoseReference requested_reference;
   if (has_fresh_target) {
     requested_reference = target->pose;
     if (target->sequence != last_target_sequence_) {
-      integral_error_.fill(0.0);
+      if (!has_last_target_pose_ || (target->pose.position - last_target_pose_.position).norm() > integral_reset_position_threshold_ ||
+          orientation_distance(target->pose.orientation, last_target_pose_.orientation) > integral_reset_orientation_threshold_) {
+        integral_error_.fill(0.0);
+      }
+      last_target_pose_ = target->pose;
+      has_last_target_pose_ = true;
       last_target_sequence_ = target->sequence;
     }
     timed_out_ = false;
   } else {
     if (!timed_out_) {
       hold_pose_ = pose_reference(current_pose);
+      integral_error_.fill(0.0);
       timed_out_ = true;
     }
     requested_reference = hold_pose_;
@@ -375,46 +425,59 @@ controller_interface::return_type CartesianImpedanceController::update(const rcl
   const PoseReference previous_reference = reference_pose_;
   reference_pose_ = limit_reference_step(reference_pose_, requested_reference, linear_reference_speed_, angular_reference_speed_,
                                          period_seconds);
+  if (!within_workspace_limits(reference_pose_.position)) {
+    write_zero_torque();
+    return controller_interface::return_type::ERROR;
+  }
   Eigen::Isometry3d target_pose = Eigen::Isometry3d::Identity();
   target_pose.translation() = reference_pose_.position;
   target_pose.linear() = reference_pose_.orientation.toRotationMatrix();
   const Vector6 pose_error = cartesian_pose_error(current_pose, target_pose);
-  integral_error_ = integrate_error(integral_error_, pose_error, period_seconds, integral_limit_);
-
-  KDL::Jacobian jacobian(joints_.size());
-  if (jacobian_solver_->JntToJac(position, jacobian) < 0) {
+  if (jacobian_solver_->JntToJac(position_buffer_, jacobian_buffer_) < 0) {
     write_zero_torque();
     return controller_interface::return_type::ERROR;
   }
-  const Eigen::VectorXd joint_velocity = velocity.data;
-  const Eigen::VectorXd cartesian_velocity = jacobian.data * joint_velocity;
+  cartesian_velocity_buffer_.noalias() = jacobian_buffer_.data * velocity_buffer_.data;
   Vector6 measured_twist{};
   for (std::size_t index = 0; index < measured_twist.size(); ++index) {
-    measured_twist[index] = cartesian_velocity(static_cast<Eigen::Index>(index));
+    measured_twist[index] = cartesian_velocity_buffer_(static_cast<Eigen::Index>(index));
   }
   const Vector6 desired_twist = reference_twist(previous_reference, reference_pose_, period_seconds);
+  const Vector6 zero_integral{};
+  const Vector6 wrench_without_integral = cartesian_impedance_wrench_unbounded(
+      pose_error, measured_twist, desired_twist, zero_integral, stiffness_, damping_, zero_integral);
+  integral_error_ = integrate_error_with_antiwindup(integral_error_, pose_error, period_seconds, integral_limit_,
+                                                     wrench_without_integral, integral_gain_, max_wrench_);
   const Vector6 task_wrench = cartesian_impedance_wrench(pose_error, measured_twist, desired_twist, integral_error_, stiffness_,
                                                           damping_, integral_gain_, max_wrench_);
+  if (!finite_vector(task_wrench)) {
+    write_zero_torque();
+    return controller_interface::return_type::ERROR;
+  }
 
   Vector6 external_wrench{};
-  if (!get_external_wrench_in_base(position, external_wrench) ||
+  if (!get_external_wrench_in_base(position_buffer_, external_wrench) ||
       (use_external_ft_ && !wrench_within_limits(external_wrench, max_measured_wrench_))) {
     write_zero_torque();
     return controller_interface::return_type::ERROR;
   }
 
-  Eigen::VectorXd desired_torque = jacobian.data.transpose() * Eigen::Map<const Eigen::Matrix<double, 6, 1>>(task_wrench.data());
+  const Eigen::Map<const Eigen::Matrix<double, 6, 1>> task_wrench_eigen(task_wrench.data());
+  desired_torque_buffer_.noalias() = jacobian_buffer_.data.transpose() * task_wrench_eigen;
   if (use_coriolis_) {
-    KDL::JntArray coriolis(joints_.size());
-    if (dynamics_solver_->JntToCoriolis(position, velocity, coriolis) < 0) {
+    if (dynamics_solver_->JntToCoriolis(position_buffer_, velocity_buffer_, coriolis_buffer_) < 0) {
       write_zero_torque();
       return controller_interface::return_type::ERROR;
     }
-    desired_torque += coriolis.data;
+    desired_torque_buffer_ += coriolis_buffer_.data;
   }
   Vector6 desired_torque_array{};
   for (std::size_t index = 0; index < desired_torque_array.size(); ++index) {
-    desired_torque_array[index] = desired_torque(static_cast<Eigen::Index>(index));
+    desired_torque_array[index] = desired_torque_buffer_(static_cast<Eigen::Index>(index));
+  }
+  if (!finite_vector(desired_torque_array)) {
+    write_zero_torque();
+    return controller_interface::return_type::ERROR;
   }
   const Vector6 bounded_torque = limit_joint_torque(desired_torque_array, previous_torque_, max_torque_, max_torque_rate_, period_seconds);
   if (!write_joint_torque(bounded_torque)) {

@@ -14,6 +14,8 @@
 #include <kdl/chaindynparam.hpp>
 #include <kdl/chainfksolverpos_recursive.hpp>
 #include <kdl/chainjnttojacsolver.hpp>
+#include <kdl/jacobian.hpp>
+#include <kdl/jntarray.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <realtime_tools/realtime_buffer.hpp>
 
@@ -47,6 +49,7 @@ private:
   bool get_current_pose(const KDL::JntArray& position, Eigen::Isometry3d& pose) const;
   bool get_external_wrench_in_base(const KDL::JntArray& position, Vector6& wrench) const;
   bool within_joint_and_workspace_limits(const KDL::JntArray& position, const Eigen::Isometry3d& pose) const;
+  bool within_workspace_limits(const Eigen::Vector3d& position) const;
   void target_callback(const geometry_msgs::msg::PoseStamped::SharedPtr message);
   void write_zero_torque();
   bool write_joint_torque(const Vector6& torque);
@@ -77,6 +80,8 @@ private:
   double linear_reference_speed_{ 0.05 };
   double angular_reference_speed_{ 0.2 };
   double command_timeout_{ 0.5 };
+  double integral_reset_position_threshold_{ 0.005 };
+  double integral_reset_orientation_threshold_{ 0.05 };
 
   KDL::Chain tip_chain_;
   KDL::Chain sensor_chain_;
@@ -84,12 +89,20 @@ private:
   std::unique_ptr<KDL::ChainFkSolverPos_recursive> sensor_fk_;
   std::unique_ptr<KDL::ChainJntToJacSolver> jacobian_solver_;
   std::unique_ptr<KDL::ChainDynParam> dynamics_solver_;
+  KDL::JntArray position_buffer_;
+  KDL::JntArray velocity_buffer_;
+  KDL::JntArray coriolis_buffer_;
+  KDL::Jacobian jacobian_buffer_;
+  Eigen::Matrix<double, 6, 1> cartesian_velocity_buffer_{ Eigen::Matrix<double, 6, 1>::Zero() };
+  Eigen::Matrix<double, 6, 1> desired_torque_buffer_{ Eigen::Matrix<double, 6, 1>::Zero() };
 
   PoseReference reference_pose_;
   PoseReference hold_pose_;
   Vector6 integral_error_{};
   Vector6 previous_torque_{};
+  PoseReference last_target_pose_;
   std::uint64_t last_target_sequence_{ 0 };
+  bool has_last_target_pose_{ false };
   bool timed_out_{ false };
   std::atomic<std::uint64_t> target_sequence_counter_{ 0 };
   realtime_tools::RealtimeBuffer<PoseTarget> target_buffer_;

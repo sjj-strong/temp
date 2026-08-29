@@ -55,6 +55,21 @@ TEST(ImpedanceLaw, ClampsIntegralErrorPerAxis)
   EXPECT_DOUBLE_EQ(integrated[2], 0.05);
 }
 
+TEST(ImpedanceLaw, StopsIntegratingWhenIntegralWouldDeepenWrenchSaturation)
+{
+  const Vector6 previous{};
+  const Vector6 pose_error{ 1.0, 0.0, 0.0, 0.0, 0.0, 0.0 };
+  const Vector6 wrench_without_integral{ 10.0, 0.0, 0.0, 0.0, 0.0, 0.0 };
+  const Vector6 integral_gain{ 5.0, 0.0, 0.0, 0.0, 0.0, 0.0 };
+  const Vector6 integral_limit{ 10.0, 10.0, 10.0, 10.0, 10.0, 10.0 };
+  const Vector6 wrench_limit{ 10.0, 10.0, 10.0, 10.0, 10.0, 10.0 };
+
+  const Vector6 integrated = integrate_error_with_antiwindup(
+      previous, pose_error, 1.0, integral_limit, wrench_without_integral, integral_gain, wrench_limit);
+
+  EXPECT_DOUBLE_EQ(integrated[0], 0.0);
+}
+
 TEST(ImpedanceLaw, AppliesAbsoluteAndRateTorqueLimits)
 {
   const Vector6 desired{ 30.0, -30.0, 3.0, 0.0, 0.0, 0.0 };

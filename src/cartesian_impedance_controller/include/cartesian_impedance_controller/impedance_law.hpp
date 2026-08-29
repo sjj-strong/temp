@@ -8,17 +8,29 @@ namespace cartesian_impedance_controller
 {
 using Vector6 = std::array<double, 6>;
 
+inline Vector6 cartesian_impedance_wrench_unbounded(const Vector6& pose_error, const Vector6& measured_twist,
+                                                    const Vector6& desired_twist, const Vector6& integral_error,
+                                                    const Vector6& stiffness, const Vector6& damping,
+                                                    const Vector6& integral_gain)
+{
+  Vector6 command{};
+  for (std::size_t index = 0; index < command.size(); ++index) {
+    command[index] = stiffness[index] * pose_error[index] + damping[index] * (desired_twist[index] - measured_twist[index]) +
+                     integral_gain[index] * integral_error[index];
+  }
+  return command;
+}
+
 inline Vector6 cartesian_impedance_wrench(const Vector6& pose_error, const Vector6& measured_twist,
                                           const Vector6& desired_twist, const Vector6& integral_error,
                                           const Vector6& stiffness, const Vector6& damping,
                                           const Vector6& integral_gain, const Vector6& wrench_limit)
 {
-  Vector6 command{};
+  Vector6 command = cartesian_impedance_wrench_unbounded(pose_error, measured_twist, desired_twist, integral_error,
+                                                          stiffness, damping, integral_gain);
   for (std::size_t index = 0; index < command.size(); ++index) {
-    const double unconstrained = stiffness[index] * pose_error[index] +
-                                 damping[index] * (desired_twist[index] - measured_twist[index]) +
-                                 integral_gain[index] * integral_error[index];
-    command[index] = std::clamp(unconstrained, -std::abs(wrench_limit[index]), std::abs(wrench_limit[index]));
+    const double limit = std::abs(wrench_limit[index]);
+    command[index] = std::clamp(command[index], -limit, limit);
   }
   return command;
 }
@@ -35,6 +47,24 @@ inline Vector6 integrate_error(const Vector6& previous, const Vector6& pose_erro
     result[index] = std::clamp(previous[index] + pose_error[index] * period_seconds, -limit, limit);
   }
   return result;
+}
+
+inline Vector6 integrate_error_with_antiwindup(const Vector6& previous, const Vector6& pose_error,
+                                               const double period_seconds, const Vector6& integral_limit,
+                                               const Vector6& wrench_without_integral, const Vector6& integral_gain,
+                                               const Vector6& wrench_limit)
+{
+  Vector6 candidate = integrate_error(previous, pose_error, period_seconds, integral_limit);
+  for (std::size_t index = 0; index < candidate.size(); ++index) {
+    const double candidate_wrench = wrench_without_integral[index] + integral_gain[index] * candidate[index];
+    const double limit = std::abs(wrench_limit[index]);
+    const bool deepens_positive_saturation = candidate_wrench > limit && pose_error[index] > 0.0;
+    const bool deepens_negative_saturation = candidate_wrench < -limit && pose_error[index] < 0.0;
+    if (deepens_positive_saturation || deepens_negative_saturation) {
+      candidate[index] = previous[index];
+    }
+  }
+  return candidate;
 }
 
 inline Vector6 limit_joint_torque(const Vector6& desired, const Vector6& previous, const Vector6& absolute_limit,

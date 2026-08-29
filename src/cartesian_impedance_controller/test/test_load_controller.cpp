@@ -62,6 +62,20 @@ TEST(CartesianImpedanceController, ConfiguresSixJointEffortContract)
                                    "wrist_1_joint/velocity", "wrist_2_joint/velocity", "wrist_3_joint/velocity"));
 }
 
+TEST(CartesianImpedanceController, RejectsJointOrderDifferentFromKdlChain)
+{
+  cartesian_impedance_controller::CartesianImpedanceController controller;
+  ASSERT_EQ(controller.init("cartesian_impedance", kSixAxisUrdf, 500, "", rclcpp::NodeOptions()),
+            controller_interface::return_type::OK);
+  ASSERT_TRUE(controller.get_node()
+                  ->set_parameter(rclcpp::Parameter("joints", std::vector<std::string>{
+                                                               "shoulder_lift_joint", "shoulder_pan_joint", "elbow_joint",
+                                                               "wrist_1_joint", "wrist_2_joint", "wrist_3_joint" }))
+                  .successful);
+
+  EXPECT_NE(controller.configure().id(), lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE);
+}
+
 int main(int argc, char* argv[])
 {
   ::testing::InitGoogleMock(&argc, argv);

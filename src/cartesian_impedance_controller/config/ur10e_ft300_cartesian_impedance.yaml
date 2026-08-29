@@ -26,6 +26,9 @@ cartesian_impedance_controller:
     # Keep zero until PD behavior is verified on hardware.
     integral_gain: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
     integral_limit: [0.05, 0.05, 0.05, 0.2, 0.2, 0.2]
+    # Repeated identical messages do not reset Ki. Reset only after a target jump.
+    integral_reset_position_threshold: 0.005
+    integral_reset_orientation_threshold: 0.05
 
     max_wrench: [40.0, 40.0, 40.0, 4.0, 4.0, 4.0]
     max_torque: [60.0, 60.0, 60.0, 30.0, 30.0, 30.0]
