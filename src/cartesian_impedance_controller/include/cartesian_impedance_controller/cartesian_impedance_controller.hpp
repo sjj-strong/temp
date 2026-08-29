@@ -51,6 +51,7 @@ private:
   std::vector<std::string> joints_;
   Vector6 stiffness_{};
   Vector6 max_wrench_{};
+  Vector6 max_measured_wrench_{};
   Vector6 speed_limits_{};
   Vector6 deviation_limits_{};
   std::array<bool, 6> selection_{};

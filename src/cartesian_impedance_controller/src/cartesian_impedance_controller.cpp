@@ -8,6 +8,7 @@
 #include <pluginlib/class_list_macros.hpp>
 
 #include "cartesian_impedance_controller/wrench_transform.hpp"
+#include "cartesian_impedance_controller/wrench_safety.hpp"
 
 namespace cartesian_impedance_controller
 {
@@ -58,6 +59,7 @@ controller_interface::CallbackReturn CartesianImpedanceController::on_init()
                                                                  "wrist_1_joint", "wrist_2_joint", "wrist_3_joint" });
     node.declare_parameter("stiffness", std::vector<double>{ 100.0, 100.0, 100.0, 10.0, 10.0, 10.0 });
     node.declare_parameter("max_wrench", std::vector<double>{ 40.0, 40.0, 40.0, 4.0, 4.0, 4.0 });
+    node.declare_parameter("max_measured_wrench", std::vector<double>{ 80.0, 80.0, 80.0, 8.0, 8.0, 8.0 });
     node.declare_parameter("selection_vector", std::vector<bool>{ true, true, true, true, true, true });
     node.declare_parameter("speed_limits", std::vector<double>{ 0.05, 0.05, 0.05, 0.2, 0.2, 0.2 });
     node.declare_parameter("deviation_limits", std::vector<double>{ 0.01, 0.01, 0.01, 0.1, 0.1, 0.1 });
@@ -114,6 +116,7 @@ controller_interface::CallbackReturn CartesianImpedanceController::on_configure(
     joints_ = node.get_parameter("joints").as_string_array();
     stiffness_ = vector_parameter(node.get_parameter("stiffness").as_double_array(), "stiffness");
     max_wrench_ = vector_parameter(node.get_parameter("max_wrench").as_double_array(), "max_wrench");
+    max_measured_wrench_ = vector_parameter(node.get_parameter("max_measured_wrench").as_double_array(), "max_measured_wrench");
     speed_limits_ = vector_parameter(node.get_parameter("speed_limits").as_double_array(), "speed_limits");
     deviation_limits_ = vector_parameter(node.get_parameter("deviation_limits").as_double_array(), "deviation_limits");
     const auto selection = node.get_parameter("selection_vector").as_bool_array();
@@ -237,6 +240,12 @@ controller_interface::return_type CartesianImpedanceController::update(const rcl
                  rotation_error.axis().y() * rotation_error.angle(), rotation_error.axis().z() * rotation_error.angle() };
   Vector6 command = spring_wrench(error, stiffness_, max_wrench_);
   const Vector6 measured = current_wrench_in_base();
+  if (use_external_ft_ && !wrench_within_limits(measured, max_measured_wrench_)) {
+    static_cast<void>(command_interfaces_[kForceModeDisable].set_value(1.0));
+    static_cast<void>(command_interfaces_[kForceModeAsync].set_value(2.0));
+    RCLCPP_ERROR(get_node()->get_logger(), "Measured FT300 wrench exceeded configured safety limit");
+    return controller_interface::return_type::ERROR;
+  }
   for (std::size_t index = 0; index < command.size(); ++index) {
     command[index] = std::clamp(command[index] - force_feedback_gain_ * measured[index], -max_wrench_[index], max_wrench_[index]);
   }
