@@ -18,6 +18,10 @@
   <xacro:arg name="gripper_rpy" default="0 0 0"/>
   <xacro:arg name="tcp_xyz" default="0 0 0.15"/>
   <xacro:arg name="tcp_rpy" default="0 0 0"/>
+  <xacro:arg name="ft_sensor_use_fake_mode" default="false"/>
+  <xacro:arg name="ft_sensor_max_retries" default="100"/>
+  <xacro:arg name="ft_sensor_read_rate" default="10"/>
+  <xacro:arg name="ft_sensor_ftdi_id" default=""/>
 
   <!-- ===== ros2_control 参数（与官方 ur.urdf.xacro 相同的参数集） ===== -->
   <xacro:arg name="robot_ip" default="0.0.0.0" />
@@ -49,6 +53,7 @@
   <xacro:include filename="$(find ur_description)/urdf/ur_macro.xacro"/>
   <xacro:include filename="$(find ur_robot_driver)/urdf/ur.ros2_control.xacro"/>
   <xacro:include filename="$(find robotiq_ft_sensor_description)/urdf/robotiq_ft300.urdf.xacro"/>
+  <xacro:include filename="$(find robotiq_ft_sensor_description)/urdf/robotiq_fts.ros2_control.xacro"/>
   <xacro:include filename="$(find robotiq_description)/urdf/robotiq_2f_85_macro.urdf.xacro"/>
 
   <!-- ===== UR 配置文件路径 ===== -->
@@ -135,6 +140,18 @@
     trajectory_port="$(arg trajectory_port)"
     ur_type="$(arg ur_type)"
     verify_robot_model="$(arg verify_robot_model)"
+  />
+
+  <!-- FT300 hardware is part of the ros2_control graph even when the Cartesian
+       controller leaves use_external_ft=false.  This keeps external sensing a
+       runtime controller option while preserving a single authoritative TF chain. -->
+  <xacro:robotiq_fts_ros2_control
+    name="$(arg name)"
+    use_fake_mode="$(arg ft_sensor_use_fake_mode)"
+    max_retries="$(arg ft_sensor_max_retries)"
+    read_rate="$(arg ft_sensor_read_rate)"
+    ftdi_id="$(arg ft_sensor_ftdi_id)"
+    tf_prefix="$(arg tf_prefix)"
   />
 
 </robot>

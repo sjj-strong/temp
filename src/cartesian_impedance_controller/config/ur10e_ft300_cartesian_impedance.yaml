@@ -1,0 +1,33 @@
+controller_manager:
+  ros__parameters:
+    cartesian_impedance_controller:
+      type: cartesian_impedance_controller/CartesianImpedanceController
+
+cartesian_impedance_controller:
+  ros__parameters:
+    # Do not activate ur_controllers/ForceModeController at the same time.
+    tf_prefix: ""
+    base_frame: base_link
+    tip_frame: gripper_tcp
+    target_topic: ~/target_pose
+    joints:
+      - shoulder_pan_joint
+      - shoulder_lift_joint
+      - elbow_joint
+      - wrist_1_joint
+      - wrist_2_joint
+      - wrist_3_joint
+    selection_vector: [true, true, true, true, true, true]
+    stiffness: [100.0, 100.0, 100.0, 10.0, 10.0, 10.0]
+    max_wrench: [40.0, 40.0, 40.0, 4.0, 4.0, 4.0]
+    speed_limits: [0.05, 0.05, 0.05, 0.2, 0.2, 0.2]
+    deviation_limits: [0.01, 0.01, 0.01, 0.1, 0.1, 0.1]
+    ur_damping: 0.025
+    ur_gain_scaling: 0.5
+
+    # Set false to run without any external force-torque hardware.
+    use_external_ft: true
+    ft_sensor_name: robotiq_ft_sensor
+    ft_frame: robotiq_ft_frame_id
+    # Start at zero; increase only after verifying the measured wrench sign on hardware.
+    force_feedback_gain: 0.0
