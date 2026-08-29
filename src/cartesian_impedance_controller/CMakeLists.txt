@@ -29,6 +29,10 @@ if(BUILD_TESTING)
   target_link_libraries(test_impedance_law Eigen3::Eigen)
   target_include_directories(test_impedance_law PRIVATE include)
 
+  ament_add_gtest(test_reference_limiter test/test_reference_limiter.cpp)
+  target_link_libraries(test_reference_limiter Eigen3::Eigen)
+  target_include_directories(test_reference_limiter PRIVATE include)
+
   ament_add_gtest(test_wrench_safety test/test_wrench_safety.cpp)
   target_include_directories(test_wrench_safety PRIVATE include)
 
