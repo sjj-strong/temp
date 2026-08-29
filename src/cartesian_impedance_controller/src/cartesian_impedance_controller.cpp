@@ -430,6 +430,7 @@ void CartesianImpedanceController::write_zero_torque()
   for (auto& command_interface : command_interfaces_) {
     static_cast<void>(command_interface.set_value(0.0));
   }
+  previous_torque_.fill(0.0);
 }
 
 bool CartesianImpedanceController::write_joint_torque(const Vector6& torque)
