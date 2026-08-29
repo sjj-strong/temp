@@ -372,6 +372,7 @@ controller_interface::return_type CartesianImpedanceController::update(const rcl
   }
 
   const double period_seconds = period.seconds();
+  const PoseReference previous_reference = reference_pose_;
   reference_pose_ = limit_reference_step(reference_pose_, requested_reference, linear_reference_speed_, angular_reference_speed_,
                                          period_seconds);
   Eigen::Isometry3d target_pose = Eigen::Isometry3d::Identity();
@@ -391,7 +392,7 @@ controller_interface::return_type CartesianImpedanceController::update(const rcl
   for (std::size_t index = 0; index < measured_twist.size(); ++index) {
     measured_twist[index] = cartesian_velocity(static_cast<Eigen::Index>(index));
   }
-  const Vector6 desired_twist{};
+  const Vector6 desired_twist = reference_twist(previous_reference, reference_pose_, period_seconds);
   const Vector6 task_wrench = cartesian_impedance_wrench(pose_error, measured_twist, desired_twist, integral_error_, stiffness_,
                                                           damping_, integral_gain_, max_wrench_);
 

@@ -3,7 +3,7 @@
 <package format="3">
   <name>cartesian_impedance_controller</name>
   <version>0.1.0</version>
-  <description>UR Force Mode Cartesian impedance controller with optional external force torque sensing.</description>
+  <description>Torque-level Cartesian impedance controller for UR effort interfaces with optional external force torque safety monitoring.</description>
   <maintainer email="user@example.com">user</maintainer>
   <license>BSD-3-Clause</license>
 

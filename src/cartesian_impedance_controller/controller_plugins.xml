@@ -2,6 +2,6 @@
   <class name="cartesian_impedance_controller/CartesianImpedanceController"
          type="cartesian_impedance_controller::CartesianImpedanceController"
          base_class_type="controller_interface::ControllerInterface">
-    <description>UR Force Mode controller with optional external force-torque sensing.</description>
+    <description>Torque-level Cartesian impedance controller for UR effort interfaces with optional external force-torque safety monitoring.</description>
   </class>
 </library>

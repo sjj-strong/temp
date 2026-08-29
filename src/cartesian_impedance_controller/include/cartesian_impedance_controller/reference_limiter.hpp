@@ -5,6 +5,8 @@
 
 #include <Eigen/Geometry>
 
+#include "cartesian_impedance_controller/impedance_law.hpp"
+
 namespace cartesian_impedance_controller
 {
 struct PoseReference
@@ -40,5 +42,28 @@ inline PoseReference limit_reference_step(const PoseReference& current, const Po
                                  : 1.0;
   result.orientation = current_orientation.slerp(interpolation, target_orientation).normalized();
   return result;
+}
+
+inline Vector6 reference_twist(const PoseReference& previous, const PoseReference& current, const double period_seconds)
+{
+  Vector6 result{};
+  if (!std::isfinite(period_seconds) || period_seconds <= 0.0) {
+    return result;
+  }
+  const Eigen::Vector3d linear_velocity = (current.position - previous.position) / period_seconds;
+  Eigen::Quaterniond previous_orientation = previous.orientation.normalized();
+  Eigen::Quaterniond current_orientation = current.orientation.normalized();
+  if (previous_orientation.dot(current_orientation) < 0.0) {
+    current_orientation.coeffs() *= -1.0;
+  }
+  Eigen::Quaterniond delta = current_orientation * previous_orientation.conjugate();
+  delta.normalize();
+  if (delta.w() < 0.0) {
+    delta.coeffs() *= -1.0;
+  }
+  const Eigen::AngleAxisd angular_delta(delta);
+  const Eigen::Vector3d angular_velocity = angular_delta.axis() * angular_delta.angle() / period_seconds;
+  return { linear_velocity.x(), linear_velocity.y(), linear_velocity.z(), angular_velocity.x(), angular_velocity.y(),
+           angular_velocity.z() };
 }
 }  // namespace cartesian_impedance_controller
