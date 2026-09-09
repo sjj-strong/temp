@@ -66,6 +66,10 @@ def generate_launch_description():
     visual_params_file = LaunchConfiguration("visual_params_file")
     transmission_hw_interface = LaunchConfiguration("transmission_hw_interface")
     initial_positions_file = LaunchConfiguration("initial_positions_file")
+    ft_sensor_use_fake_mode = LaunchConfiguration("ft_sensor_use_fake_mode")
+    ft_sensor_max_retries = LaunchConfiguration("ft_sensor_max_retries")
+    ft_sensor_read_rate = LaunchConfiguration("ft_sensor_read_rate")
+    ft_sensor_ftdi_id = LaunchConfiguration("ft_sensor_ftdi_id")
 
     declared_arguments = [
         DeclareLaunchArgument("name", default_value="ur10e_robotiq_ft"),
@@ -147,6 +151,12 @@ def generate_launch_description():
                  "initial_positions.yaml"]
             ),
         ),
+        # FT300 参数需要由上层 bringup 显式传入；空 ftdi_id 会令硬件插件
+        # 扫描全部串口，并在未发现设备时阻塞 controller_manager 的激活。
+        DeclareLaunchArgument("ft_sensor_use_fake_mode", default_value="false"),
+        DeclareLaunchArgument("ft_sensor_max_retries", default_value="100"),
+        DeclareLaunchArgument("ft_sensor_read_rate", default_value="10"),
+        DeclareLaunchArgument("ft_sensor_ftdi_id", default_value=""),
     ]
 
     # ============================================================
@@ -259,6 +269,18 @@ def generate_launch_description():
             " ",
             "initial_positions_file:=",
             initial_positions_file,
+            " ",
+            "ft_sensor_use_fake_mode:=",
+            ft_sensor_use_fake_mode,
+            " ",
+            "ft_sensor_max_retries:=",
+            ft_sensor_max_retries,
+            " ",
+            "ft_sensor_read_rate:=",
+            ft_sensor_read_rate,
+            " ",
+            "ft_sensor_ftdi_id:=",
+            ft_sensor_ftdi_id,
         ]
     )
 
