@@ -57,6 +57,10 @@ def generate_launch_description():
         ]),
         " use_mock_hardware:=", use_mock_hardware,
         " mock_sensor_commands:=", mock_sensor_commands,
+        # 组合模型中的 FT300 也必须使用 mock 硬件。仅 use_mock_hardware
+        # 不会传递给独立的 robotiq_fts_ros2_control macro；若遗漏此参数，
+        # controller_manager 会在启动时枚举真实 USB FT300 并阻塞。
+        " ft_sensor_use_fake_mode:=true",
         " | sed 's/calculate_dynamics\\\">true</calculate_dynamics\\\">false</g'",
         "\"",
     ])
