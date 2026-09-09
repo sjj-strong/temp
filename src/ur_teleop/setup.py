@@ -20,6 +20,7 @@ setup(
             "launch/home.launch.py",
             "launch/teleop.launch.py",
             "launch/rsp_mock.launch.py",
+            "launch/ft300_gripper_test.launch.py",
         ]),
         ("share/ament_index/resource_index/packages", ["resource/ur_teleop"]),
     ],
