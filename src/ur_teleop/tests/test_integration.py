@@ -296,7 +296,8 @@ def _launch_stack(tmp_path, master_off_home=False):
     cfg_path.write_text(CFG_BODY)
     procs = [
         _start("ros2", "launch", "ur_teleop", "cell.launch.py",
-               f"config_file:={cfg_path}", "sim:=true", "launch_rviz:=false"),
+               f"config_file:={cfg_path}", "sim:=true", "launch_rviz:=false",
+               "launch_alicia:=false"),
         _start("ros2", "run", "ur_teleop", "teleop_node",
                "--ros-args", "-p", f"config_file:={cfg_path}"),
         _start(sys.executable, str(FAKE_MASTER),
@@ -361,7 +362,8 @@ def test_record_one_episode(tmp_path):
     _sweep(tmp_path)                           # 必须先于 spawn：pkill 按 tmp_path 匹配 stack cmdline
     procs = [
         _start("ros2", "launch", "ur_teleop", "cell.launch.py",
-               f"config_file:={cfg_path}", "sim:=true", "launch_rviz:=false"),
+               f"config_file:={cfg_path}", "sim:=true", "launch_rviz:=false",
+               "launch_alicia:=false"),
         _start("ros2", "run", "ur_teleop", "teleop_node",
                "--ros-args", "-p", f"config_file:={cfg_path}"),
         _start(sys.executable, str(FAKE_MASTER)),
@@ -973,7 +975,8 @@ def test_record_save_episode(tmp_path):
     _sweep(tmp_path)                           # 必须先于 spawn：pkill 按 tmp_path 匹配 stack cmdline
     procs = [
         _start("ros2", "launch", "ur_teleop", "cell.launch.py",
-               f"config_file:={cfg_path}", "sim:=true", "launch_rviz:=false"),
+               f"config_file:={cfg_path}", "sim:=true", "launch_rviz:=false",
+               "launch_alicia:=false"),
         _start("ros2", "run", "ur_teleop", "teleop_node",
                "--ros-args", "-p", f"config_file:={cfg_path}"),
         _start(sys.executable, str(FAKE_MASTER)),
@@ -1026,7 +1029,8 @@ def test_home_node_subprocess_smoke(tmp_path):
     cfg_path.write_text(CFG_BODY)              # home.slave = mock UR 初始位姿 → 轨迹即达
     procs = [
         _start("ros2", "launch", "ur_teleop", "cell.launch.py",
-               f"config_file:={cfg_path}", "sim:=true", "launch_rviz:=false"),
+               f"config_file:={cfg_path}", "sim:=true", "launch_rviz:=false",
+               "launch_alicia:=false"),
         _start(sys.executable, str(FAKE_MASTER)),   # master 保持 home（zeros）直到 status=true
         _start("ros2", "run", "ur_teleop", "home_node",
                "--ros-args", "-p", f"config_file:={cfg_path}"),

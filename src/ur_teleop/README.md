@@ -81,6 +81,11 @@ source /opt/lerobot_venv/bin/activate
 **阶段 1**（home.launch.py）：启动 cell（持续运行）+ 移双臂到 home 并验证 → 打印 HOME REACHED 后退出（cell 保持运行）。
 **阶段 2**（teleop.launch.py）：连接已运行的 cell，teleop_node 状态机 WAITING_CELL → VERIFY_HOME → SETTLING → CAPTURE_OFFSET → ARMED（Enter 门控）→ ACTIVE；同时启动 `ruckig_node`（500 Hz 平滑映射目标后下发 `/forward_position_controller/commands`）；`mode=record` 时额外拉起 data_recorder。
 
+> **一个 ROS Domain 内只能选择一套 UR cell。** `home.launch.py` 会自行启动
+> `ur_robot_driver/ur_control.launch.py` 和 `/controller_manager`；因此不要先启动
+> 独立的官方 `ur_control.launch.py`，再运行本节命令。若已启动独立真机驱动，请先
+> Ctrl-C 将其关闭，或为两套系统设置不同的 `ROS_DOMAIN_ID`。
+
 ### sim（主臂真实，UR 端 mock + rviz）
 
 ```bash
