@@ -13,7 +13,8 @@ public:
   RCLCPP_SHARED_PTR_DEFINITIONS(JointImpedanceMockSystem)
 
   hardware_interface::CallbackReturn
-  on_init(const hardware_interface::HardwareComponentInterfaceParams &params) override;
+  on_init(const hardware_interface::HardwareComponentInterfaceParams &params)
+      override;
   hardware_interface::CallbackReturn
   on_activate(const rclcpp_lifecycle::State &) override;
   hardware_interface::CallbackReturn
@@ -30,6 +31,7 @@ public:
 private:
   std::vector<double> position_;
   std::vector<double> velocity_;
+  std::vector<double> effort_state_;
   std::vector<double> effort_command_;
   double inertia_{1.0};
   double viscous_damping_{0.2};

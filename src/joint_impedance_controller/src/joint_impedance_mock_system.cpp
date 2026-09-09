@@ -40,17 +40,20 @@ hardware_interface::CallbackReturn JointImpedanceMockSystem::on_init(
 
   position_.resize(info_.joints.size(), 0.0);
   velocity_.resize(info_.joints.size(), 0.0);
+  effort_state_.resize(info_.joints.size(), 0.0);
   effort_command_.resize(info_.joints.size(), 0.0);
   for (std::size_t index = 0; index < info_.joints.size(); ++index) {
     const auto &joint = info_.joints[index];
     if (joint.command_interfaces.size() != 1 ||
         joint.command_interfaces[0].name != hardware_interface::HW_IF_EFFORT ||
-        joint.state_interfaces.size() != 2 ||
+        joint.state_interfaces.size() != 3 ||
         joint.state_interfaces[0].name != hardware_interface::HW_IF_POSITION ||
-        joint.state_interfaces[1].name != hardware_interface::HW_IF_VELOCITY) {
-      RCLCPP_ERROR(get_logger(),
-                   "关节 %s 的接口契约不是 effort/position/velocity",
-                   joint.name.c_str());
+        joint.state_interfaces[1].name != hardware_interface::HW_IF_VELOCITY ||
+        joint.state_interfaces[2].name != hardware_interface::HW_IF_EFFORT) {
+      RCLCPP_ERROR(
+          get_logger(),
+          "关节 %s 的接口契约不是 effort 命令及 position/velocity/effort 状态",
+          joint.name.c_str());
       return hardware_interface::CallbackReturn::ERROR;
     }
     const auto initial_value = joint.state_interfaces[0].initial_value;
@@ -71,6 +74,9 @@ JointImpedanceMockSystem::export_state_interfaces() {
     interfaces.emplace_back(info_.joints[index].name,
                             hardware_interface::HW_IF_VELOCITY,
                             &velocity_[index]);
+    interfaces.emplace_back(info_.joints[index].name,
+                            hardware_interface::HW_IF_EFFORT,
+                            &effort_state_[index]);
   }
   return interfaces;
 }
@@ -89,6 +95,7 @@ JointImpedanceMockSystem::export_command_interfaces() {
 hardware_interface::CallbackReturn
 JointImpedanceMockSystem::on_activate(const rclcpp_lifecycle::State &) {
   std::fill(velocity_.begin(), velocity_.end(), 0.0);
+  std::fill(effort_state_.begin(), effort_state_.end(), 0.0);
   std::fill(effort_command_.begin(), effort_command_.end(), 0.0);
   RCLCPP_INFO(get_logger(), "关节阻抗模拟硬件已激活");
   return hardware_interface::CallbackReturn::SUCCESS;
@@ -97,6 +104,7 @@ JointImpedanceMockSystem::on_activate(const rclcpp_lifecycle::State &) {
 hardware_interface::CallbackReturn
 JointImpedanceMockSystem::on_deactivate(const rclcpp_lifecycle::State &) {
   std::fill(effort_command_.begin(), effort_command_.end(), 0.0);
+  std::fill(effort_state_.begin(), effort_state_.end(), 0.0);
   return hardware_interface::CallbackReturn::SUCCESS;
 }
 
@@ -108,9 +116,9 @@ JointImpedanceMockSystem::read(const rclcpp::Time &,
     return hardware_interface::return_type::OK;
   }
   for (std::size_t index = 0; index < position_.size(); ++index) {
+    effort_state_[index] = effort_command_[index];
     const double acceleration =
-        (effort_command_[index] - viscous_damping_ * velocity_[index]) /
-        inertia_;
+        (effort_state_[index] - viscous_damping_ * velocity_[index]) / inertia_;
     velocity_[index] = std::clamp(velocity_[index] + acceleration * seconds,
                                   -maximum_velocity_, maximum_velocity_);
     position_[index] += velocity_[index] * seconds;

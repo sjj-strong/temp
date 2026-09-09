@@ -45,7 +45,7 @@ ros2 topic pub --rate 20 /joint_impedance_controller/target_joint_state \
   "{name: [shoulder_pan_joint, shoulder_lift_joint, elbow_joint, wrist_1_joint, wrist_2_joint, wrist_3_joint], position: [0.0, -1.57, 0.0, -1.57, 0.0, 0.2]}"
 ```
 
-仿真复用官方 UR10e 描述模型，但使用本包的 `JointImpedanceMockSystem`。该模拟硬件按单位惯量模型将 effort 积分为关节速度和位置，因此 RViz 能显示阻抗闭环运动，且不会连接机器人。官方 Jazzy `GenericSystem` 的 `calculate_dynamics=true` 模式不接受 effort-only 控制模式，不能直接用于此测试。可用以下命令确认接口与控制器：
+仿真复用官方 UR10e 描述模型，但使用本包的 `JointImpedanceMockSystem`。该模拟硬件按单位惯量模型将 effort 积分为关节速度和位置，同时回传有限的 effort 状态，因此 RViz 能显示阻抗闭环运动，`/joint_states` 也能完整记录位置、速度和力矩，且不会连接机器人。官方 Jazzy `GenericSystem` 的 `calculate_dynamics=true` 模式不接受 effort-only 控制模式，不能直接用于此测试。可用以下命令确认接口与控制器：
 
 ```bash
 ros2 control list_controllers
@@ -63,7 +63,8 @@ ros2 run joint_impedance_controller run_rviz_test.sh
 ros2 run joint_impedance_controller run_rviz_test.sh /tmp/my_joint_impedance_test
 ```
 
-对应输出为 `launch.log`、`ros/` 和 `bag/`。停止测试时使用 `Ctrl-C`，等待 rosbag 打印 `Recording stopped` 后再关闭终端，以确保缓存已落盘。
+对应输出为 `launch.log`、`ros/` 和 `bag/`。停止测试时使用 `Ctrl-C`，等待 rosbag 打印 `Recording stopped` 后再关闭终端，以确保缓存已落盘；脚本会将这种正常中断转换为成功退出。
+脚本会在启动 launch 前设置 `ROS_LOG_DIR`，因此 launch 自身和各节点日志都会保存到该测试目录中。
 
 也可以直接启动并指定：
 
