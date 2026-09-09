@@ -1,0 +1,7 @@
+<library path="joint_impedance_controller">
+  <class name="joint_impedance_controller/JointImpedanceMockSystem"
+         type="joint_impedance_controller::JointImpedanceMockSystem"
+         base_class_type="hardware_interface::SystemInterface">
+    <description>用于 RViz 闭环测试的单位惯量关节 effort 模拟硬件。</description>
+  </class>
+</library>

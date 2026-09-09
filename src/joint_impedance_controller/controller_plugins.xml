@@ -1,0 +1,7 @@
+<library path="joint_impedance_controller">
+  <class name="joint_impedance_controller/JointImpedanceController"
+         type="joint_impedance_controller::JointImpedanceController"
+         base_class_type="controller_interface::ControllerInterface">
+    <description>通过 UR effort 接口执行 direct_torque 的六关节阻抗控制器。</description>
+  </class>
+</library>
