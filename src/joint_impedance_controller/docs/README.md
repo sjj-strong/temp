@@ -19,7 +19,8 @@ tau = K * (q_ref - q) + D * (dq_ref - dq)
 
 ## 接口
 
-- 目标话题：`/joint_impedance_controller/target_joint_state`
+- 仿真目标话题：`/joint_impedance_sim/joint_impedance_controller/target_joint_state`
+- 实机默认目标话题：`/joint_impedance_controller/target_joint_state`
 - 消息类型：`sensor_msgs/msg/JointState`
 - `name` 和 `position` 必须包含全部六个 UR 关节；`velocity` 可为空，空值按零处理。
 - 命令接口：六个 `<joint>/effort`
@@ -37,20 +38,55 @@ source install/setup.bash
 ros2 launch joint_impedance_controller rviz_test.launch.py
 ```
 
+仿真默认使用 `/joint_impedance_sim` 命名空间，会同时隔离 controller manager、`robot_description`、关节状态和 TF，因此可以与已启动的 UR 实机驱动并存。
+修改过本包后，必须停止旧的 `rviz_test.launch.py`、重新构建并再次 `source install/setup.bash`，然后启动新 launch；已运行的进程不会自动更新命名空间。
+
 以 20 Hz 持续发布目标。下面保持 UR 模型的其他初始关节角，只将 `wrist_3_joint` 旋转到 0.2 rad：
 
 ```bash
-ros2 topic pub --rate 20 /joint_impedance_controller/target_joint_state \
+ros2 topic pub --rate 20 /joint_impedance_sim/joint_impedance_controller/target_joint_state \
   sensor_msgs/msg/JointState \
   "{name: [shoulder_pan_joint, shoulder_lift_joint, elbow_joint, wrist_1_joint, wrist_2_joint, wrist_3_joint], position: [0.0, -1.57, 0.0, -1.57, 0.0, 0.2]}"
 ```
 
-仿真复用官方 UR10e 描述模型，但使用本包的 `JointImpedanceMockSystem`。该模拟硬件按单位惯量模型将 effort 积分为关节速度和位置，同时回传有限的 effort 状态，因此 RViz 能显示阻抗闭环运动，`/joint_states` 也能完整记录位置、速度和力矩，且不会连接机器人。官方 Jazzy `GenericSystem` 的 `calculate_dynamics=true` 模式不接受 effort-only 控制模式，不能直接用于此测试。可用以下命令确认接口与控制器：
+仿真复用官方 UR10e 描述模型，但使用本包的 `JointImpedanceMockSystem`。该模拟硬件按单位惯量模型将 effort 积分为关节速度和位置，同时回传有限的 effort 状态，因此 RViz 能显示阻抗闭环运动，`/joint_impedance_sim/joint_state_broadcaster/joint_states` 也能完整记录位置、速度和力矩，且不会连接机器人。官方 Jazzy `GenericSystem` 的 `calculate_dynamics=true` 模式不接受 effort-only 控制模式，不能直接用于此测试。可用以下命令确认接口与控制器：
 
 ```bash
-ros2 control list_controllers
-ros2 control list_hardware_interfaces | grep -E 'effort|position|velocity'
+ros2 control list_controllers -c /joint_impedance_sim/controller_manager
+ros2 control list_hardware_interfaces -c /joint_impedance_sim/controller_manager \
+  | grep -E 'effort|position|velocity'
 ```
+
+## RViz 中机器人不运动
+
+先确认发布的是仿真命名空间下的新话题，而不是实机控制器的全局话题：
+
+```bash
+ros2 topic info -v \
+  /joint_impedance_sim/joint_impedance_controller/target_joint_state
+```
+
+`Subscription count` 必须为 `1`，且订阅者命名空间必须是 `/joint_impedance_sim`。再检查仿真的关节状态是否改变：
+
+```bash
+ros2 topic echo --once \
+  /joint_impedance_sim/joint_state_broadcaster/joint_states
+```
+
+若关节数值不变，检查控制器必须都为 `active`：
+
+```bash
+ros2 control list_controllers -c /joint_impedance_sim/controller_manager
+```
+
+若关节数值已变但 RViz 不动，检查状态话题必须有 `robot_state_publisher` 订阅：
+
+```bash
+ros2 topic info -v \
+  /joint_impedance_sim/joint_state_broadcaster/joint_states
+```
+
+如果 `ros2 node list` 中仍出现全局 `/joint_impedance_controller`，说明旧仿真进程还在运行。回到启动它的终端按 `Ctrl-C`，然后重新执行本节的构建、source 和 launch 命令。不要通过全局 `/controller_manager` 判断仿真控制器状态，该名称可能属于正在运行的 UR 实机驱动。
 
 ## 保存测试日志
 
