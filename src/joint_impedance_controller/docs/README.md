@@ -20,8 +20,6 @@ tau = K * (q_ref - q) + D * (dq_ref - dq)
 | `joint_position_min` / `joint_position_max` | 当前状态和外部目标均须满足的六关节位置安全边界，单位 rad。                       |
 | `max_torque` / `max_torque_rate`            | 每关节绝对力矩和力矩变化率硬上限，单位 Nm、Nm/s。                                |
 
-旧版标量参数 `reference_speed` 仍可被接受以兼容已有启动文件，但不再参与控制；请使用 `max_reference_speed`。
-
 ## UR 官方接口依据
 
 - `Universal_Robots_ROS2_Description/urdf/inc/ur_joint_control.xacro` 为六个关节声明了 `effort` 命令接口。

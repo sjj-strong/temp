@@ -60,9 +60,6 @@ controller_interface::CallbackReturn JointImpedanceController::on_init() {
                            std::vector<double>{2.0 * M_PI, 2.0 * M_PI,
                                                2.0 * M_PI, 2.0 * M_PI,
                                                2.0 * M_PI, 2.0 * M_PI});
-    // 保留旧标量参数以兼容已有配置；实际逐关节限速由
-    // max_reference_speed 控制。
-    node.declare_parameter("reference_speed", 0.2);
     node.declare_parameter("max_reference_speed",
                            std::vector<double>{0.2, 0.2, 0.2, 0.2, 0.2,
                                                0.2});
