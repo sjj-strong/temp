@@ -36,3 +36,28 @@ TEST(JointImpedanceLaw, LimitsReferenceSpeed) {
       joint_impedance_controller::limit_reference(0.0, -1.0, 0.2, 0.01),
       -0.002);
 }
+
+TEST(JointImpedanceLaw, LimitsEachJointReferenceSpeed) {
+  const JointVector current{};
+  const JointVector requested{1.0, -1.0, 1.0, -1.0, 1.0, -1.0};
+  const JointVector maximum_speed{0.1, 0.2, 0.3, 0.4, 0.5, 0.6};
+
+  const auto limited = joint_impedance_controller::limit_reference_step(
+      current, requested, maximum_speed, 0.1);
+  EXPECT_DOUBLE_EQ(limited[0], 0.01);
+  EXPECT_DOUBLE_EQ(limited[1], -0.02);
+  EXPECT_DOUBLE_EQ(limited[2], 0.03);
+  EXPECT_DOUBLE_EQ(limited[3], -0.04);
+  EXPECT_DOUBLE_EQ(limited[4], 0.05);
+  EXPECT_DOUBLE_EQ(limited[5], -0.06);
+}
+
+TEST(JointImpedanceLaw, FiltersReferenceVelocity) {
+  const JointVector previous{};
+  const JointVector raw{1.0, -1.0, 0.5, 0.0, 0.0, 0.0};
+  const auto filtered = joint_impedance_controller::filter_reference_velocity(
+      previous, raw, 0.01, 0.01);
+  EXPECT_DOUBLE_EQ(filtered[0], 0.5);
+  EXPECT_DOUBLE_EQ(filtered[1], -0.5);
+  EXPECT_DOUBLE_EQ(filtered[2], 0.25);
+}

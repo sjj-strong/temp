@@ -45,4 +45,33 @@ inline double limit_reference(const double current, const double requested,
       std::max(0.0, maximum_speed) * std::max(0.0, period_seconds);
   return current + std::clamp(requested - current, -maximum_step, maximum_step);
 }
+
+inline JointVector limit_reference_step(const JointVector &current,
+                                        const JointVector &requested,
+                                        const JointVector &maximum_speed,
+                                        const double period_seconds) {
+  JointVector result{};
+  for (std::size_t index = 0; index < result.size(); ++index) {
+    result[index] = limit_reference(current[index], requested[index],
+                                    maximum_speed[index], period_seconds);
+  }
+  return result;
+}
+
+inline JointVector filter_reference_velocity(
+    const JointVector &previous, const JointVector &raw,
+    const double time_constant, const double period_seconds) {
+  const double period = std::max(0.0, std::isfinite(period_seconds)
+                                          ? period_seconds
+                                          : 0.0);
+  const double constant = std::max(0.0, std::isfinite(time_constant)
+                                            ? time_constant
+                                            : 0.0);
+  const double alpha = constant == 0.0 ? 1.0 : period / (constant + period);
+  JointVector result{};
+  for (std::size_t index = 0; index < result.size(); ++index) {
+    result[index] = previous[index] + alpha * (raw[index] - previous[index]);
+  }
+  return result;
+}
 } // namespace joint_impedance_controller

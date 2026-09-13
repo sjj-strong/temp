@@ -27,5 +27,8 @@
     max_position_error: [0.5, 0.5, 0.5, 0.5, 0.5, 0.5]
     joint_position_min: [-6.283, -6.283, -6.283, -6.283, -6.283, -6.283]
     joint_position_max: [6.283, 6.283, 6.283, 6.283, 6.283, 6.283]
-    reference_speed: 0.2
+    # 各关节内部参考位置的最大变化速度，单位 rad/s。
+    max_reference_speed: [0.2, 0.2, 0.2, 0.2, 0.2, 0.2]
+    # 由受限参考位置差分得到的参考速度的一阶低通时间常数，单位 s；0 表示关闭滤波。
+    reference_velocity_filter_time_constant: 0.02
     command_timeout: 0.5

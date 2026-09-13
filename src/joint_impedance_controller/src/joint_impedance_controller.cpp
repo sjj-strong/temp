@@ -60,7 +60,13 @@ controller_interface::CallbackReturn JointImpedanceController::on_init() {
                            std::vector<double>{2.0 * M_PI, 2.0 * M_PI,
                                                2.0 * M_PI, 2.0 * M_PI,
                                                2.0 * M_PI, 2.0 * M_PI});
+    // 保留旧标量参数以兼容已有配置；实际逐关节限速由
+    // max_reference_speed 控制。
     node.declare_parameter("reference_speed", 0.2);
+    node.declare_parameter("max_reference_speed",
+                           std::vector<double>{0.2, 0.2, 0.2, 0.2, 0.2,
+                                               0.2});
+    node.declare_parameter("reference_velocity_filter_time_constant", 0.02);
     node.declare_parameter("command_timeout", 0.5);
   } catch (const std::exception &exception) {
     RCLCPP_ERROR(get_node()->get_logger(), "参数声明失败：%s",
@@ -123,7 +129,12 @@ JointImpedanceController::on_configure(const rclcpp_lifecycle::State &) {
     joint_position_max_ = vector_parameter(
         node.get_parameter("joint_position_max").as_double_array(),
         "joint_position_max");
-    reference_speed_ = node.get_parameter("reference_speed").as_double();
+    max_reference_speed_ = vector_parameter(
+        node.get_parameter("max_reference_speed").as_double_array(),
+        "max_reference_speed");
+    reference_velocity_filter_time_constant_ = node
+        .get_parameter("reference_velocity_filter_time_constant")
+        .as_double();
     command_timeout_ = node.get_parameter("command_timeout").as_double();
 
     if (!finite_nonnegative_vector(stiffness_) ||
@@ -131,12 +142,14 @@ JointImpedanceController::on_configure(const rclcpp_lifecycle::State &) {
         !finite_nonnegative_vector(max_torque_) ||
         !finite_nonnegative_vector(max_torque_rate_) ||
         !finite_nonnegative_vector(max_position_error_) ||
+        !finite_nonnegative_vector(max_reference_speed_) ||
         !finite_vector(joint_position_min_) ||
         !finite_vector(joint_position_max_) ||
-        !std::isfinite(reference_speed_) || reference_speed_ < 0.0 ||
+        !std::isfinite(reference_velocity_filter_time_constant_) ||
+        reference_velocity_filter_time_constant_ < 0.0 ||
         !std::isfinite(command_timeout_) || command_timeout_ < 0.0) {
       throw std::runtime_error(
-          "增益、限幅、速度和超时参数必须为有限且合法的数值");
+          "增益、限幅、参考速度、滤波时间常数和超时参数必须为有限且合法的数值");
     }
     for (std::size_t index = 0; index < joints_.size(); ++index) {
       if (joint_position_min_[index] >= joint_position_max_[index]) {
@@ -196,7 +209,7 @@ JointImpedanceController::on_activate(const rclcpp_lifecycle::State &) {
     RCLCPP_ERROR(get_node()->get_logger(), "激活时无法读取有效的六关节状态");
     return CallbackReturn::ERROR;
   }
-  requested_velocity_.fill(0.0);
+  reference_velocity_.fill(0.0);
   previous_torque_.fill(0.0);
   timed_out_ = false;
   target_buffer_.writeFromNonRT(JointTarget{});
@@ -277,27 +290,36 @@ JointImpedanceController::update(const rclcpp::Time &,
   JointVector requested_position = reference_position_;
   if (target_fresh) {
     requested_position = target->position;
-    requested_velocity_ = target->velocity;
     timed_out_ = false;
   } else if (!timed_out_) {
     reference_position_ = position;
     requested_position = position;
-    requested_velocity_.fill(0.0);
+    reference_velocity_.fill(0.0);
     timed_out_ = true;
   }
 
   const double period_seconds = period.seconds();
-  for (std::size_t index = 0; index < joints_.size(); ++index) {
-    reference_position_[index] =
-        limit_reference(reference_position_[index], requested_position[index],
-                        reference_speed_, period_seconds);
+  const JointVector previous_reference = reference_position_;
+  reference_position_ = limit_reference_step(
+      reference_position_, requested_position, max_reference_speed_,
+      period_seconds);
+  JointVector raw_reference_velocity{};
+  if (std::isfinite(period_seconds) && period_seconds > 0.0) {
+    for (std::size_t index = 0; index < joints_.size(); ++index) {
+      raw_reference_velocity[index] =
+          (reference_position_[index] - previous_reference[index]) /
+          period_seconds;
+    }
   }
+  reference_velocity_ = filter_reference_velocity(
+      reference_velocity_, raw_reference_velocity,
+      reference_velocity_filter_time_constant_, period_seconds);
 
   JointVector position_error{};
   JointVector velocity_error{};
   for (std::size_t index = 0; index < joints_.size(); ++index) {
     position_error[index] = reference_position_[index] - position[index];
-    velocity_error[index] = requested_velocity_[index] - velocity[index];
+    velocity_error[index] = reference_velocity_[index] - velocity[index];
     if (!std::isfinite(position_error[index]) ||
         std::abs(position_error[index]) > max_position_error_[index]) {
       write_zero_torque();

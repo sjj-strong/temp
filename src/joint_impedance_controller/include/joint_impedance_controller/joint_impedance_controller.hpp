@@ -54,9 +54,11 @@ private:
   JointVector joint_position_min_{};
   JointVector joint_position_max_{};
   JointVector reference_position_{};
-  JointVector requested_velocity_{};
+  // 由受限参考位置差分并低通滤波得到，避免外部消息的速度字段绕过参考限速。
+  JointVector reference_velocity_{};
   JointVector previous_torque_{};
-  double reference_speed_{0.2};
+  JointVector max_reference_speed_{};
+  double reference_velocity_filter_time_constant_{0.02};
   double command_timeout_{0.5};
   bool timed_out_{false};
   std::atomic<std::uint64_t> target_sequence_counter_{0};
