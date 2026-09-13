@@ -148,3 +148,104 @@ ros2 control switch_controllers \
 ```
 
 不要同时激活 `forward_effort_controller`、轨迹、位置或速度控制器。UR 的 direct torque 要求兼容的软件版本；本工作区驱动会在切换 effort 模式时检查版本，不满足条件会拒绝切换。
+
+
+## 实机使用命令
+
+以下流程仅适用于已完成风险评估的 UR10e。它只用于首次小幅验证
+`wrist_3_joint`：不得将示例扩展为其他关节、末端位姿、轨迹或笛卡尔速度控制。开始前确保急停可用、机器人周边无人且无接触负载；示教器上的 External Control 程序必须已安装、选中并可运行。
+
+### 1. 构建并启动真实 UR 驱动
+
+在 ROS PC 上构建并加载本包与 UR 驱动：
+
+```bash
+cd /ros2_ws
+source /opt/ros/jazzy/setup.bash
+colcon build --symlink-install --packages-up-to joint_impedance_controller
+source install/setup.bash
+```
+
+将 `<机器人IP>` 替换为控制柜 IP，在独立终端启动真实硬件驱动。`use_mock_hardware` 必须保持为 `false`；启动后在示教器上运行 External Control 程序，确认驱动已连接且机器人处于正常运行状态：
+
+```bash
+source /opt/ros/jazzy/setup.bash
+source /ros2_ws/install/setup.bash
+ros2 launch ur_robot_driver ur_control.launch.py \
+  ur_type:=ur10e \
+  robot_ip:=<机器人IP> \
+  use_mock_hardware:=false \
+  launch_rviz:=false
+```
+
+实际机器人必须使用由 `ur_calibration` 为该序列号生成的标定参数；不要把默认运动学参数当作标定结果。PolyScope 版本还必须不低于 `5.23.0`（PolyScope X 不低于 `10.10.0`），否则驱动会拒绝 effort 模式。
+
+### 2. 核对驱动和接口
+
+在第二个终端加载工作区环境后，先确认不是 mock 硬件，并核对控制器状态和六个 effort 接口：
+
+```bash
+source /opt/ros/jazzy/setup.bash
+source /ros2_ws/install/setup.bash
+ros2 control list_controllers -c /controller_manager
+ros2 control list_hardware_interfaces -c /controller_manager | \
+  rg 'shoulder_pan_joint/effort|shoulder_lift_joint/effort|elbow_joint/effort|wrist_1_joint/effort|wrist_2_joint/effort|wrist_3_joint/effort'
+ros2 topic echo --once /joint_states
+```
+
+六个 effort 接口都必须显示为 `available`。默认的
+`scaled_joint_trajectory_controller` 应为 `active`，而 `forward_effort_controller`、
+`forward_position_controller`、`forward_velocity_controller` 与 `force_mode_controller` 必须不是 `active`。若看到 `mock_components/GenericSystem`、连接失败、保护停止或接口缺失，立即停止流程，排除问题后从本节重新开始。
+
+### 3. 加载并切换控制器
+
+先以 inactive 状态加载，确认它出现于控制器列表中：
+
+```bash
+ros2 run controller_manager spawner joint_impedance_controller \
+  --controller-manager /controller_manager \
+  --param-file "$(ros2 pkg prefix joint_impedance_controller)/share/joint_impedance_controller/config/ur10e_joint_impedance.yaml" \
+  --inactive
+
+ros2 control list_controllers -c /controller_manager
+```
+
+确认参数、关节顺序、限位和急停后，严格切换。激活瞬间控制器会将当前六关节位置锁存为保持参考，并先输出零力矩：
+
+```bash
+ros2 control switch_controllers \
+  --deactivate scaled_joint_trajectory_controller \
+  --activate joint_impedance_controller \
+  --strict
+
+ros2 control list_controllers -c /controller_manager
+```
+
+输出中 `joint_impedance_controller` 必须是 `active`，`scaled_joint_trajectory_controller` 必须不是 `active`。切换失败时不要重复发布目标；先检查上一步列出的互斥控制器与控制柜状态。
+
+### 4. 仅验证 wrist_3_joint
+
+先从 `/joint_states` 记录**刚激活后**的六个关节位置。下面命令中的前五项必须原样填写为该次读取的当前位置；最后一项仅允许在当前 `wrist_3_joint` 位置基础上增加或减小不超过 `0.02` rad。以 20 Hz 持续发布是为了避免 `command_timeout`（默认 `0.5` s）触发保持：
+
+```bash
+ros2 topic pub --rate 20 /joint_impedance_controller/target_joint_state \
+  sensor_msgs/msg/JointState \
+  "{name: [shoulder_pan_joint, shoulder_lift_joint, elbow_joint, wrist_1_joint, wrist_2_joint, wrist_3_joint], position: [<当前肩关节>, <当前肩升降关节>, <当前肘关节>, <当前腕1关节>, <当前腕2关节>, <当前wrist_3关节±0.02>]}"
+```
+
+发布期间只观察 `wrist_3_joint` 的小幅旋转；若发现任何其他关节运动、振荡、异常声音、保护停止或人员进入风险区域，立即按 `Ctrl-C` 停止发布并执行下一节的停用命令。不要在本流程中修改前五个关节的目标值，也不要发送轨迹、位姿或笛卡尔速度命令。
+
+### 5. 停用并恢复默认控制器
+
+验证结束或出现异常时，先停止目标发布（发布终端按 `Ctrl-C`），再停用阻抗控制器并恢复轨迹控制器：
+
+```bash
+ros2 control switch_controllers \
+  --deactivate joint_impedance_controller \
+  --activate scaled_joint_trajectory_controller \
+  --strict
+
+ros2 control list_controllers -c /controller_manager
+```
+
+停用时控制器会写入零力矩。若上述切换失败或机器人未进入预期安全状态，应使用示教器急停/保护停止处置，不要继续发送 ROS 控制命令。
