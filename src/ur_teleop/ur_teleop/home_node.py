@@ -13,7 +13,6 @@ import time
 
 import rclpy
 from control_msgs.action import FollowJointTrajectory
-from controller_manager_msgs.srv import ListControllers
 from rclpy.action import ActionClient
 from rclpy.duration import Duration
 from rclpy.executors import SingleThreadedExecutor
@@ -50,11 +49,7 @@ class HomeNode(rclpy.node.Node):
         self._traj_client = ActionClient(
             self, FollowJointTrajectory, "/scaled_joint_trajectory_controller/follow_joint_trajectory"
         )
-        self._list_controllers = self.create_client(
-            ListControllers, "/controller_manager/list_controllers"
-        )
-        self._list_controllers_future = None
-        self._trajectory_controller_active = False
+        self._cell_ready_since: float | None = None
 
     def _joint_cb(self, msg: JointState):
         # 双臂各自发布 /joint_states（UR cell 与 alicia_d_driver 交织在同一话题），
@@ -77,37 +72,21 @@ class HomeNode(rclpy.node.Node):
         return self._q(self._alicia_states, ALICIA_JOINT_NAMES)
 
     def cell_ready(self) -> bool:
-        """仅在轨迹控制器已激活后才允许发送 home goal。
+        """等待轨迹 action 与状态通道稳定后才允许发送 home goal。
 
-        action server 在控制器 configure 阶段就会出现。若此时发送 goal，它可能被
-        接受、但在 activate 时立即以成功结束，导致真机不实际运动。
+        action server 可能早于控制器激活而出现。首次同时收到 UR 状态与 action
+        server 后保留 2 秒稳定窗口，避免启动阶段接受的 goal 在控制器激活时被立即结束。
+        这里不调用 controller_manager 的 list_controllers 服务：Jazzy 在 spawner 超时
+        取消请求时可能因响应已失效的客户端而终止 controller_manager。
         """
-        if self._list_controllers_future is None:
-            if not self._list_controllers.service_is_ready():
-                return False
-            self._list_controllers_future = self._list_controllers.call_async(
-                ListControllers.Request()
-            )
+        ready = self.slave_q() is not None and self._traj_client.server_is_ready()
+        if not ready:
+            self._cell_ready_since = None
             return False
-        if not self._list_controllers_future.done():
+        if self._cell_ready_since is None:
+            self._cell_ready_since = time.monotonic()
             return False
-        try:
-            response = self._list_controllers_future.result()
-            self._trajectory_controller_active = any(
-                controller.name == "scaled_joint_trajectory_controller"
-                and controller.state == "active"
-                for controller in response.controller
-            )
-        except Exception as exc:
-            self.get_logger().warn(f"查询轨迹控制器状态失败：{exc}")
-            self._trajectory_controller_active = False
-        finally:
-            self._list_controllers_future = None
-        return (
-            self._trajectory_controller_active
-            and self.slave_q() is not None
-            and self._traj_client.server_is_ready()
-        )
+        return time.monotonic() - self._cell_ready_since >= 2.0
 
     def publish_alicia_home(self):
         msg = JointState()
@@ -183,7 +162,7 @@ def main():
     rc = 0
     try:
         node.get_logger().info(
-            "等待 UR cell 就绪（/joint_states + 已激活的 scaled_joint_trajectory_controller）..."
+            "等待 UR cell 就绪（/joint_states + trajectory action server 稳定）..."
         )
         deadline = time.time() + 30.0
         while rclpy.ok() and not node.cell_ready() and time.time() < deadline:
