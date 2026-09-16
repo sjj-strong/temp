@@ -1,0 +1,4 @@
+# ur_teleop 的阻抗仿真使用全局 /joint_states，供 teleop_node 与 ruckig_node 订阅。
+/**/joint_state_broadcaster:
+  ros__parameters:
+    use_local_topics: false

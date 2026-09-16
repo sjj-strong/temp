@@ -91,6 +91,13 @@ trajectory 与另一遥操运动控制器，并激活配置选择的控制器；
 `config_file:=...`，还应显式传 `controller:=joint_impedance`，原因与下方的 launch
 默认值读取机制相同。
 
+当 `sim:=true controller:=joint_impedance` 时，cell 不会启动官方 UR 的
+`GenericSystem`，而会启动 `JointImpedanceMockSystem`：home 阶段由同名
+`scaled_joint_trajectory_controller` 使用 position 接口，遥操阶段严格切换到 effort
+接口并按单位惯量/黏性阻尼积分关节状态。因此该分支可验证完整的“遥操映射 → Ruckig
+→ 阻抗力矩 → 关节状态”闭环。该专用模型仅含 UR 六轴，不含仿真 Robotiq/FT；若启用
+夹爪，夹爪 action server 不存在时会被遥操节点自动禁用，不影响六轴闭环。
+
 `mode` 与 `ruckig_control_hz` 的读取与 cell 类参数不同：teleop.launch.py 内联 `yaml.safe_load(...)` 一次性读 `mode`（兜底 `"teleop"`）与 `ruckig.control_hz`（兜底 `"500.0"`）作默认值；teleop_node 收到 `mode` 参数后 `mode or cfg["mode"]` 兜底（launch 参数优先、yaml 兜底，teleop_node.py:67）。
 
 ## 参数优先级：launch 参数 > yaml 默认

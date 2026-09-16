@@ -59,7 +59,7 @@ ros2 topic pub --rate 20 /joint_impedance_sim/joint_impedance_controller/target_
   "{name: [shoulder_pan_joint, shoulder_lift_joint, elbow_joint, wrist_1_joint, wrist_2_joint, wrist_3_joint], position: [0.0, -1.57, 0.0, -1.57, 0.0, 0.2]}"
 ```
 
-仿真复用官方 UR10e 描述模型，但使用本包的 `JointImpedanceMockSystem`。该模拟硬件按单位惯量模型将 effort 积分为关节速度和位置，同时回传有限的 effort 状态，因此 RViz 能显示阻抗闭环运动，`/joint_impedance_sim/joint_state_broadcaster/joint_states` 也能完整记录位置、速度和力矩，且不会连接机器人。官方 Jazzy `GenericSystem` 的 `calculate_dynamics=true` 模式不接受 effort-only 控制模式，不能直接用于此测试。可用以下命令确认接口与控制器：
+仿真复用官方 UR10e 描述模型，但使用本包的 `JointImpedanceMockSystem`。该模拟硬件按单位惯量模型将 effort 积分为关节速度和位置，同时回传有限的 effort 状态，因此 RViz 能显示阻抗闭环运动，`/joint_impedance_sim/joint_state_broadcaster/joint_states` 也能完整记录位置、速度和力矩，且不会连接机器人。它还支持与 effort 互斥的 position 命令接口，供 `ur_teleop` 的 home 阶段轨迹控制器使用；controller_manager 切换到阻抗控制器后才开始 effort 积分。官方 Jazzy `GenericSystem` 不提供这一可用于阻抗闭环的 effort 动力学，不能直接用于遥操阻抗仿真。可用以下命令确认接口与控制器：
 
 ```bash
 ros2 control list_controllers -c /joint_impedance_sim/controller_manager
@@ -128,6 +128,10 @@ ros2 launch joint_impedance_controller rviz_test.launch.py \
 官方 `force_mode_controller` 对应控制柜内置笛卡尔 `force_mode(...)`，不是本控制器使用的接口。本控制器使用的是关节 `effort` 接口，对应 `direct_torque(...)`。
 
 实机驱动正常运行后，先以 inactive 状态加载：
+
+`type` 必须位于 YAML 中 `/**/joint_impedance_controller` 的参数块。Jazzy
+的 spawner 仅从该控制器块读取类型；若放到 `controller_manager` 块，会在
+manager 日志中报 `The 'type' param was not defined`。
 
 ```bash
 ros2 run controller_manager spawner joint_impedance_controller \

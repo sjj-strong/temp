@@ -12,9 +12,9 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.conditions import IfCondition, UnlessCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration, PythonExpression
+from launch.substitutions import Command, FindExecutable, LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
-from launch_ros.parameter_descriptions import ParameterFile
+from launch_ros.parameter_descriptions import ParameterValue
 
 
 def _yaml_default(config_file: str, *path: str, fallback: str):
@@ -77,10 +77,26 @@ def generate_launch_description():
     uses_joint_impedance = PythonExpression(
         ["'", controller, "' == 'joint_impedance'"]
     )
+    uses_sim_joint_impedance = PythonExpression(
+        ["'", sim, "' == 'true' and '", controller, "' == 'joint_impedance'"]
+    )
+    uses_sim_forward_position = PythonExpression(
+        ["'", sim, "' == 'true' and '", controller, "' != 'joint_impedance'"]
+    )
     impedance_config = os.path.join(
         get_package_share_directory("joint_impedance_controller"),
         "config", "ur10e_joint_impedance.yaml",
     )
+    impedance_mock_urdf = os.path.join(
+        get_package_share_directory("joint_impedance_controller"),
+        "urdf", "ur10e_joint_impedance_mock.urdf.xacro",
+    )
+    impedance_mock_description = {
+        "robot_description": ParameterValue(
+            Command([FindExecutable(name="xacro"), " ", impedance_mock_urdf]),
+            value_type=str,
+        )
+    }
 
     return LaunchDescription([
         DeclareLaunchArgument("config_file", default_value=config_file),
@@ -118,7 +134,7 @@ def generate_launch_description():
                 os.path.join(get_package_share_directory("ur_robot_driver"),
                              "launch", "ur_control.launch.py")
             ),
-            condition=IfCondition(is_sim),
+            condition=IfCondition(uses_sim_forward_position),
             launch_arguments={
                 "ur_type": LaunchConfiguration("ur_type"),
                 "robot_ip": LaunchConfiguration("robot_ip"),
@@ -131,6 +147,39 @@ def generate_launch_description():
                 "activate_joint_controller": "true",
                 "controllers_file": os.path.join(pkg_share, "config", "ur_controllers_sim.yaml"),
             }.items(),
+        ),
+        # 阻抗仿真不能复用 GenericSystem：它不将 effort 积分为关节状态。
+        # 专用 mock 同时实现 position（home）与 effort（阻抗）两种互斥模式。
+        Node(
+            package="robot_state_publisher",
+            executable="robot_state_publisher",
+            condition=IfCondition(uses_sim_joint_impedance),
+            parameters=[impedance_mock_description],
+            output="screen",
+        ),
+        Node(
+            package="controller_manager",
+            executable="ros2_control_node",
+            condition=IfCondition(uses_sim_joint_impedance),
+            parameters=[impedance_config, impedance_mock_description],
+            output="screen",
+        ),
+        Node(
+            package="controller_manager",
+            executable="spawner",
+            condition=IfCondition(uses_sim_joint_impedance),
+            arguments=[
+                "joint_state_broadcaster", "-c", "/controller_manager",
+                "--param-file", os.path.join(
+                    pkg_share, "config", "ur_controllers_impedance_sim.yaml"
+                ),
+            ],
+        ),
+        Node(
+            package="controller_manager",
+            executable="spawner",
+            condition=IfCondition(uses_sim_joint_impedance),
+            arguments=["scaled_joint_trajectory_controller", "-c", "/controller_manager"],
         ),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
@@ -174,7 +223,7 @@ def generate_launch_description():
         Node(
             package="controller_manager",
             executable="spawner",
-            condition=IfCondition(is_sim),
+            condition=IfCondition(uses_sim_forward_position),
             arguments=[
                 "robotiq_gripper_controller",
                 "-c", "/controller_manager",

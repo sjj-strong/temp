@@ -11,6 +11,8 @@ setup(
         ("share/" + package_name + "/config", [
             "config/ur_teleop.yaml",
             "config/ur_controllers_sim.yaml",
+            "config/ur_controllers_impedance_sim.yaml",
+            "config/opencv_cameras.yaml",
         ]),
         ("share/" + package_name + "/config/rviz", [
             "config/rviz/ur_teleop.rviz",

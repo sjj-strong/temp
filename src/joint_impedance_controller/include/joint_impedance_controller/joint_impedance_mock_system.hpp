@@ -19,10 +19,12 @@ public:
   on_activate(const rclcpp_lifecycle::State &) override;
   hardware_interface::CallbackReturn
   on_deactivate(const rclcpp_lifecycle::State &) override;
-  std::vector<hardware_interface::StateInterface>
-  export_state_interfaces() override;
-  std::vector<hardware_interface::CommandInterface>
-  export_command_interfaces() override;
+  hardware_interface::return_type prepare_command_mode_switch(
+      const std::vector<std::string> &start_interfaces,
+      const std::vector<std::string> &stop_interfaces) override;
+  hardware_interface::return_type perform_command_mode_switch(
+      const std::vector<std::string> &start_interfaces,
+      const std::vector<std::string> &stop_interfaces) override;
   hardware_interface::return_type read(const rclcpp::Time &,
                                        const rclcpp::Duration &period) override;
   hardware_interface::return_type write(const rclcpp::Time &,
@@ -33,6 +35,9 @@ private:
   std::vector<double> velocity_;
   std::vector<double> effort_state_;
   std::vector<double> effort_command_;
+  std::vector<double> position_command_;
+  enum class CommandMode { kNone, kPosition, kEffort };
+  CommandMode command_mode_{CommandMode::kNone};
   double inertia_{1.0};
   double viscous_damping_{0.2};
   double maximum_velocity_{2.0};

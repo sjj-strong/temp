@@ -37,6 +37,9 @@ teleop:
   # joint_impedance：发布 JointState（含关节名）到 joint impedance controller。
   # 改为 joint_impedance 后，home.launch 会预加载阻抗控制器，遥操/数采启用时切换它。
   controller: forward_position
+  # 真机阻抗模式固定启用安全门：前五轴锁定为开始切换时的位置，
+  # 仅允许 wrist_3_joint 在此范围内变动。不可通过配置关闭。
+  real_impedance_wrist_3_max_delta_rad: 0.02
   command_rate_hz: 500
   watchdog_timeout_s: 0.5
   restore_controller_on_exit: true

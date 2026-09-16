@@ -31,6 +31,7 @@
     </hardware>
     <xacro:macro name="mock_joint" params="name">
       <joint name="${name}">
+        <command_interface name="position"/>
         <command_interface name="effort"/>
         <state_interface name="position">
           <param name="initial_value">${initial_positions[name]}</param>

@@ -3,16 +3,27 @@
     update_rate: 500
     joint_state_broadcaster:
       type: joint_state_broadcaster/JointStateBroadcaster
-    joint_impedance_controller:
-      type: joint_impedance_controller/JointImpedanceController
+    # 仅供 ur_teleop 的阻抗仿真 home 阶段使用；名称保持与真实 UR 驱动一致，
+    # 因此 home_node 无需为仿真另写轨迹 action 客户端。
+    scaled_joint_trajectory_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
 
 /**/joint_state_broadcaster:
   ros__parameters:
     # 仿真 launch 使用命名空间时，避免与实机 /joint_states 冲突。
     use_local_topics: true
 
+/**/scaled_joint_trajectory_controller:
+  ros__parameters:
+    joints: [shoulder_pan_joint, shoulder_lift_joint, elbow_joint, wrist_1_joint, wrist_2_joint, wrist_3_joint]
+    command_interfaces: [position]
+    state_interfaces: [position, velocity]
+    allow_partial_joints_goal: false
+
 /**/joint_impedance_controller:
   ros__parameters:
+    # spawner 从控制器自身的参数块读取 type；不要将其放在 controller_manager 块。
+    type: joint_impedance_controller/JointImpedanceController
     joints:
       - shoulder_pan_joint
       - shoulder_lift_joint
