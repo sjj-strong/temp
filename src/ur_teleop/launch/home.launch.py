@@ -49,6 +49,10 @@ def generate_launch_description():
         DeclareLaunchArgument("launch_alicia",
                               default_value=_yaml_default(config_file, "cell", "launch_alicia",
                                                          fallback="true")),
+        DeclareLaunchArgument("controller",
+                              default_value=_yaml_default(config_file, "teleop", "controller",
+                                                         fallback="forward_position"),
+                              choices=["forward_position", "joint_impedance"]),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
                 os.path.join(pkg_share, "launch", "cell.launch.py")
@@ -62,6 +66,7 @@ def generate_launch_description():
                 "launch_rviz": LaunchConfiguration("launch_rviz"),
                 "alicia_port": LaunchConfiguration("alicia_port"),
                 "launch_alicia": LaunchConfiguration("launch_alicia"),
+                "controller": LaunchConfiguration("controller"),
             }.items(),
         ),
         Node(

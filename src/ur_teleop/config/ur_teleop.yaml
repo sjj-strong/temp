@@ -33,6 +33,10 @@ safety:
     wrist_2_joint: [-6.283, 6.283]
     wrist_3_joint: [-6.283, 6.283]
 teleop:
+  # forward_position：发布 Float64MultiArray 到 forward position controller。
+  # joint_impedance：发布 JointState（含关节名）到 joint impedance controller。
+  # 改为 joint_impedance 后，home.launch 会预加载阻抗控制器，遥操/数采启用时切换它。
+  controller: forward_position
   command_rate_hz: 500
   watchdog_timeout_s: 0.5
   restore_controller_on_exit: true

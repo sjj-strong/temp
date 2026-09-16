@@ -20,6 +20,7 @@ UR_GRIPPER_JOINT = "robotiq_85_left_knuckle_joint"
 _REQUIRED_TOP = ["mode", "sim", "home", "mapping", "safety", "teleop"]
 _REQUIRED_MAPPING = ["alicia_joint_order", "ur_joint_order", "sign", "scale"]
 _REQUIRED_HOME = ["master", "slave"]
+_SUPPORTED_TELEOP_CONTROLLERS = ("forward_position", "joint_impedance")
 
 
 class ConfigError(ValueError):
@@ -39,6 +40,13 @@ def load_config(path: str | Path) -> dict[str, Any]:
 
     if data["mode"] not in ("teleop", "record"):
         raise ConfigError(f"mode must be 'teleop' or 'record', got '{data['mode']}'")
+
+    controller = data["teleop"].get("controller", "forward_position")
+    if controller not in _SUPPORTED_TELEOP_CONTROLLERS:
+        raise ConfigError(
+            "teleop.controller must be one of "
+            f"{', '.join(_SUPPORTED_TELEOP_CONTROLLERS)}, got '{controller}'"
+        )
 
     for key in _REQUIRED_MAPPING:
         if key not in data["mapping"]:

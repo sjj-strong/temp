@@ -1,7 +1,7 @@
 # ruckig_node（遥操从臂 Ruckig 平滑节点）
 
-> 路径：`ur_teleop/ruckig_node.py` — 基于 [Ruckig](https://github.com/pantor/ruckig) 的在线轨迹生成（OTG）节点，对 teleop_node 映射后的 UR 目标做 jerk-limited 平滑，再下发给 UR 前向位置控制器。
-> **性质：遥操链路的平滑环节**。teleop_node 把映射后的 UR 目标发给本节点，本节点以 `control_hz`（默认 **500 Hz**，与 `controller_manager` 一致）平滑后下发 `/forward_position_controller/commands`。
+> 路径：`ur_teleop/ruckig_node.py` — 基于 [Ruckig](https://github.com/pantor/ruckig) 的在线轨迹生成（OTG）节点，对 teleop_node 映射后的 UR 目标做 jerk-limited 平滑，再按配置下发给 UR 前向位置或关节阻抗控制器。
+> **性质：遥操链路的平滑环节**。teleop_node 把映射后的 UR 目标发给本节点，本节点以 `control_hz`（默认 **500 Hz**，与 `controller_manager` 一致）平滑后下发配置选择的从臂控制器。
 
 ## 在遥操链路中的位置
 
@@ -17,7 +17,12 @@
         │   ├─ /joint_states（UR 实测 q/dq，按名重排，用于首次初始化）
         │   └─ 首次全关节有效时 initialize_ruckig()：初始状态 = 当前 UR 状态，目标 = 当前位置 → 启动不产生运动
         ▼
-  /forward_position_controller/commands（6 维位置，500 Hz）   ← 仅 ruckig_node 发布
+  `teleop.controller=forward_position`：
+  /forward_position_controller/commands（6 维位置，500 Hz）
+
+  `teleop.controller=joint_impedance`：
+  /joint_impedance_controller/target_joint_state（JointState，500 Hz）
+                                                        ← 均仅 ruckig_node 发布
 ```
 
 夹爪不经 ruckig：teleop_node 用 Alicia `Gripper` 关节做二值（开/合）判断，直接发 Robotiq action。
@@ -35,6 +40,8 @@
 `control_hz` 通过 launch 参数 `ruckig_control_hz`（或 ROS 参数 `control_hz`）设置，默认 **500.0**（`teleop.launch` 从 `ur_teleop.yaml` 的 `ruckig.control_hz` 读取，缺省 500）。
 
 max_velocity / max_acceleration / max_jerk：若 `ur_teleop.yaml` 含 `ruckig:` 段则从其读取，否则回退代码内 `_DEFAULT_*`（`[0.30]×6 / [0.80]×6 / [4.0]×6`，第一阶段真机测试保守参数）。列表长度 ≠ 6 时同样回退默认。需要调参时在 `ur_teleop.yaml` 加回 `ruckig:` 段即可。
+
+`teleop.controller` 决定输出接口：默认 `forward_position` 保持历史行为；设为 `joint_impedance` 时发布 `sensor_msgs/msg/JointState`，其中 `name` 固定为 UR 六关节标准顺序，`position` 为 Ruckig 输出。阻抗控制器的 `velocity` 可省略，控制器会使用其受限内部参考速度。
 
 ## 启动方式
 

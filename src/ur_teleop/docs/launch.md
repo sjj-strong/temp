@@ -82,6 +82,15 @@ ruckig_node 必须在 home 完成后启动：teleop.launch 连接的是已 home 
 | `force_home` | `"false"`（硬编码，无 yaml 对应键） | `true` = 跳过 VERIFY_HOME（teleop_node 把 `at_home_tolerance_rad` 置 `inf`，teleop_node.py:64-65） |
 | `ruckig_control_hz` | yaml `ruckig.control_hz`（兜底 `"500.0"`） | ruckig_node OTG 频率，默认与 controller_manager 同频 500 Hz |
 
+控制器由 `ur_teleop.yaml` 的 `teleop.controller` 选择。默认 `forward_position` 沿用
+`/forward_position_controller/commands`；设为 `joint_impedance` 时，`home.launch.py`
+转发同名 launch 参数给 cell，cell 用关节阻抗包的参数文件将
+`joint_impedance_controller` 预加载为 inactive。随后 teleop 的 STRICT 切换会停用
+trajectory 与另一遥操运动控制器，并激活配置选择的控制器；Ruckig 输出改为
+`/joint_impedance_controller/target_joint_state` 的 `JointState`。若使用自定义
+`config_file:=...`，还应显式传 `controller:=joint_impedance`，原因与下方的 launch
+默认值读取机制相同。
+
 `mode` 与 `ruckig_control_hz` 的读取与 cell 类参数不同：teleop.launch.py 内联 `yaml.safe_load(...)` 一次性读 `mode`（兜底 `"teleop"`）与 `ruckig.control_hz`（兜底 `"500.0"`）作默认值；teleop_node 收到 `mode` 参数后 `mode or cfg["mode"]` 兜底（launch 参数优先、yaml 兜底，teleop_node.py:67）。
 
 ## 参数优先级：launch 参数 > yaml 默认

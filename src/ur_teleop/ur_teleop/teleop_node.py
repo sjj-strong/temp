@@ -69,7 +69,16 @@ class TeleopNode(Node):
         self._watchdog_timeout = float(cfg["teleop"].get("watchdog_timeout_s", 0.5))
         self._restore_on_exit = bool(cfg["teleop"].get("restore_controller_on_exit", True))
         self._traj_ctrl = "scaled_joint_trajectory_controller"
-        self._fwd_ctrl = "forward_position_controller"
+        self._controller_kind = cfg["teleop"].get("controller", "forward_position")
+        self._motion_ctrl = {
+            "forward_position": "forward_position_controller",
+            "joint_impedance": "joint_impedance_controller",
+        }[self._controller_kind]
+        # effort 与 position 命令接口不能同时被占用；切换时也主动停用另一个
+        # 遥操运动控制器，防止上一次异常退出后留下冲突的 active 控制器。
+        self._teleop_motion_ctrls = [
+            "forward_position_controller", "joint_impedance_controller",
+        ]
 
         self._state = State.WAITING_CELL
         self._start_time = time.time()
@@ -99,8 +108,8 @@ class TeleopNode(Node):
         self._joint_sub = self.create_subscription(JointState, "/joint_states", self._joint_cb, 10)
         self._enable_sub = self.create_subscription(Bool, "/teleop/enable", self._enable_cb, 10)
         self._estop_sub = self.create_subscription(Bool, "/teleop/e_stop", self._estop_cb, 10)
-        # 映射后的 UR 目标发给 ruckig_node（500 Hz jerk-limited 平滑）→
-        # /forward_position_controller/commands。teleop 不再直接写 forward controller。
+        # 映射后的 UR 目标交给 ruckig_node；其根据 teleop.controller 选择
+        # forward position 或 joint impedance 的消息接口。
         self._ruckig_target_pub = self.create_publisher(Float64MultiArray, "/ruckig/target_joint_positions", 10)
         self._cmd_pub = self.create_publisher(Float64MultiArray, "/teleop/commands", 10)
         self._status_pub = self.create_publisher(Bool, "/teleop/status", 10)
@@ -265,15 +274,17 @@ class TeleopNode(Node):
                 controllers = {}                       # 异常 → 视为未加载，走 load 路径
             # 只对真正 active 的 trajectory controller 发起 deactivate；
             # controller_stopper 可能在 teleop 启动前已将其切到 inactive。
-            deactivate = ([self._traj_ctrl]
-                          if controllers.get(self._traj_ctrl, "").startswith("active")
-                          else [])
-            if self._fwd_ctrl not in controllers:
+            deactivate = [
+                name for name in [self._traj_ctrl, *self._teleop_motion_ctrls]
+                if name != self._motion_ctrl
+                and controllers.get(name, "").startswith("active")
+            ]
+            if self._motion_ctrl not in controllers:
                 self._switch_phase = "load"
-                self._switch_future = self._switcher.load_controller(self._fwd_ctrl)
+                self._switch_future = self._switcher.load_controller(self._motion_ctrl)
             else:
                 self._switch_phase = "switch"
-                self._switch_future = self._switcher.switch([self._fwd_ctrl], deactivate)
+                self._switch_future = self._switcher.switch([self._motion_ctrl], deactivate)
         elif self._switch_phase == "load":
             try:
                 load_ok = fut.result() is not None and fut.result().ok
@@ -281,9 +292,11 @@ class TeleopNode(Node):
                 load_ok = False
             if load_ok:
                 self._switch_phase = "switch"
-                self._switch_future = self._switcher.switch([self._fwd_ctrl], [self._traj_ctrl])
+                self._switch_future = self._switcher.switch(
+                    [self._motion_ctrl], [self._traj_ctrl]
+                )
             else:
-                self.get_logger().error("加载 forward_position_controller 失败")
+                self.get_logger().error(f"加载 {self._motion_ctrl} 失败")
                 self._log_state(State.ARMED)
         elif self._switch_phase == "switch":
             try:
@@ -361,7 +374,7 @@ class TeleopNode(Node):
     # ---------- helpers ----------
 
     def _publish_commands(self, cmd: list[float]):
-        # 映射后的 UR 目标 → ruckig_node 平滑后下发 forward_position_controller。
+        # 映射后的 UR 目标 → ruckig_node 平滑后下发配置指定的控制器。
         target = Float64MultiArray()
         target.data = list(cmd)
         self._ruckig_target_pub.publish(target)
@@ -379,7 +392,7 @@ class TeleopNode(Node):
         """Ctrl-C 退出流程：恢复力矩 → 切回 trajectory controller（spec §5）。"""
         self._publish_demo(False)
         if self._restore_on_exit and self._state in (State.ACTIVE, State.INACTIVE, State.SWITCHING):
-            fut = self._switcher.switch([self._traj_ctrl], [self._fwd_ctrl])
+            fut = self._switcher.switch([self._traj_ctrl], [self._motion_ctrl])
             if fut is not None:
                 executor = SingleThreadedExecutor()
                 executor.add_node(self)
@@ -408,6 +421,7 @@ def main():
     node.get_logger().info(f"ur_teleop 就绪 — mode={node._mode}, sim={node._cfg['sim']}")
     node.get_logger().info(
         f"  控制频率: teleop 命令 {node._command_rate:g} Hz | ruckig 平滑 {ruckig_hz:g} Hz")
+    node.get_logger().info(f"  从臂控制器: {node._motion_ctrl} ({node._controller_kind})")
     node.get_logger().info("  等待双臂到位 → 静止 → offset → Enter 开始控制")
     node.get_logger().info("=" * 60)
     try:

@@ -3,7 +3,7 @@
 UR10e 从臂 + Alicia-D 主臂遥操作功能包（ROS 2 Jazzy，ament_python）。
 
 - 主臂 Alicia（`alicia_d_driver`）100 Hz 发布 `/joint_states`（`Joint1..6` 弧度 + `Gripper` 米）
-- 遥操核心订阅主臂关节，映射后以 50 Hz 发布映射目标；`ruckig_node` 以 **500 Hz**（与 controller_manager 同频）jerk-limited 平滑后下发 UR 前向 pos control（`/forward_position_controller/commands`，6 维）
+- 遥操核心订阅主臂关节，映射后以 50 Hz 发布映射目标；`ruckig_node` 以 **500 Hz**（与 controller_manager 同频）jerk-limited 平滑后按配置下发 UR 前向位置或关节阻抗控制器
 - 支持 **teleop / record** 两种模式（record 基于 lerobot 保存数据，键盘控制采集）
 - 支持 **sim / real** 两种方式：sim = UR 端 mock + rviz；**主臂始终是真实 Alicia**
 - **两阶段启动**：先 `home.launch.py` 移双臂到 home 并验证，再 `teleop.launch.py` 运行遥操；到位后静止等待、捕获 offset，按 Enter 才开始控制

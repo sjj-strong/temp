@@ -67,9 +67,20 @@ def generate_launch_description():
     alicia_default = _yaml_default(config_file, "cell", "alicia_port", fallback="")
     launch_alicia_default = _yaml_default(config_file, "cell", "launch_alicia", fallback="true")
     ur_type_default = _yaml_default(config_file, "cell", "ur_type", fallback="ur10e")
+    controller_default = _yaml_default(
+        config_file, "teleop", "controller", fallback="forward_position"
+    )
 
     sim = LaunchConfiguration("sim")
+    controller = LaunchConfiguration("controller")
     is_sim = PythonExpression(["'", sim, "' == 'true'"])          # "false" 字符串真值陷阱防护
+    uses_joint_impedance = PythonExpression(
+        ["'", controller, "' == 'joint_impedance'"]
+    )
+    impedance_config = os.path.join(
+        get_package_share_directory("joint_impedance_controller"),
+        "config", "ur10e_joint_impedance.yaml",
+    )
 
     return LaunchDescription([
         DeclareLaunchArgument("config_file", default_value=config_file),
@@ -81,6 +92,10 @@ def generate_launch_description():
         DeclareLaunchArgument("alicia_port", default_value=alicia_default),
         DeclareLaunchArgument("launch_alicia", default_value=launch_alicia_default),
         DeclareLaunchArgument("ur_type", default_value=ur_type_default),
+        DeclareLaunchArgument(
+            "controller", default_value=controller_default,
+            choices=["forward_position", "joint_impedance"],
+        ),
         DeclareLaunchArgument("description_sim",
                               default_value=_description_launchfile()),
         # rviz2 必须放在 ur_control include 之前：后者传 launch_rviz:="false" 会把
@@ -139,6 +154,17 @@ def generate_launch_description():
                     get_package_share_directory("ur_robot_driver"),
                     "launch", "ur_rsp.launch.py"),
             }.items(),
+        ),
+        # 阻抗控制器在 home 阶段仅加载为 inactive；teleop_node 收到 enable 后再与
+        # trajectory controller 严格切换，避免 home 轨迹与 effort 接口冲突。
+        Node(
+            package="controller_manager",
+            executable="spawner",
+            condition=IfCondition(uses_joint_impedance),
+            arguments=[
+                "joint_impedance_controller", "-c", "/controller_manager",
+                "--param-file", impedance_config, "--inactive",
+            ],
         ),
         # Sim 模式：将 parallel_gripper_action_controller spawn 到 UR 的
         # controller_manager，驱动 mock_components/GenericSystem 暴露的

@@ -26,9 +26,10 @@ UR_GRIPPER_JOINT = "robotiq_85_left_knuckle_joint"   # UR 侧夹爪关节名
 2. `yaml.safe_load` 结果空 → 视为 `{}`。
 3. 必需顶层键缺失：`_REQUIRED_TOP = ["mode", "sim", "home", "mapping", "safety", "teleop"]`（`cell` / `gripper` / `recorder` 为可选）。
 4. `mode` 必须为 `"teleop"` 或 `"record"`。
-5. `mapping` 必需键：`_REQUIRED_MAPPING = ["alicia_joint_order", "ur_joint_order", "sign", "scale"]`；且 `ur_joint_order` 必须恰好 6 项。
-6. `home` 必需键：`_REQUIRED_HOME = ["master", "slave"]`，各自必须恰好 6 项（长度不足时报 `home.master must have 6 values` 之类）。
-7. `safety.limits` 必须包含全部 6 个 `UR_JOINT_NAMES` 关节名（缺失报 `safety.limits missing joint '{joint}'`）。
+5. 可选的 `teleop.controller` 必须为 `"forward_position"` 或 `"joint_impedance"`；未写时兼容旧配置并使用 `forward_position`。
+6. `mapping` 必需键：`_REQUIRED_MAPPING = ["alicia_joint_order", "ur_joint_order", "sign", "scale"]`；且 `ur_joint_order` 必须恰好 6 项。
+7. `home` 必需键：`_REQUIRED_HOME = ["master", "slave"]`，各自必须恰好 6 项（长度不足时报 `home.master must have 6 values` 之类）。
+8. `safety.limits` 必须包含全部 6 个 `UR_JOINT_NAMES` 关节名（缺失报 `safety.limits missing joint '{joint}'`）。
 
 ### `default_config_path() -> str`（config.py:61）
 
@@ -101,6 +102,7 @@ gripper_value_to_position(value: float, gripper_type: str = "50mm") -> float
 
 | 键                             | 类型  | 默认值   | 含义                             | 消费方                                           |
 | ------------------------------ | ----- | -------- | -------------------------------- | ------------------------------------------------ |
+| `controller`                 | str   | `forward_position` | 从臂遥操控制器：`forward_position` 或 `joint_impedance`。前者发布 6 维位置数组；后者发布带六个关节名的 `JointState`，并在 home 阶段由 cell 预加载为 inactive | cell.launch、teleop_node、ruckig_node |
 | `command_rate_hz`            | float | `50`   | 控制/发布频率（50 Hz timer）     | teleop_node.py:68,110                            |
 | `watchdog_timeout_s`         | float | `0.5`  | 主臂数据超时 → INACTIVE         | teleop_node.py:69,300                            |
 | `restore_controller_on_exit` | bool  | `true` | 退出时切回 trajectory controller | teleop_node`shutdown`（teleop_node.py:70,363） |
@@ -141,6 +143,7 @@ gripper_value_to_position(value: float, gripper_type: str = "50mm") -> float
 - 所有校验失败均抛 `ConfigError`（继承 `ValueError`），节点构造时即失败退出——配置错误不延迟到运行期。
 - 可选键不做默认填充：`load_config` 返回原始 dict，各消费方 `.get(key, default)` 自行兜底，默认值散落在各模块（见上表），不在 config.py 集中。
 - 校验只查"键存在/长度"，不校验数值范围（如 `sign` 是否为 ±1、`limits[0] < limits[1]`）——数值合法性由 JointMapper/GripperController 的 clamp 与下游行为兜底。
+- 使用 `joint_impedance` 时，启动 `home.launch.py`（或 `cell.launch.py`）会以 `--inactive` 预加载 `joint_impedance_controller` 的参数文件；遥操启用时才严格停用轨迹/前向位置控制器并激活它。真实机械臂仍须遵守工作区的 `wrist_3_joint` 单关节测试边界。
 
 ## 测试覆盖（tests/test_config.py）
 

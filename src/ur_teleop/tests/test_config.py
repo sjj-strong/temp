@@ -43,6 +43,20 @@ def test_load_minimal_valid_config(tmp_path):
     assert cfg["safety"]["limits"]["shoulder_pan_joint"] == [-6.283, 6.283]
 
 
+def test_joint_impedance_controller_config_is_accepted(tmp_path):
+    cfg = load_config(_write(tmp_path, BASE + """
+  controller: joint_impedance
+"""))
+    assert cfg["teleop"]["controller"] == "joint_impedance"
+
+
+def test_unknown_teleop_controller_is_rejected(tmp_path):
+    with pytest.raises(ConfigError, match="teleop.controller"):
+        load_config(_write(tmp_path, BASE + """
+  controller: unsupported
+"""))
+
+
 def test_missing_required_key_raises(tmp_path):
     with pytest.raises(ConfigError, match="mode"):
         load_config(_write(tmp_path, "sim: true\n"))

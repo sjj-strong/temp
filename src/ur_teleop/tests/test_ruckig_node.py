@@ -25,9 +25,11 @@ from ur_teleop.ruckig_node import DOF, UR_JOINT_INDEX, UR_JOINT_NAMES, RuckigNod
 class FakePub:
     def __init__(self):
         self.sent = []
+        self.raw_sent = []
 
     def publish(self, msg):
-        self.sent.append(list(msg.data))
+        self.raw_sent.append(msg)
+        self.sent.append(list(msg.position if hasattr(msg, "position") else msg.data))
 
 
 class FakeLogger:
@@ -54,6 +56,7 @@ def _make_node():
     node.inp.target_velocity = [0.0] * DOF
     node.inp.target_acceleration = [0.0] * DOF
     node.initialized = False
+    node.controller_kind = "forward_position"
     node.command_pub = FakePub()
     node.get_logger = lambda: FakeLogger()
     return node
@@ -250,3 +253,18 @@ def test_control_loop_tracks_target_over_steps():
         node.target_callback(SimpleNamespace(data=target))
 
     assert np.allclose(node.command_pub.sent[-1], target, atol=1e-3)
+
+
+def test_control_loop_publishes_named_joint_state_for_impedance():
+    node = _make_node()
+    node.controller_kind = "joint_impedance"
+    node.joint_state_callback(
+        _joint_msg(UR_JOINT_NAMES, [0.0] * DOF, [0.0] * DOF))
+    assert node.initialize_ruckig()
+    node.target_callback(SimpleNamespace(data=[0.1] * DOF))
+    node.control_loop()
+
+    assert len(node.command_pub.sent) == 1
+    command = node.command_pub.raw_sent[0]
+    assert list(command.name) == UR_JOINT_NAMES
+    assert len(command.position) == DOF

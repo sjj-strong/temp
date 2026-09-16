@@ -20,7 +20,7 @@ _DEFAULT_MAX_VELOCITY = [0.30] * DOF
 _DEFAULT_MAX_ACCELERATION = [0.80] * DOF
 _DEFAULT_MAX_JERK = [4.0] * DOF
 
-# forward_position_controller 要求的关节顺序
+# 从臂控制器共同使用的关节顺序。
 UR_JOINT_NAMES = [
     "shoulder_pan_joint",
     "shoulder_lift_joint",
@@ -61,11 +61,12 @@ class RuckigNode(Node):
         # ------------------------------------------------------------
 
         try:
-            ruckig_cfg = load_config(
-                self.get_parameter("config_file").value
-            ).get("ruckig", {})
+            config = load_config(self.get_parameter("config_file").value)
+            ruckig_cfg = config.get("ruckig", {})
+            self.controller_kind = config["teleop"].get("controller", "forward_position")
         except Exception:
             ruckig_cfg = {}
+            self.controller_kind = "forward_position"
 
         def _vec6(values, default):
             vec = [float(v) for v in values] if values is not None else default
@@ -155,11 +156,18 @@ class RuckigNode(Node):
         # ROS publisher
         # ============================================================
 
-        self.command_pub = self.create_publisher(
-            Float64MultiArray,
-            "/forward_position_controller/commands",
-            10,
-        )
+        if self.controller_kind == "joint_impedance":
+            self.command_pub = self.create_publisher(
+                JointState,
+                "/joint_impedance_controller/target_joint_state",
+                10,
+            )
+        else:
+            self.command_pub = self.create_publisher(
+                Float64MultiArray,
+                "/forward_position_controller/commands",
+                10,
+            )
 
         # ============================================================
         # Control timer
@@ -181,6 +189,7 @@ class RuckigNode(Node):
         self.get_logger().info(
             f"control period: {self.dt:.6f} s"
         )
+        self.get_logger().info(f"target controller: {self.controller_kind}")
 
         self.get_logger().info(
             "waiting for UR /joint_states ..."
@@ -380,12 +389,14 @@ class RuckigNode(Node):
         # 4. Publish the next position setpoint
         # ------------------------------------------------------------
 
-        command = Float64MultiArray()
-
-        command.data = [
-            float(x)
-            for x in self.out.new_position
-        ]
+        positions = [float(x) for x in self.out.new_position]
+        if self.controller_kind == "joint_impedance":
+            command = JointState()
+            command.name = UR_JOINT_NAMES
+            command.position = positions
+        else:
+            command = Float64MultiArray()
+            command.data = positions
 
         self.command_pub.publish(command)
 
