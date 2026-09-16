@@ -83,8 +83,8 @@ source /opt/lerobot_venv/bin/activate
 ## 独立 USB 相机与可视化
 
 当前默认配置不启动 RealSense，而是启动 `config/opencv_cameras.yaml` 中的
-`usb_front`、`usb_left`、`usb_right` 三台 USB 相机，并在一个可缩放、可平移的 OpenCV
-拼接窗口中显示全部视角。相机 launch 与机械臂遥操完全独立：
+`usb_front`、`usb_left`、`usb_right` 三台 USB 相机。节点先合成一张拼接图像，再由一个
+可缩放、可平移的 `rqt_image_view` 窗口显示全部视角。相机 launch 与机械臂遥操完全独立：
 
 ```bash
 source /opt/ros/jazzy/setup.bash

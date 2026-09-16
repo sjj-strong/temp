@@ -140,9 +140,10 @@ trajectory 与另一遥操运动控制器，并激活配置选择的控制器；
 
 `cameras.visualization.topics` 定义要可视化的原始图像话题；将
 `cameras.visualization.enabled` 设为 `true`，或在命令行传
-`launch_image_viewers:=true`，即可启动一个 OpenCV 拼接窗口显示全部话题。窗口支持
-鼠标滚轮缩放、左键拖拽平移、`R` 重置视图、`Q`/Esc 关闭查看器；查看器只订阅图像，
-不向相机或机器人发送命令。
+`launch_image_viewers:=true`，即可启动一个 `rqt_image_view` 窗口显示全部话题。拼接
+节点将所有配置话题合成为 `/camera_mosaic/image_raw`，rqt 窗口支持缩放、平移与窗口尺寸
+调整；所有节点只订阅或发布图像，不向相机或机器人发送命令。话题列表至少保留一个有效
+的字符串话题；默认已配置三路 USB 相机话题。
 
 ```bash
 # 仅启动图像发布（不启动机械臂、Alicia 或录制器）。

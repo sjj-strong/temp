@@ -25,7 +25,7 @@ cameras:
     # 每台 USB 相机的设备端口、节点名、图像话题和分辨率在此文件定义。
     config_file: ""
   visualization:
-    # OpenCV 单窗口拼接所有 topic；支持鼠标滚轮缩放与左键拖拽平移。
+    # 合成单一拼接图像，再由 rqt_image_view 单窗口显示；支持缩放与平移。
     enabled: true
     topics:
       - /camera/usb_front/color/image_raw

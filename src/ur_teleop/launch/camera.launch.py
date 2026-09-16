@@ -5,7 +5,7 @@ import os
 import yaml
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, ExecuteProcess, IncludeLaunchDescription
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
@@ -86,12 +86,18 @@ def generate_launch_description():
             condition=IfCondition(LaunchConfiguration("launch_opencv_cameras")),
             launch_arguments={"camera_config": LaunchConfiguration("opencv_camera_config")}.items(),
         ),
-        # rqt_image_view 一次只能显示一个 topic，无法满足多视角单窗口需求。
-        # 此节点将所有 raw Image 拼接为一个窗口，且只订阅图像、不参与控制。
+        # rqt_image_view 一次只能显示一个 topic。此节点先合成多视角拼图，
+        # rqt 再显示该单一拼图话题；二者都只订阅图像、不参与控制。
         Node(
             package="ur_teleop", executable="camera_mosaic_viewer",
             name="camera_mosaic_viewer", output="screen",
             condition=IfCondition(LaunchConfiguration("launch_image_viewers")),
             parameters=[{"topics": image_topics}],
+        ),
+        ExecuteProcess(
+            cmd=["ros2", "run", "rqt_image_view", "rqt_image_view",
+                 "/camera_mosaic/image_raw"],
+            output="screen",
+            condition=IfCondition(LaunchConfiguration("launch_image_viewers")),
         ),
     ])
