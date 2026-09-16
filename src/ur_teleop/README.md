@@ -59,8 +59,8 @@ source /opt/lerobot_venv/bin/activate
 | `safety.clamp_margin_rad`                                                     | 关节极限 clamp 的安全余量                                                                                                            |
 | `safety.limits`                                                               | 关节名键值 dict（`[min, max]` 弧度，来自 ur10e joint_limits）                                                                      |
 | `teleop.command_rate_hz`                                                      | 映射目标发布频率（默认 50 Hz；forward 实际下发由 ruckig 500 Hz 平滑）                                                                |
-| `teleop.controller`                                                           | 遥操/数采使用的从臂控制器：`forward_position`（默认）或 `joint_impedance`                                                          |
-| `teleop.real_impedance_wrist_3_max_delta_rad`                                 | 真机阻抗安全门的 `wrist_3_joint` 最大相对位移；前五轴始终锁定，安全门不可关闭                                                       |
+| `teleop.controller`                                                           | 遥操/数采使用的从臂控制器：`forward_position`（默认）或 `joint_impedance`                                                        |
+| `teleop.real_impedance_wrist_3_max_delta_rad`                                 | 真机阻抗安全门的`wrist_3_joint` 最大相对位移；前五轴始终锁定，安全门不可关闭                                                       |
 | `teleop.watchdog_timeout_s`                                                   | 主臂数据超时（默认 0.5 s）→ INACTIVE 暂停映射                                                                                       |
 | `teleop.restore_controller_on_exit`                                           | 退出时是否切回 trajectory controller（默认 true）                                                                                    |
 | `gripper.enabled`                                                             | 夹爪跟随开关：sim 默认`false`，real 设 `true`                                                                                    |
@@ -79,6 +79,22 @@ source /opt/lerobot_venv/bin/activate
 | `recorder.state_threshold_rad`                                                | robotiq 夹爪 rad → 0/1 state 的阈值（默认 0.4）                                                                                     |
 
 ## 3. 两阶段使用流程
+
+## 独立 USB 相机与可视化
+
+当前默认配置不启动 RealSense，而是启动 `config/opencv_cameras.yaml` 中的
+`usb_front`、`usb_left`、`usb_right` 三台 USB 相机，并为三路原始图像各打开一个
+可缩放、可平移的 `rqt_image_view` 窗口。相机 launch 与机械臂遥操完全独立：
+
+```bash
+source /opt/ros/jazzy/setup.bash
+source /ros2_ws/install/setup.bash
+ros2 launch ur_teleop camera.launch.py
+```
+
+查看器的图像话题由 `ur_teleop.yaml` 的 `cameras.visualization.topics` 配置；USB
+端口、图像话题、分辨率与帧率由 `config/opencv_cameras.yaml` 配置。按 `Ctrl-C` 会同时
+停止相机节点与查看窗口。
 
 **阶段 1**（home.launch.py）：启动 cell（持续运行）+ 移双臂到 home 并验证 → 打印 HOME REACHED 后退出（cell 保持运行）。
 **阶段 2**（teleop.launch.py）：连接已运行的 cell，teleop_node 状态机 WAITING_CELL → VERIFY_HOME → SETTLING → CAPTURE_OFFSET → ARMED（Enter 门控）→ ACTIVE；同时启动 `ruckig_node`（500 Hz 平滑映射目标后按 `teleop.controller` 下发到前向位置或阻抗控制器）；`mode=record` 时额外拉起 data_recorder。
