@@ -59,6 +59,8 @@ source /opt/lerobot_venv/bin/activate
 | `safety.clamp_margin_rad`                                                     | 关节极限 clamp 的安全余量                                                                                                            |
 | `safety.limits`                                                               | 关节名键值 dict（`[min, max]` 弧度，来自 ur10e joint_limits）                                                                      |
 | `teleop.command_rate_hz`                                                      | 映射目标发布频率（默认 50 Hz；forward 实际下发由 ruckig 500 Hz 平滑）                                                                |
+| `teleop.controller`                                                           | 遥操/数采使用的从臂控制器：`forward_position`（默认）或 `joint_impedance`                                                          |
+| `teleop.real_impedance_wrist_3_max_delta_rad`                                 | 真机阻抗安全门的 `wrist_3_joint` 最大相对位移；前五轴始终锁定，安全门不可关闭                                                       |
 | `teleop.watchdog_timeout_s`                                                   | 主臂数据超时（默认 0.5 s）→ INACTIVE 暂停映射                                                                                       |
 | `teleop.restore_controller_on_exit`                                           | 退出时是否切回 trajectory controller（默认 true）                                                                                    |
 | `gripper.enabled`                                                             | 夹爪跟随开关：sim 默认`false`，real 设 `true`                                                                                    |
@@ -79,7 +81,7 @@ source /opt/lerobot_venv/bin/activate
 ## 3. 两阶段使用流程
 
 **阶段 1**（home.launch.py）：启动 cell（持续运行）+ 移双臂到 home 并验证 → 打印 HOME REACHED 后退出（cell 保持运行）。
-**阶段 2**（teleop.launch.py）：连接已运行的 cell，teleop_node 状态机 WAITING_CELL → VERIFY_HOME → SETTLING → CAPTURE_OFFSET → ARMED（Enter 门控）→ ACTIVE；同时启动 `ruckig_node`（500 Hz 平滑映射目标后下发 `/forward_position_controller/commands`）；`mode=record` 时额外拉起 data_recorder。
+**阶段 2**（teleop.launch.py）：连接已运行的 cell，teleop_node 状态机 WAITING_CELL → VERIFY_HOME → SETTLING → CAPTURE_OFFSET → ARMED（Enter 门控）→ ACTIVE；同时启动 `ruckig_node`（500 Hz 平滑映射目标后按 `teleop.controller` 下发到前向位置或阻抗控制器）；`mode=record` 时额外拉起 data_recorder。
 
 > **一个 ROS Domain 内只能选择一套 UR cell。** `home.launch.py` 会自行启动
 > `ur_robot_driver/ur_control.launch.py` 和 `/controller_manager`；因此不要先启动
@@ -100,6 +102,46 @@ ros2 launch ur_teleop teleop.launch.py
 
 rviz 显示模型：**默认组合模型**（`ur10e_robotiq_ft_description` 包，UR + FT300 + Robotiq 2F-85 完整装配，含 gripper_tcp 参考帧）——ur 官方 `ur_description` 只有纯 UR。组合模型的 xacro 复用官方 `ur_ros2_control` 宏，sim 下带 mock 硬件（含夹爪关节），real 下带真机插件；`ur10e_robotiq_ft_description` 未安装时自动回退官方纯 UR 模型。切换方式与细节见 `docs/launch.md`「rviz 模型：URDF 描述文件来源」。
 
+### 阻抗控制 sim（完整六轴闭环）
+
+先在运行配置中设置控制器；若用自定义配置文件，建议同时关闭夹爪，因为阻抗仿真模型只包含 UR 六轴：
+
+```yaml
+teleop:
+  controller: joint_impedance
+gripper:
+  enabled: false
+```
+
+重新构建并 source 后，按两阶段命令启动。`controller:=joint_impedance` 只需要传给
+`home.launch.py`，用于让 cell 选择阻抗仿真模型；`teleop.launch.py` 从 YAML 读取同一设置。
+
+```bash
+source /opt/ros/jazzy/setup.bash
+cd /ros2_ws
+colcon build --symlink-install --packages-select joint_impedance_controller ur_teleop
+source install/setup.bash
+
+# 终端 1：先完成 home；该分支使用 JointImpedanceMockSystem。
+ros2 launch ur_teleop home.launch.py sim:=true controller:=joint_impedance
+# 看到 HOME REACHED 后，保持终端 1 运行。
+
+# 终端 2：状态到 ARMED 后按 Enter。
+ros2 launch ur_teleop teleop.launch.py
+```
+
+此分支先由 `scaled_joint_trajectory_controller` 完成 home，随后严格切换到
+`joint_impedance_controller`。Ruckig 输出 `JointState` 到
+`/joint_impedance_controller/target_joint_state`，mock 将阻抗力矩积分为 `/joint_states`，可用于验证完整闭环。
+
+若使用独立配置文件（例如 `/tmp/teleop_impedance.yaml`），两个阶段必须使用同一个文件，且阶段 1 显式指定控制器：
+
+```bash
+ros2 launch ur_teleop home.launch.py sim:=true \
+  config_file:=/tmp/teleop_impedance.yaml controller:=joint_impedance
+ros2 launch ur_teleop teleop.launch.py config_file:=/tmp/teleop_impedance.yaml
+```
+
 ### real（真机）
 
 ```bash
@@ -110,6 +152,30 @@ ros2 launch ur_teleop teleop.launch.py
 
 > `sim` 切换到 false 后`cell.launch.py` 会走真机分支：UR 用官方默认 bare 模型(真机驱动 + recipe 文件路径内置)，夹爪/FT300 各自启动独立的 controller_manager。
 > `robot_ip`/`gripper_port`/`ftdi_id`/`launch_rviz` 在 `home.launch.py` 声明，launch 参数优先、yaml 兜底。夹爪和 FT300 的端口如果 yaml 已配置正确则无需传参。
+
+### 阻抗控制 real（仅 wrist_3_joint 验证）
+
+真机阻抗控制需要已部署支持 effort 命令接口的 `joint_impedance_controller`，并完成现场安全检查、急停与减速设置。当前遥操真机安全门是强制的：进入阻抗控制器时捕获从臂当前关节角，**前五轴保持该角度不变**，只有 `wrist_3_joint` 可在 `±teleop.real_impedance_wrist_3_max_delta_rad`（默认 `±0.02 rad`）内变化；该限制不能通过配置关闭。
+
+```bash
+# 配置文件中须为：teleop.controller: joint_impedance
+# 终端 1：只在完成安全检查后执行。
+ros2 launch ur_teleop home.launch.py sim:=false controller:=joint_impedance \
+  robot_ip:=192.168.1.1 gripper_port:=/dev/ttyUSB1 ftdi_id:=<你的ftdi_id>
+# 看到 HOME REACHED 后，保持终端 1 运行。
+
+# 终端 2：进入 ARMED 后按 Enter；仅验证 wrist_3_joint 的小幅旋转。
+ros2 launch ur_teleop teleop.launch.py
+```
+
+验证期间可只读确认控制器状态与实际关节反馈：
+
+```bash
+ros2 control list_controllers -c /controller_manager
+ros2 topic echo /joint_states
+```
+
+不要在真机阻抗验证期间下发其他关节、末端位姿、轨迹或笛卡尔速度指令。
 
 ### record 模式
 

@@ -1,5 +1,6 @@
 # USB/OpenCV 相机发布配置。使用 /dev/v4l/by-path 固定物理 USB 端口，避免 /dev/videoN
-# 随插拔改变。启用后由 cell.launch.py 包含 data_collection 的 opencv_cameras.launch.py。
+# 随插拔改变。启用后由独立的 camera.launch.py 包含 data_collection 的
+# opencv_cameras.launch.py。
 opencv_cameras:
   - name: usb_front
     enabled: true

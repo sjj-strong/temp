@@ -122,6 +122,62 @@ trajectory 与另一遥操运动控制器，并激活配置选择的控制器；
 
 ## 启动命令序列
 
+## 相机发布与数据录制
+
+相机由独立的 `camera.launch.py` 启动，不包含在 `cell.launch.py`、`home.launch.py` 或
+`teleop.launch.py` 中，也不会启动 UR、Alicia、控制器或数据录制节点。请在独立终端
+启动相机后，再启动遥操与录制。`ur_teleop.yaml` 的 `cameras.realsense.enabled` 与
+`cameras.opencv.enabled` 分别控制两类相机，可同时为 `true`。两者默认关闭。
+
+- RealSense 复用 `data_collection/launch/dual_realsense.launch.py`；序列号、是否启用
+  D435i、RGB/深度、分辨率和命名空间均由 `cameras.realsense` 配置。
+- USB/OpenCV 复用 `data_collection/launch/opencv_cameras.launch.py`；设备路径、发布
+  话题、帧名、分辨率、帧率与节点名在本包 `config/opencv_cameras.yaml` 配置。
+
+例如要在录制时保存 D455 RGB 与 USB 前视图，`recorder.cameras` 的 topic 必须与发布端
+一致：`/camera/d455/color/image_raw` 和 `/camera/usb_front/color/image_raw`。两者均为
+`sensor_msgs/msg/Image`。
+
+```bash
+# 仅启动图像发布（不启动机械臂、Alicia 或录制器）。
+ros2 launch ur_teleop camera.launch.py \
+  launch_realsense:=true \
+  launch_opencv_cameras:=true
+```
+
+```bash
+# 环境（sim 与 real 均需）
+source /opt/ros/jazzy/setup.bash
+source /ros2_ws/install/setup.bash
+
+# 阶段 1 —— sim（主臂真实，UR 端 mock + rviz）
+ros2 launch ur_teleop home.launch.py
+# 看到 HOME REACHED 后（cell 仍在运行）开第二个终端：
+ros2 launch ur_teleop teleop.launch.py
+# 状态到 ARMED 后按 Enter → rviz 中 mock UR 跟随主臂
+
+# 阶段 1 —— real（真机）
+ros2 launch ur_teleop home.launch.py sim:=false robot_ip:=192.168.1.1 gripper_port:=/dev/ttyUSB1 ftdi_id:=<你的ftdi_id>
+# HOME REACHED 后第二个终端：
+ros2 launch ur_teleop teleop.launch.py
+
+# 阶段 2 —— record（需先激活 lerobot venv）
+source /opt/lerobot_venv/bin/activate
+ros2 launch ur_teleop teleop.launch.py mode:=record
+```
+
+补充：
+
+- `sim`/`robot_ip`/`gripper_port`/`ftdi_id`/`launch_rviz` 只在 home.launch.py（含 cell）声明；也可直接改 yaml 的 `sim`/`cell.*` 而不传参。
+- `force_home:=true`：双臂不在 home 容差内时跳过验证直接继续；home 轨迹未到位时也可用。
+- 退出：Ctrl-C。teleop_node 自动执行 `/demonstration=false` → 切回 trajectory controller（`restore_controller_on_exit`）→ recorder `finalize()`。
+
+## 测试覆盖
+
+- 集成测试 `test_integration.py` 通过 launch API 拉起 home/teleop 全栈（假主臂 + mock UR + record），覆盖两阶段启动与 `force_home` 等参数路径；launch 文件本身的参数默认值读取（`_yaml_default` 与 `config_file` 张力）由测试的 `tmp_path` 隔离配置复现验证。见 docs/README.md。
+
+## 控制器启动命令
+
 ### 默认前向位置控制
 
 ```bash
@@ -174,50 +230,3 @@ ros2 launch ur_teleop teleop.launch.py
 
 真机阻抗安全门固定锁定前五轴，只允许 `wrist_3_joint` 在启动切换时的位置附近
 `±teleop.real_impedance_wrist_3_max_delta_rad`（默认 `±0.02 rad`）旋转。不得下发其他关节、末端位姿、轨迹或笛卡尔速度控制指令。
-
-## 相机发布与数据录制
-
-相机由独立的 `camera.launch.py` 启动，不包含在 `cell.launch.py`、`home.launch.py` 或
-`teleop.launch.py` 中，也不会启动 UR、Alicia、控制器或数据录制节点。请在独立终端
-启动相机后，再启动遥操与录制。`ur_teleop.yaml` 的 `cameras.realsense.enabled` 与
-`cameras.opencv.enabled` 分别控制两类相机，可同时为 `true`。两者默认关闭。
-
-- RealSense 复用 `data_collection/launch/dual_realsense.launch.py`；序列号、是否启用
-  D435i、RGB/深度、分辨率和命名空间均由 `cameras.realsense` 配置。
-- USB/OpenCV 复用 `data_collection/launch/opencv_cameras.launch.py`；设备路径、发布
-  话题、帧名、分辨率、帧率与节点名在本包 `config/opencv_cameras.yaml` 配置。
-
-例如要在录制时保存 D455 RGB 与 USB 前视图，`recorder.cameras` 的 topic 必须与发布端
-一致：`/camera/d455/color/image_raw` 和 `/camera/usb_front/color/image_raw`。两者均为
-`sensor_msgs/msg/Image`。
-
-```bash
-# 环境（sim 与 real 均需）
-source /opt/ros/jazzy/setup.bash
-source /ros2_ws/install/setup.bash
-
-# 阶段 1 —— sim（主臂真实，UR 端 mock + rviz）
-ros2 launch ur_teleop home.launch.py
-# 看到 HOME REACHED 后（cell 仍在运行）开第二个终端：
-ros2 launch ur_teleop teleop.launch.py
-# 状态到 ARMED 后按 Enter → rviz 中 mock UR 跟随主臂
-
-# 阶段 1 —— real（真机）
-ros2 launch ur_teleop home.launch.py sim:=false robot_ip:=192.168.1.1 gripper_port:=/dev/ttyUSB1 ftdi_id:=<你的ftdi_id>
-# HOME REACHED 后第二个终端：
-ros2 launch ur_teleop teleop.launch.py
-
-# 阶段 2 —— record（需先激活 lerobot venv）
-source /opt/lerobot_venv/bin/activate
-ros2 launch ur_teleop teleop.launch.py mode:=record
-```
-
-补充：
-
-- `sim`/`robot_ip`/`gripper_port`/`ftdi_id`/`launch_rviz` 只在 home.launch.py（含 cell）声明；也可直接改 yaml 的 `sim`/`cell.*` 而不传参。
-- `force_home:=true`：双臂不在 home 容差内时跳过验证直接继续；home 轨迹未到位时也可用。
-- 退出：Ctrl-C。teleop_node 自动执行 `/demonstration=false` → 切回 trajectory controller（`restore_controller_on_exit`）→ recorder `finalize()`。
-
-## 测试覆盖
-
-- 集成测试 `test_integration.py` 通过 launch API 拉起 home/teleop 全栈（假主臂 + mock UR + record），覆盖两阶段启动与 `force_home` 等参数路径；launch 文件本身的参数默认值读取（`_yaml_default` 与 `config_file` 张力）由测试的 `tmp_path` 隔离配置复现验证。见 docs/README.md。

@@ -49,6 +49,9 @@ max_velocity / max_acceleration / max_jerk：若 `ur_teleop.yaml` 含 `ruckig:` 
 # 正常遥操（推荐）：home 完成后启动，ruckig 从当前（已 home）UR 状态初始化
 #   T1: ros2 launch ur_teleop home.launch.py sim:=true
 #   T2: ros2 launch ur_teleop teleop.launch.py mode:=teleop        # 含 teleop_node + ruckig_node
+# 关节阻抗仿真：先在 YAML 设置 teleop.controller: joint_impedance，随后
+#   T1: ros2 launch ur_teleop home.launch.py sim:=true controller:=joint_impedance
+#   T2: ros2 launch ur_teleop teleop.launch.py
 # 频率可覆盖：
 #   ros2 launch ur_teleop teleop.launch.py ruckig_control_hz:=500
 
@@ -62,7 +65,7 @@ ros2 topic pub -r 1 /ruckig/target_joint_positions std_msgs/msg/Float64MultiArra
 
 ## 注意事项
 
-- **唯一发布者**：`/forward_position_controller/commands` **只能由 ruckig_node 发布**；teleop_node 已改为只发 `/ruckig/target_joint_positions`。**不要同时用 `cell.launch … ruckig:=true` 和 `teleop.launch`**——两个 ruckig_node 会抢同一话题。
+- **唯一发布者**：配置选择的输出话题（`/forward_position_controller/commands` 或 `/joint_impedance_controller/target_joint_state`）只能由 ruckig_node 发布；teleop_node 已改为只发 `/ruckig/target_joint_positions`。**不要同时用 `cell.launch … ruckig:=true` 和 `teleop.launch`**——两个 ruckig_node 会抢同一话题。
 - **必须在 home 之后启动**：teleop.launch 在 home 完成后才拉起 ruckig_node，此时 UR 已在 home 位，ruckig 从真实状态初始化，避免 home 阶段轨迹控制器移动机器人导致 Ruckig 内部状态过期（否则切换到 forward controller 时首帧会跳变）。
 - **`cell.launch ruckig:=true` 仅用于纯手动测试**（不跑 teleop/home），方便单独验证 Ruckig 效果或标定运动学参数。
 - **依赖**：`pip install ruckig`（无 rosdep key，系统 python 与 lerobot venv 均需安装）。
