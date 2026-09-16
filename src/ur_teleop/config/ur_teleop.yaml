@@ -3,14 +3,30 @@ sim: true               # cell 端：sim(mock+rviz) / real(真机+夹爪+FT)
 cell:
   ur_type: ur10e
   robot_ip: 169.254.138.15
-  gripper_port: /dev/ttyUSB1     # real 模式，include robotiq_control 用
-  ftdi_id: "ttyUSB3"                    # real 模式，include rq_fts 驱动用（launch 参数即 ftdi_id）
+  gripper_port: /dev/ttyUSB0     # real 模式，include robotiq_control 用
+  ftdi_id: "ttyUSB2"                    # real 模式，include rq_fts 驱动用（launch 参数即 ftdi_id）
   launch_rviz: true
   alicia_port: "/dev/ttyACM0"                 # 空=自动检测；可指定如 /dev/ttyACM0
   launch_alicia: true             # 主臂始终真实；纯 sim 无 Alicia 时设 false
+# 相机发布由独立的 camera.launch.py 启动，不会随 UR 控制栈启动。
+# 两类相机可同时启用；默认均关闭，避免未接入设备时影响遥操启动。
+cameras:
+  realsense:
+    enabled: false
+    d435i_serial: "405622073956"
+    d455_serial: "311322304687"
+    enable_d435i: true
+    enable_color: true
+    enable_depth: false
+    color_profile: "640,480,30"
+    camera_namespace: camera
+  opencv:
+    enabled: false
+    # 每台 USB 相机的设备端口、节点名、图像话题和分辨率在此文件定义。
+    config_file: ""
 home:
-  master: [0.01687378866674205, 0.009203884727313927, -0.3988350048502669, 0.4509903516383784, 0.05982525072754008, 0.06135923151542544]     # 目标 home（用户提前设置，本包不处理含义）
-  slave:  [1.507859468460083, -1.3925681871226807, 2.0107973257647913, -2.1436053715147914, -1.54979116121401, 4.581111431121826]
+  master: [-0.0214676, -0.0781908, -0.1104793, 0.2501057, -0.0015708, -0.0445059]     # 目标 home（用户提前设置，本包不处理含义）
+  slave:  [1.5078551769256592, -1.3925983321717759, 2.010801140462057, -2.1436053715147914, -1.54979116121401, 4.581111431121826]
   master_gripper_value: 1000
   at_home_tolerance_rad: 0.1   # 与控制器的 goal tolerance (0.1) 保持一致，避免控制器报告成功但 home_node 验证失败
   settle_time_s: 2.0

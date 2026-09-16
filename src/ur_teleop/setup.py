@@ -21,6 +21,7 @@ setup(
             "launch/cell.launch.py",
             "launch/home.launch.py",
             "launch/teleop.launch.py",
+            "launch/camera.launch.py",
             "launch/rsp_mock.launch.py",
             "launch/ft300_gripper_test.launch.py",
         ]),

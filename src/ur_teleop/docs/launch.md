@@ -122,6 +122,75 @@ trajectory 与另一遥操运动控制器，并激活配置选择的控制器；
 
 ## 启动命令序列
 
+### 默认前向位置控制
+
+```bash
+source /opt/ros/jazzy/setup.bash
+source /ros2_ws/install/setup.bash
+
+# 终端 1：sim，等待 HOME REACHED，保持 cell 运行。
+ros2 launch ur_teleop home.launch.py sim:=true
+
+# 终端 2：进入 ARMED 后按 Enter。
+ros2 launch ur_teleop teleop.launch.py
+```
+
+### 关节阻抗仿真
+
+在 `ur_teleop.yaml` 中设置 `teleop.controller: joint_impedance`。阻抗仿真使用专用的
+`JointImpedanceMockSystem`，只包含 UR 六轴，因此建议同时设置 `gripper.enabled: false`。
+
+```bash
+source /opt/ros/jazzy/setup.bash
+cd /ros2_ws
+colcon build --symlink-install --packages-select joint_impedance_controller ur_teleop
+source install/setup.bash
+
+# 终端 1：home 使用 position 接口；HOME REACHED 后保持运行。
+ros2 launch ur_teleop home.launch.py sim:=true controller:=joint_impedance
+
+# 终端 2：遥操阶段严格切换到 effort 接口的阻抗控制器。
+ros2 launch ur_teleop teleop.launch.py
+```
+
+Ruckig 会向 `/joint_impedance_controller/target_joint_state` 发布带关节名的
+`sensor_msgs/msg/JointState`。如果使用 `config_file:=/绝对路径/配置.yaml`，两个 launch
+都要传同一个 `config_file`，并在 `home.launch.py` 命令额外传
+`controller:=joint_impedance`；`teleop.launch.py` 没有 `controller` launch 参数。
+
+### 关节阻抗真机验证
+
+配置 `teleop.controller: joint_impedance` 后，只有完成现场安全检查且真机控制器支持
+effort 接口时才可执行：
+
+```bash
+# 终端 1：HOME REACHED 后保持运行。
+ros2 launch ur_teleop home.launch.py sim:=false controller:=joint_impedance \
+  robot_ip:=192.168.1.1 gripper_port:=/dev/ttyUSB1 ftdi_id:=<你的ftdi_id>
+
+# 终端 2：进入 ARMED 后按 Enter。
+ros2 launch ur_teleop teleop.launch.py
+```
+
+真机阻抗安全门固定锁定前五轴，只允许 `wrist_3_joint` 在启动切换时的位置附近
+`±teleop.real_impedance_wrist_3_max_delta_rad`（默认 `±0.02 rad`）旋转。不得下发其他关节、末端位姿、轨迹或笛卡尔速度控制指令。
+
+## 相机发布与数据录制
+
+相机由独立的 `camera.launch.py` 启动，不包含在 `cell.launch.py`、`home.launch.py` 或
+`teleop.launch.py` 中，也不会启动 UR、Alicia、控制器或数据录制节点。请在独立终端
+启动相机后，再启动遥操与录制。`ur_teleop.yaml` 的 `cameras.realsense.enabled` 与
+`cameras.opencv.enabled` 分别控制两类相机，可同时为 `true`。两者默认关闭。
+
+- RealSense 复用 `data_collection/launch/dual_realsense.launch.py`；序列号、是否启用
+  D435i、RGB/深度、分辨率和命名空间均由 `cameras.realsense` 配置。
+- USB/OpenCV 复用 `data_collection/launch/opencv_cameras.launch.py`；设备路径、发布
+  话题、帧名、分辨率、帧率与节点名在本包 `config/opencv_cameras.yaml` 配置。
+
+例如要在录制时保存 D455 RGB 与 USB 前视图，`recorder.cameras` 的 topic 必须与发布端
+一致：`/camera/d455/color/image_raw` 和 `/camera/usb_front/color/image_raw`。两者均为
+`sensor_msgs/msg/Image`。
+
 ```bash
 # 环境（sim 与 real 均需）
 source /opt/ros/jazzy/setup.bash
