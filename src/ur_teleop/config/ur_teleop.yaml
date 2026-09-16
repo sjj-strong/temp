@@ -24,6 +24,12 @@ cameras:
     enabled: false
     # 每台 USB 相机的设备端口、节点名、图像话题和分辨率在此文件定义。
     config_file: ""
+  visualization:
+    # 使用 rqt_image_view 为每个 topic 打开独立窗口；支持鼠标滚轮缩放与拖拽平移。
+    enabled: false
+    topics:
+      - /camera/d455/color/image_raw
+      - /camera/usb_front/color/image_raw
 home:
   master: [-0.0214676, -0.0781908, -0.1104793, 0.2501057, -0.0015708, -0.0445059]     # 目标 home（用户提前设置，本包不处理含义）
   slave:  [1.5078551769256592, -1.3925983321717759, 2.010801140462057, -2.1436053715147914, -1.54979116121401, 4.581111431121826]

@@ -5,7 +5,7 @@ import os
 import yaml
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, ExecuteProcess, IncludeLaunchDescription
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
@@ -22,6 +22,16 @@ def _yaml_default(config_file: str, *path: str, fallback: str):
         return fallback
 
 
+def _yaml_topics(config_file: str) -> list[str]:
+    """读取需要显示的原始 Image 话题，忽略空值和非字符串项。"""
+    try:
+        with open(config_file) as f:
+            topics = yaml.safe_load(f)["cameras"]["visualization"]["topics"]
+        return [str(topic) for topic in topics if isinstance(topic, str) and topic]
+    except Exception:
+        return []
+
+
 def generate_launch_description():
     pkg_share = get_package_share_directory("ur_teleop")
     config_file = os.path.join(pkg_share, "config", "ur_teleop.yaml")
@@ -30,6 +40,7 @@ def generate_launch_description():
     if not opencv_config:
         opencv_config = os.path.join(pkg_share, "config", "opencv_cameras.yaml")
     data_collection_share = get_package_share_directory("data_collection")
+    image_topics = _yaml_topics(config_file)
 
     return LaunchDescription([
         DeclareLaunchArgument("config_file", default_value=config_file),
@@ -37,6 +48,8 @@ def generate_launch_description():
             config_file, "cameras", "realsense", "enabled", fallback="false")),
         DeclareLaunchArgument("launch_opencv_cameras", default_value=_yaml_default(
             config_file, "cameras", "opencv", "enabled", fallback="false")),
+        DeclareLaunchArgument("launch_image_viewers", default_value=_yaml_default(
+            config_file, "cameras", "visualization", "enabled", fallback="false")),
         DeclareLaunchArgument("opencv_camera_config", default_value=opencv_config),
         DeclareLaunchArgument("d435i_serial", default_value=_yaml_default(
             config_file, "cameras", "realsense", "d435i_serial", fallback="")),
@@ -72,4 +85,14 @@ def generate_launch_description():
             condition=IfCondition(LaunchConfiguration("launch_opencv_cameras")),
             launch_arguments={"camera_config": LaunchConfiguration("opencv_camera_config")}.items(),
         ),
+        # 每个窗口独立订阅一个 raw Image 话题。rqt_image_view 支持鼠标滚轮缩放、
+        # 拖拽平移和窗口自适应；该进程只消费图像，不参与发布或控制。
+        *[
+            ExecuteProcess(
+                cmd=["ros2", "run", "rqt_image_view", "rqt_image_view", topic],
+                output="screen",
+                condition=IfCondition(LaunchConfiguration("launch_image_viewers")),
+            )
+            for topic in image_topics
+        ],
     ])

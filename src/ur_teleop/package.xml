@@ -20,6 +20,7 @@
   <depend>trajectory_msgs</depend>
   <depend>cv_bridge</depend>
   <exec_depend>data_collection</exec_depend>
+  <exec_depend>rqt_image_view</exec_depend>
   <exec_depend>joint_impedance_controller</exec_depend>
   <exec_depend>robotiq_ft_sensor_hardware</exec_depend>
   <exec_depend>robotiq_description</exec_depend>
