@@ -222,7 +222,7 @@ Ruckig 会向 `/joint_impedance_controller/target_joint_state` 发布带关节�
 都要传同一个 `config_file`，并在 `home.launch.py` 命令额外传
 `controller:=joint_impedance`；`teleop.launch.py` 没有 `controller` launch 参数。
 
-### 关节阻抗真机验证
+### 关节阻抗真机六轴遥操
 
 配置 `teleop.controller: joint_impedance` 后，只有完成现场安全检查且真机控制器支持
 effort 接口时才可执行：
@@ -236,5 +236,4 @@ ros2 launch ur_teleop home.launch.py sim:=false controller:=joint_impedance \
 ros2 launch ur_teleop teleop.launch.py
 ```
 
-真机阻抗安全门固定锁定前五轴，只允许 `wrist_3_joint` 在启动切换时的位置附近
-`±teleop.real_impedance_wrist_3_max_delta_rad`（默认 `±0.02 rad`）旋转。不得下发其他关节、末端位姿、轨迹或笛卡尔速度控制指令。
+Ruckig 的速度、加速度和 jerk 约束以及 `safety.limits` 的关节限位会作用于六个关节。遥操运行期间不得并行向同一控制器下发其他来源的关节、末端位姿、轨迹或笛卡尔速度指令。

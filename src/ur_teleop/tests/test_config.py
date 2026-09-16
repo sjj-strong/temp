@@ -6,7 +6,6 @@ from ur_teleop.config import (
     load_config,
     gripper_position_to_value,
     gripper_value_to_position,
-    constrain_real_impedance_target,
 )
 
 LIMITS = "\n".join(f"    {j}: [-6.283, 6.283]" for j in UR_JOINT_NAMES)
@@ -56,14 +55,6 @@ def test_unknown_teleop_controller_is_rejected(tmp_path):
         load_config(_write(tmp_path, BASE + """
   controller: unsupported
 """))
-
-
-def test_real_impedance_safety_gate_locks_first_five_joints():
-    assert constrain_real_impedance_target(
-        [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
-        [0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
-        0.02,
-    ) == pytest.approx([0.1, 0.2, 0.3, 0.4, 0.5, 0.62])
 
 
 def test_missing_required_key_raises(tmp_path):

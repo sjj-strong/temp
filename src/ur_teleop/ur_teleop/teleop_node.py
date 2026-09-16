@@ -22,7 +22,6 @@ from ur_teleop.config import (
     GRIPPER_JOINT,
     UR_GRIPPER_JOINT,
     UR_JOINT_NAMES,
-    constrain_real_impedance_target,
     default_config_path,
     load_config,
 )
@@ -80,14 +79,6 @@ class TeleopNode(Node):
         self._teleop_motion_ctrls = [
             "forward_position_controller", "joint_impedance_controller",
         ]
-        self._real_impedance_validation = (
-            self._controller_kind == "joint_impedance" and not bool(cfg["sim"])
-        )
-        self._real_impedance_wrist_3_max_delta = float(
-            cfg["teleop"].get("real_impedance_wrist_3_max_delta_rad", 0.02)
-        )
-        self._real_impedance_hold_q: list[float] | None = None
-
         self._state = State.WAITING_CELL
         self._start_time = time.time()
         self._fatal_error = False
@@ -262,16 +253,6 @@ class TeleopNode(Node):
             self._begin_switch()
 
     def _begin_switch(self):
-        if self._real_impedance_validation:
-            with self._lock:
-                self._real_impedance_hold_q = list(self._slave_q) if self._slave_q else None
-            if self._real_impedance_hold_q is None:
-                self.get_logger().error("未收到从臂状态，拒绝进入真机阻抗验证")
-                return
-            self.get_logger().warn(
-                "真机阻抗安全门已启用：前五轴锁定，仅允许 wrist_3_joint 在保持位置 ±%.3f rad 内运动"
-                % self._real_impedance_wrist_3_max_delta
-            )
         self._switch_attempt = 0
         self._switch_phase = "list"
         self._switch_future = self._switcher.list_controllers()
@@ -393,14 +374,6 @@ class TeleopNode(Node):
 
     def _publish_commands(self, cmd: list[float]):
         # 映射后的 UR 目标 → ruckig_node 平滑后下发配置指定的控制器。
-        if self._real_impedance_validation:
-            if self._real_impedance_hold_q is None:
-                self.get_logger().error("真机阻抗保持位置缺失，拒绝发布目标")
-                return
-            cmd = constrain_real_impedance_target(
-                cmd, self._real_impedance_hold_q,
-                self._real_impedance_wrist_3_max_delta,
-            )
         target = Float64MultiArray()
         target.data = list(cmd)
         self._ruckig_target_pub.publish(target)

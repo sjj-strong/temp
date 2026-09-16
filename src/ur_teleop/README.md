@@ -60,7 +60,6 @@ source /opt/lerobot_venv/bin/activate
 | `safety.limits`                                                               | 关节名键值 dict（`[min, max]` 弧度，来自 ur10e joint_limits）                                                                      |
 | `teleop.command_rate_hz`                                                      | 映射目标发布频率（默认 50 Hz；forward 实际下发由 ruckig 500 Hz 平滑）                                                                |
 | `teleop.controller`                                                           | 遥操/数采使用的从臂控制器：`forward_position`（默认）或 `joint_impedance`                                                        |
-| `teleop.real_impedance_wrist_3_max_delta_rad`                                 | 真机阻抗安全门的`wrist_3_joint` 最大相对位移；前五轴始终锁定，安全门不可关闭                                                       |
 | `teleop.watchdog_timeout_s`                                                   | 主臂数据超时（默认 0.5 s）→ INACTIVE 暂停映射                                                                                       |
 | `teleop.restore_controller_on_exit`                                           | 退出时是否切回 trajectory controller（默认 true）                                                                                    |
 | `gripper.enabled`                                                             | 夹爪跟随开关：sim 默认`false`，real 设 `true`                                                                                    |
@@ -169,9 +168,9 @@ ros2 launch ur_teleop teleop.launch.py
 > `sim` 切换到 false 后`cell.launch.py` 会走真机分支：UR 用官方默认 bare 模型(真机驱动 + recipe 文件路径内置)，夹爪/FT300 各自启动独立的 controller_manager。
 > `robot_ip`/`gripper_port`/`ftdi_id`/`launch_rviz` 在 `home.launch.py` 声明，launch 参数优先、yaml 兜底。夹爪和 FT300 的端口如果 yaml 已配置正确则无需传参。
 
-### 阻抗控制 real（仅 wrist_3_joint 验证）
+### 阻抗控制 real（六轴遥操）
 
-真机阻抗控制需要已部署支持 effort 命令接口的 `joint_impedance_controller`，并完成现场安全检查、急停与减速设置。当前遥操真机安全门是强制的：进入阻抗控制器时捕获从臂当前关节角，**前五轴保持该角度不变**，只有 `wrist_3_joint` 可在 `±teleop.real_impedance_wrist_3_max_delta_rad`（默认 `±0.02 rad`）内变化；该限制不能通过配置关闭。
+真机阻抗控制需要已部署支持 effort 命令接口的 `joint_impedance_controller`，并完成现场安全检查、急停与减速设置。遥操映射、关节限位 clamp 与 Ruckig 的速度、加速度、jerk 限制对 UR 六轴均生效。
 
 ```bash
 # 配置文件中须为：teleop.controller: joint_impedance
@@ -180,7 +179,7 @@ ros2 launch ur_teleop home.launch.py sim:=false controller:=joint_impedance \
   robot_ip:=192.168.1.1 gripper_port:=/dev/ttyUSB1 ftdi_id:=<你的ftdi_id>
 # 看到 HOME REACHED 后，保持终端 1 运行。
 
-# 终端 2：进入 ARMED 后按 Enter；仅验证 wrist_3_joint 的小幅旋转。
+# 终端 2：进入 ARMED 后按 Enter，开始六轴遥操。
 ros2 launch ur_teleop teleop.launch.py
 ```
 
@@ -191,7 +190,7 @@ ros2 control list_controllers -c /controller_manager
 ros2 topic echo /joint_states
 ```
 
-不要在真机阻抗验证期间下发其他关节、末端位姿、轨迹或笛卡尔速度指令。
+请勿在遥操运行期间并行向同一控制器下发其他来源的关节、末端位姿、轨迹或笛卡尔速度指令。
 
 ### record 模式
 

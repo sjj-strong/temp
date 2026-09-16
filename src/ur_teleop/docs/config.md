@@ -103,7 +103,6 @@ gripper_value_to_position(value: float, gripper_type: str = "50mm") -> float
 | 键                             | 类型  | 默认值   | 含义                             | 消费方                                           |
 | ------------------------------ | ----- | -------- | -------------------------------- | ------------------------------------------------ |
 | `controller`                 | str   | `forward_position` | 从臂遥操控制器：`forward_position` 或 `joint_impedance`。前者发布 6 维位置数组；后者发布带六个关节名的 `JointState`，并在 home 阶段由 cell 预加载为 inactive | cell.launch、teleop_node、ruckig_node |
-| `real_impedance_wrist_3_max_delta_rad` | float | `0.02` | 真机阻抗安全门的 wrist_3 最大偏移。真机阻抗模式始终锁定前五轴为切换前实测值，且本项不可用来关闭安全门 | teleop_node |
 | `command_rate_hz`            | float | `50`   | 控制/发布频率（50 Hz timer）     | teleop_node.py:68,110                            |
 | `watchdog_timeout_s`         | float | `0.5`  | 主臂数据超时 → INACTIVE         | teleop_node.py:69,300                            |
 | `restore_controller_on_exit` | bool  | `true` | 退出时切回 trajectory controller | teleop_node`shutdown`（teleop_node.py:70,363） |
@@ -144,8 +143,7 @@ gripper_value_to_position(value: float, gripper_type: str = "50mm") -> float
 - 所有校验失败均抛 `ConfigError`（继承 `ValueError`），节点构造时即失败退出——配置错误不延迟到运行期。
 - 可选键不做默认填充：`load_config` 返回原始 dict，各消费方 `.get(key, default)` 自行兜底，默认值散落在各模块（见上表），不在 config.py 集中。
 - 校验只查"键存在/长度"，不校验数值范围（如 `sign` 是否为 ±1、`limits[0] < limits[1]`）——数值合法性由 JointMapper/GripperController 的 clamp 与下游行为兜底。
-- 使用 `joint_impedance` 时，启动 `home.launch.py`（或 `cell.launch.py`）会以 `--inactive` 预加载 `joint_impedance_controller` 的参数文件；遥操启用时才严格停用轨迹/前向位置控制器并激活它。真实机械臂仍须遵守工作区的 `wrist_3_joint` 单关节测试边界。
-- 真机 `joint_impedance` 模式会在进入控制器切换前锁存从臂六关节位置。之后所有遥操与 watchdog 保持目标均强制使用该锁存值的前五轴，并将 `wrist_3_joint` 钳制在 `±real_impedance_wrist_3_max_delta_rad`；该保护在代码中强制执行。
+- 使用 `joint_impedance` 时，启动 `home.launch.py`（或 `cell.launch.py`）会以 `--inactive` 预加载 `joint_impedance_controller` 的参数文件；遥操启用时才严格停用轨迹/前向位置控制器并激活它。真机和仿真均使用同一套六轴遥操映射、关节限位与 Ruckig 轨迹约束。
 
 ## 测试覆盖（tests/test_config.py）
 

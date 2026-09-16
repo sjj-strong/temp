@@ -76,22 +76,6 @@ def default_config_path() -> str:
         return ""
 
 
-def constrain_real_impedance_target(
-    target: list[float], hold_position: list[float], wrist_3_max_delta_rad: float
-) -> list[float]:
-    """真机阻抗验证安全门：锁定前五轴，仅允许 wrist_3 小幅偏移。"""
-    if len(target) != 6 or len(hold_position) != 6:
-        raise ConfigError("真机阻抗安全门需要六个关节目标与保持位置")
-    if wrist_3_max_delta_rad <= 0.0:
-        raise ConfigError("teleop.real_impedance_wrist_3_max_delta_rad 必须大于 0")
-    constrained = list(hold_position)
-    constrained[5] = max(
-        hold_position[5] - wrist_3_max_delta_rad,
-        min(hold_position[5] + wrist_3_max_delta_rad, target[5]),
-    )
-    return constrained
-
-
 def gripper_position_to_value(position_m: float, gripper_type: str = "50mm") -> float:
     """Alicia gripper position (m, 0=open) → command value (0-1000, 0=closed).
 
