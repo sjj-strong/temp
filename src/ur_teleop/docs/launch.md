@@ -237,3 +237,7 @@ ros2 launch ur_teleop teleop.launch.py
 ```
 
 Ruckig 的速度、加速度和 jerk 约束以及 `safety.limits` 的关节限位会作用于六个关节。遥操运行期间不得并行向同一控制器下发其他来源的关节、末端位姿、轨迹或笛卡尔速度指令。
+
+`home_node` 会先确认 `scaled_joint_trajectory_controller` 已处于 `active`，再发送 home
+轨迹，避免控制器尚在启动时接受轨迹却不执行。若 home 失败，请先核对日志中的实际六轴
+关节值与 `home.slave` 是否一致，再处理控制器或网络状态。

@@ -13,6 +13,7 @@ import time
 
 import rclpy
 from control_msgs.action import FollowJointTrajectory
+from controller_manager_msgs.srv import ListControllers
 from rclpy.action import ActionClient
 from rclpy.duration import Duration
 from rclpy.executors import SingleThreadedExecutor
@@ -49,6 +50,11 @@ class HomeNode(rclpy.node.Node):
         self._traj_client = ActionClient(
             self, FollowJointTrajectory, "/scaled_joint_trajectory_controller/follow_joint_trajectory"
         )
+        self._list_controllers = self.create_client(
+            ListControllers, "/controller_manager/list_controllers"
+        )
+        self._list_controllers_future = None
+        self._trajectory_controller_active = False
 
     def _joint_cb(self, msg: JointState):
         # 双臂各自发布 /joint_states（UR cell 与 alicia_d_driver 交织在同一话题），
@@ -71,7 +77,37 @@ class HomeNode(rclpy.node.Node):
         return self._q(self._alicia_states, ALICIA_JOINT_NAMES)
 
     def cell_ready(self) -> bool:
-        return self.slave_q() is not None and self._traj_client.server_is_ready()
+        """仅在轨迹控制器已激活后才允许发送 home goal。
+
+        action server 在控制器 configure 阶段就会出现。若此时发送 goal，它可能被
+        接受、但在 activate 时立即以成功结束，导致真机不实际运动。
+        """
+        if self._list_controllers_future is None:
+            if not self._list_controllers.service_is_ready():
+                return False
+            self._list_controllers_future = self._list_controllers.call_async(
+                ListControllers.Request()
+            )
+            return False
+        if not self._list_controllers_future.done():
+            return False
+        try:
+            response = self._list_controllers_future.result()
+            self._trajectory_controller_active = any(
+                controller.name == "scaled_joint_trajectory_controller"
+                and controller.state == "active"
+                for controller in response.controller
+            )
+        except Exception as exc:
+            self.get_logger().warn(f"查询轨迹控制器状态失败：{exc}")
+            self._trajectory_controller_active = False
+        finally:
+            self._list_controllers_future = None
+        return (
+            self._trajectory_controller_active
+            and self.slave_q() is not None
+            and self._traj_client.server_is_ready()
+        )
 
     def publish_alicia_home(self):
         msg = JointState()
@@ -146,7 +182,9 @@ def main():
     executor.add_node(node)
     rc = 0
     try:
-        node.get_logger().info("等待 UR cell 就绪（/joint_states + trajectory action server）...")
+        node.get_logger().info(
+            "等待 UR cell 就绪（/joint_states + 已激活的 scaled_joint_trajectory_controller）..."
+        )
         deadline = time.time() + 30.0
         while rclpy.ok() and not node.cell_ready() and time.time() < deadline:
             executor.spin_once(timeout_sec=0.5)
