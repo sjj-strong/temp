@@ -492,6 +492,24 @@ class _CapturePub:
         self._store.append(msg)
 
 
+def test_disabled_ruckig_directly_publishes_impedance_target(fsm_node):
+    """关闭 Ruckig 后，遥操目标应直接进入阻抗控制器目标话题格式。"""
+    node = fsm_node
+    messages = []
+    node._use_ruckig = False
+    node._controller_kind = "joint_impedance"
+    node._direct_target_pub = _CapturePub(messages)
+
+    node._publish_commands([0.1, 0.2, 0.3, 0.4, 0.5, 0.6])
+
+    assert len(messages) == 1
+    assert messages[0].name == [
+        "shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint",
+        "wrist_1_joint", "wrist_2_joint", "wrist_3_joint",
+    ]
+    assert list(messages[0].position) == [0.1, 0.2, 0.3, 0.4, 0.5, 0.6]
+
+
 @pytest.fixture
 def fsm_node(tmp_path, monkeypatch):
     """teleop_node in-process：settle_time_s=0.1 加速；不 spin，直接驱动。"""

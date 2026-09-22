@@ -28,9 +28,11 @@ def generate_launch_description():
             cfg = yaml.safe_load(f)
         mode_default = cfg.get("mode", "teleop")
         ruckig_hz_default = str(cfg.get("ruckig", {}).get("control_hz", 500.0))
+        use_ruckig_default = str(cfg.get("ruckig", {}).get("enabled", True)).lower()
     except Exception:
         mode_default = "teleop"
         ruckig_hz_default = "500.0"
+        use_ruckig_default = "true"
 
     return LaunchDescription([
         DeclareLaunchArgument("config_file", default_value=config_file),
@@ -38,6 +40,7 @@ def generate_launch_description():
                               choices=["teleop", "record"]),
         DeclareLaunchArgument("force_home", default_value="false"),
         DeclareLaunchArgument("ruckig_control_hz", default_value=ruckig_hz_default),
+        DeclareLaunchArgument("use_ruckig", default_value=use_ruckig_default),
         Node(
             package="ur_teleop", executable="teleop_node",
             parameters=[
@@ -46,15 +49,15 @@ def generate_launch_description():
                  "force_home": LaunchConfiguration("force_home")},
             ],
         ),
-        # ruckig 平滑节点：消费 teleop_node 的映射目标，500 Hz 平滑后下发 forward controller。
-        # 注意：不要同时用 cell.launch ruckig:=true —— 两者都会向
-        # /forward_position_controller/commands 发布，会冲突。
+        # 仅 use_ruckig=true 时启动平滑节点；false 时 teleop_node 直接向
+        # teleop.controller 所选控制器发送目标，仍由控制器实施自身保护。
         Node(
             package="ur_teleop", executable="ruckig_node",
             parameters=[{
                 "config_file": LaunchConfiguration("config_file"),
                 "control_hz": LaunchConfiguration("ruckig_control_hz"),
             }],
+            condition=IfCondition(LaunchConfiguration("use_ruckig")),
         ),
         Node(
             package="ur_teleop", executable="data_recorder",

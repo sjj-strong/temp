@@ -70,6 +70,7 @@ class TeleopNode(Node):
         self._restore_on_exit = bool(cfg["teleop"].get("restore_controller_on_exit", True))
         self._traj_ctrl = "scaled_joint_trajectory_controller"
         self._controller_kind = cfg["teleop"].get("controller", "forward_position")
+        self._use_ruckig = cfg.get("ruckig", {}).get("enabled", True)
         self._motion_ctrl = {
             "forward_position": "forward_position_controller",
             "joint_impedance": "joint_impedance_controller",
@@ -107,9 +108,18 @@ class TeleopNode(Node):
         self._joint_sub = self.create_subscription(JointState, "/joint_states", self._joint_cb, 10)
         self._enable_sub = self.create_subscription(Bool, "/teleop/enable", self._enable_cb, 10)
         self._estop_sub = self.create_subscription(Bool, "/teleop/e_stop", self._estop_cb, 10)
-        # 映射后的 UR 目标交给 ruckig_node；其根据 teleop.controller 选择
-        # forward position 或 joint impedance 的消息接口。
-        self._ruckig_target_pub = self.create_publisher(Float64MultiArray, "/ruckig/target_joint_positions", 10)
+        # 启用 Ruckig 时先发给轨迹生成器；关闭时直接发给所选从臂控制器。
+        self._ruckig_target_pub = None
+        self._direct_target_pub = None
+        if self._use_ruckig:
+            self._ruckig_target_pub = self.create_publisher(
+                Float64MultiArray, "/ruckig/target_joint_positions", 10)
+        elif self._controller_kind == "joint_impedance":
+            self._direct_target_pub = self.create_publisher(
+                JointState, "/joint_impedance_controller/target_joint_state", 10)
+        else:
+            self._direct_target_pub = self.create_publisher(
+                Float64MultiArray, "/forward_position_controller/commands", 10)
         self._cmd_pub = self.create_publisher(Float64MultiArray, "/teleop/commands", 10)
         self._status_pub = self.create_publisher(Bool, "/teleop/status", 10)
         self._demo_pub = self.create_publisher(Bool, "/demonstration", 10)
@@ -373,10 +383,21 @@ class TeleopNode(Node):
     # ---------- helpers ----------
 
     def _publish_commands(self, cmd: list[float]):
-        # 映射后的 UR 目标 → ruckig_node 平滑后下发配置指定的控制器。
-        target = Float64MultiArray()
-        target.data = list(cmd)
-        self._ruckig_target_pub.publish(target)
+        if self._use_ruckig:
+            # 映射后的 UR 目标 → ruckig_node 平滑后下发配置指定的控制器。
+            target = Float64MultiArray()
+            target.data = list(cmd)
+            self._ruckig_target_pub.publish(target)
+        elif self._controller_kind == "joint_impedance":
+            # 直接路径仍经过控制器的关节限位、参考速度、力矩及变化率保护。
+            target = JointState()
+            target.name = list(UR_JOINT_NAMES)
+            target.position = list(cmd)
+            self._direct_target_pub.publish(target)
+        else:
+            target = Float64MultiArray()
+            target.data = list(cmd)
+            self._direct_target_pub.publish(target)
         tcmd = Float64MultiArray()
         tcmd.data = list(cmd) + [self._gripper.get_gripper_command_signal(self._gripper.current_target)]
         self._cmd_pub.publish(tcmd)
@@ -418,8 +439,9 @@ def main():
     ruckig_hz = float(node._cfg.get("ruckig", {}).get("control_hz", 500.0))
     node.get_logger().info("=" * 60)
     node.get_logger().info(f"ur_teleop 就绪 — mode={node._mode}, sim={node._cfg['sim']}")
-    node.get_logger().info(
-        f"  控制频率: teleop 命令 {node._command_rate:g} Hz | ruckig 平滑 {ruckig_hz:g} Hz")
+    route = (f"Ruckig 平滑 {ruckig_hz:g} Hz" if node._use_ruckig
+             else "直接发送至从臂控制器")
+    node.get_logger().info(f"  控制频率: teleop 命令 {node._command_rate:g} Hz | {route}")
     node.get_logger().info(f"  从臂控制器: {node._motion_ctrl} ({node._controller_kind})")
     node.get_logger().info("  等待双臂到位 → 静止 → offset → Enter 开始控制")
     node.get_logger().info("=" * 60)

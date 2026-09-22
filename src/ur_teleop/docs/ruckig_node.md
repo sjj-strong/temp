@@ -43,6 +43,10 @@ max_velocity / max_acceleration / max_jerk：若 `ur_teleop.yaml` 含 `ruckig:` 
 
 `teleop.controller` 决定输出接口：默认 `forward_position` 保持历史行为；设为 `joint_impedance` 时发布 `sensor_msgs/msg/JointState`，其中 `name` 固定为 UR 六关节标准顺序，`position` 为 Ruckig 输出。阻抗控制器的 `velocity` 可省略，控制器会使用其受限内部参考速度。
 
+`ur_teleop.yaml` 中 `ruckig.enabled` 默认为 `true`。设为 `false` 后，`teleop_node` 不使用
+Ruckig 路径，而是将映射后的关节目标直接发送至 `teleop.controller` 所选控制器；这不会绕过
+关节限位、阻抗控制器参考速度限制、低通、力矩限幅或力矩变化率保护。
+
 ## 启动方式
 
 ```bash

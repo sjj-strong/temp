@@ -48,6 +48,12 @@ def load_config(path: str | Path) -> dict[str, Any]:
             f"{', '.join(_SUPPORTED_TELEOP_CONTROLLERS)}, got '{controller}'"
         )
 
+    ruckig = data.get("ruckig", {})
+    if not isinstance(ruckig, dict):
+        raise ConfigError("ruckig must be a mapping")
+    if "enabled" in ruckig and not isinstance(ruckig["enabled"], bool):
+        raise ConfigError("ruckig.enabled must be a boolean")
+
     for key in _REQUIRED_MAPPING:
         if key not in data["mapping"]:
             raise ConfigError(f"Missing required key 'mapping.{key}' in {p}")

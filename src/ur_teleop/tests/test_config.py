@@ -57,6 +57,22 @@ def test_unknown_teleop_controller_is_rejected(tmp_path):
 """))
 
 
+def test_ruckig_enabled_boolean_is_accepted(tmp_path):
+    cfg = load_config(_write(tmp_path, BASE + """
+ruckig:
+  enabled: false
+"""))
+    assert cfg["ruckig"]["enabled"] is False
+
+
+def test_ruckig_enabled_rejects_non_boolean(tmp_path):
+    with pytest.raises(ConfigError, match="ruckig.enabled"):
+        load_config(_write(tmp_path, BASE + """
+ruckig:
+  enabled: "false"
+"""))
+
+
 def test_missing_required_key_raises(tmp_path):
     with pytest.raises(ConfigError, match="mode"):
         load_config(_write(tmp_path, "sim: true\n"))
