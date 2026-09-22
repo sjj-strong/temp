@@ -64,8 +64,8 @@ teleop:
   watchdog_timeout_s: 0.5
   restore_controller_on_exit: true
 ruckig:
-  # false 时映射后的关节目标直接发给 teleop.controller，跳过 Ruckig 轨迹生成。
-  # 阻抗控制器自身的参考速度限制、低通和力矩保护仍然生效。
+  # 仅对 teleop.controller: joint_impedance 有效：false 时目标直接发给阻抗控制器。
+  # forward_position 始终使用 Ruckig；阻抗控制器自身的保护仍然生效。
   enabled: true
   control_hz:       500.0                                       # launch ruckig_control_hz 默认值；与 controller_manager 一致
   max_velocity:     [2.0944, 2.0944, 3.1416, 3.1416, 3.1416, 3.1416]        # rad/s，每关节

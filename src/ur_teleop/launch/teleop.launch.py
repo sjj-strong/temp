@@ -28,7 +28,11 @@ def generate_launch_description():
             cfg = yaml.safe_load(f)
         mode_default = cfg.get("mode", "teleop")
         ruckig_hz_default = str(cfg.get("ruckig", {}).get("control_hz", 500.0))
-        use_ruckig_default = str(cfg.get("ruckig", {}).get("enabled", True)).lower()
+        controller_default = cfg.get("teleop", {}).get("controller", "forward_position")
+        ruckig_enabled = cfg.get("ruckig", {}).get("enabled", True)
+        # forward_position 始终使用 Ruckig；开关只对 joint_impedance 生效。
+        use_ruckig_default = str(
+            controller_default != "joint_impedance" or ruckig_enabled).lower()
     except Exception:
         mode_default = "teleop"
         ruckig_hz_default = "500.0"
@@ -49,8 +53,8 @@ def generate_launch_description():
                  "force_home": LaunchConfiguration("force_home")},
             ],
         ),
-        # 仅 use_ruckig=true 时启动平滑节点；false 时 teleop_node 直接向
-        # teleop.controller 所选控制器发送目标，仍由控制器实施自身保护。
+        # 仅阻抗控制且 use_ruckig=false 时跳过平滑节点；teleop_node 直接向
+        # 阻抗控制器发送目标，仍由控制器实施自身保护。
         Node(
             package="ur_teleop", executable="ruckig_node",
             parameters=[{

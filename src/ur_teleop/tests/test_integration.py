@@ -510,11 +510,20 @@ def test_disabled_ruckig_directly_publishes_impedance_target(fsm_node):
     assert list(messages[0].position) == [0.1, 0.2, 0.3, 0.4, 0.5, 0.6]
 
 
+def test_forward_position_ignores_ruckig_enabled_flag(fsm_node):
+    """Ruckig 开关不能改变前向位置控制器既有的平滑链路。"""
+    assert fsm_node._controller_kind == "forward_position"
+    assert fsm_node._use_ruckig is True
+
+
 @pytest.fixture
 def fsm_node(tmp_path, monkeypatch):
     """teleop_node in-process：settle_time_s=0.1 加速；不 spin，直接驱动。"""
     cfg_path = tmp_path / "ur_teleop.yaml"
-    cfg_path.write_text(CFG_BODY.replace("settle_time_s: 2.0", "settle_time_s: 0.1"))
+    cfg_path.write_text(
+        CFG_BODY.replace("settle_time_s: 2.0", "settle_time_s: 0.1")
+        + "\nruckig:\n  enabled: false\n"
+    )
     monkeypatch.setattr("ur_teleop.teleop_node.default_config_path", lambda: str(cfg_path))
     rclpy.init()
     node = TeleopNode()

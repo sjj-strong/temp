@@ -70,7 +70,11 @@ class TeleopNode(Node):
         self._restore_on_exit = bool(cfg["teleop"].get("restore_controller_on_exit", True))
         self._traj_ctrl = "scaled_joint_trajectory_controller"
         self._controller_kind = cfg["teleop"].get("controller", "forward_position")
-        self._use_ruckig = cfg.get("ruckig", {}).get("enabled", True)
+        # Ruckig 开关仅影响阻抗控制。前向位置控制沿用原有 Ruckig 平滑链路。
+        self._use_ruckig = (
+            self._controller_kind != "joint_impedance"
+            or cfg.get("ruckig", {}).get("enabled", True)
+        )
         self._motion_ctrl = {
             "forward_position": "forward_position_controller",
             "joint_impedance": "joint_impedance_controller",

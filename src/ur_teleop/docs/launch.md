@@ -69,7 +69,7 @@ rviz（以及 controller_manager）读的是 **`/robot_description` 话题**（`
 
 ## teleop.launch.py
 
-职责：阶段 2。启动 teleop_node；`ruckig.enabled=true` 时再启动 ruckig_node（500 Hz 平滑）；`mode=record` 时由 `IfCondition` 门控额外拉起 data_recorder。**不含 cell**——WAITING_CELL 30 s 超时即提示先运行 home.launch。
+职责：阶段 2。启动 teleop_node；使用 `joint_impedance` 且 `ruckig.enabled=true` 时再启动 ruckig_node（500 Hz 平滑）；`forward_position` 始终启动 ruckig_node；`mode=record` 时由 `IfCondition` 门控额外拉起 data_recorder。**不含 cell**——WAITING_CELL 30 s 超时即提示先运行 home.launch。
 
 ruckig_node 必须在 home 完成后启动：teleop.launch 连接的是已 home 的 cell，ruckig 从当前（已 home）UR `/joint_states` 初始化 Ruckig 状态，避免 home 阶段轨迹控制器移动机器人导致状态过期（切换到 forward 时首帧跳变）。teleop_node 把映射目标发到 `/ruckig/target_joint_positions`，ruckig_node 以 `ruckig_control_hz`（默认 500 Hz）平滑后下发 `/forward_position_controller/commands`——详见 ruckig_node.md。**不要同时用 `cell.launch … ruckig:=true`**，否则两个 ruckig_node 抢同一话题。
 
@@ -81,7 +81,7 @@ ruckig_node 必须在 home 完成后启动：teleop.launch 连接的是已 home 
 | `mode` | yaml 顶层 `mode`（兜底 `"teleop"`；`choices=["teleop", "record"]`） | 运行模式；同时门控 data_recorder |
 | `force_home` | `"false"`（硬编码，无 yaml 对应键） | `true` = 跳过 VERIFY_HOME（teleop_node 把 `at_home_tolerance_rad` 置 `inf`，teleop_node.py:64-65） |
 | `ruckig_control_hz` | yaml `ruckig.control_hz`（兜底 `"500.0"`） | ruckig_node OTG 频率，默认与 controller_manager 同频 500 Hz |
-| `use_ruckig` | yaml `ruckig.enabled`（兜底 `"true"`） | 是否启动 ruckig_node；关闭时 teleop_node 直接发送目标 |
+| `use_ruckig` | `joint_impedance` 时取 yaml `ruckig.enabled`；`forward_position` 固定 `true` | 是否启动 ruckig_node；关闭时仅阻抗目标直连 |
 
 控制器由 `ur_teleop.yaml` 的 `teleop.controller` 选择。默认 `forward_position` 沿用
 `/forward_position_controller/commands`；设为 `joint_impedance` 时，`home.launch.py`
@@ -99,7 +99,7 @@ trajectory 与另一遥操运动控制器，并激活配置选择的控制器；
 → 阻抗力矩 → 关节状态”闭环。该专用模型仅含 UR 六轴，不含仿真 Robotiq/FT；若启用
 夹爪，夹爪 action server 不存在时会被遥操节点自动禁用，不影响六轴闭环。
 
-`mode`、`ruckig_control_hz` 与 `use_ruckig` 的读取与 cell 类参数不同：teleop.launch.py 内联 `yaml.safe_load(...)` 一次性读 yaml 作默认值。`ruckig.enabled=false` 时，teleop_node 直接向 `teleop.controller` 所选控制器发送目标；控制器自身的关节限位、参考速度、低通、力矩和变化率保护仍有效。使用 `config_file:=...` 指定自定义配置时，还须显式传入匹配的 `use_ruckig:=false`。
+`mode`、`ruckig_control_hz` 与 `use_ruckig` 的读取与 cell 类参数不同：teleop.launch.py 内联 `yaml.safe_load(...)` 一次性读 yaml 作默认值。`ruckig.enabled=false` 仅在 `teleop.controller=joint_impedance` 时生效：teleop_node 直接向阻抗控制器发送目标；控制器自身的关节限位、参考速度、低通、力矩和变化率保护仍有效。`forward_position` 始终使用 Ruckig。使用自定义阻抗配置文件时，还须显式传入匹配的 `use_ruckig:=false`。
 
 ## 参数优先级：launch 参数 > yaml 默认
 
