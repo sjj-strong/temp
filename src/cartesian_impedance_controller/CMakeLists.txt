@@ -18,6 +18,9 @@ ament_target_dependencies(${PROJECT_NAME}
 target_link_libraries(${PROJECT_NAME} Eigen3::Eigen)
 pluginlib_export_plugin_description_file(controller_interface controller_plugins.xml)
 
+add_executable(move_base_z_005 src/move_base_z_005.cpp)
+ament_target_dependencies(move_base_z_005 geometry_msgs rclcpp)
+
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
   find_package(ament_cmake_gmock REQUIRED)
@@ -50,6 +53,7 @@ if(BUILD_TESTING)
 endif()
 
 install(TARGETS ${PROJECT_NAME} LIBRARY DESTINATION lib)
+install(TARGETS move_base_z_005 DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY include/ DESTINATION include)
 install(FILES controller_plugins.xml DESTINATION share/${PROJECT_NAME})
 install(DIRECTORY config DESTINATION share/${PROJECT_NAME})
