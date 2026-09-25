@@ -151,7 +151,7 @@ public:
     target_publisher_ =
       create_publisher<geometry_msgs::msg::PoseStamped>(
       "/cartesian_impedance_controller/target_pose",
-      rclcpp::SystemDefaultsQoS());
+      rclcpp::QoS(10).reliable());
 
     error_publisher_ =
       create_publisher<geometry_msgs::msg::Vector3Stamped>(

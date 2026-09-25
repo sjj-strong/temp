@@ -209,8 +209,11 @@ controller_interface::CallbackReturn CartesianImpedanceController::on_configure(
     if (!configure_kinematics()) {
       return CallbackReturn::ERROR;
     }
+    // 目标是离散的控制命令，必须可靠送达；不要使用 SystemDefaultsQoS，
+    // 否则在部分 DDS 配置中会退化成 BEST_EFFORT，导致单次 ros2 topic pub 丢失。
     target_subscription_ = node.create_subscription<geometry_msgs::msg::PoseStamped>(
-        target_topic_, rclcpp::SystemDefaultsQoS(), std::bind(&CartesianImpedanceController::target_callback, this, std::placeholders::_1));
+        target_topic_, rclcpp::QoS(10).reliable(),
+        std::bind(&CartesianImpedanceController::target_callback, this, std::placeholders::_1));
     current_pose_publisher_ = std::make_shared<realtime_tools::RealtimePublisher<geometry_msgs::msg::PoseStamped>>(
         node.create_publisher<geometry_msgs::msg::PoseStamped>("~/current_pose", rclcpp::SystemDefaultsQoS()));
   } catch (const std::exception& exception) {

@@ -27,15 +27,15 @@ const char* const kSixAxisUrdf = R"(
   <link name="link_3"/>
   <link name="link_4"/>
   <link name="link_5"/>
-  <link name="gripper_tcp"/>
+  <link name="tool0"/>
   <joint name="shoulder_pan_joint" type="revolute"><parent link="base_link"/><child link="link_1"/><axis xyz="0 0 1"/><limit lower="-6.2" upper="6.2" effort="100" velocity="1"/></joint>
   <joint name="shoulder_lift_joint" type="revolute"><parent link="link_1"/><child link="link_2"/><origin xyz="0 0 0.1"/><axis xyz="0 1 0"/><limit lower="-6.2" upper="6.2" effort="100" velocity="1"/></joint>
   <joint name="elbow_joint" type="revolute"><parent link="link_2"/><child link="link_3"/><origin xyz="0 0 0.1"/><axis xyz="0 1 0"/><limit lower="-6.2" upper="6.2" effort="100" velocity="1"/></joint>
   <joint name="wrist_1_joint" type="revolute"><parent link="link_3"/><child link="link_4"/><origin xyz="0 0 0.1"/><axis xyz="1 0 0"/><limit lower="-6.2" upper="6.2" effort="100" velocity="1"/></joint>
   <joint name="wrist_2_joint" type="revolute"><parent link="link_4"/><child link="link_5"/><origin xyz="0 0 0.1"/><axis xyz="0 1 0"/><limit lower="-6.2" upper="6.2" effort="100" velocity="1"/></joint>
-  <joint name="wrist_3_joint" type="revolute"><parent link="link_5"/><child link="gripper_tcp"/><origin xyz="0 0 0.1"/><axis xyz="1 0 0"/><limit lower="-6.2" upper="6.2" effort="100" velocity="1"/></joint>
+  <joint name="wrist_3_joint" type="revolute"><parent link="link_5"/><child link="tool0"/><origin xyz="0 0 0.1"/><axis xyz="1 0 0"/><limit lower="-6.2" upper="6.2" effort="100" velocity="1"/></joint>
   <link name="ft_frame"/>
-  <joint name="ft_fixed_joint" type="fixed"><parent link="gripper_tcp"/><child link="ft_frame"/></joint>
+  <joint name="ft_fixed_joint" type="fixed"><parent link="tool0"/><child link="ft_frame"/></joint>
 </robot>)";
 
 const std::array<std::string, 6> kJointNames{ "shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint",
