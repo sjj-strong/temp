@@ -39,7 +39,6 @@ private:
   struct PoseTarget
   {
     PoseReference pose;
-    rclcpp::Time received_time{ 0, 0, RCL_ROS_TIME };
     std::uint64_t sequence{ 0 };
     bool valid{ false };
   };
@@ -79,7 +78,7 @@ private:
   bool use_external_ft_{ false };
   double linear_reference_speed_{ 0.05 };
   double angular_reference_speed_{ 0.2 };
-  double command_timeout_{ 0.5 };
+  double reference_filter_alpha_{ 0.005 };
   double integral_reset_position_threshold_{ 0.005 };
   double integral_reset_orientation_threshold_{ 0.05 };
 
@@ -97,13 +96,12 @@ private:
   Eigen::Matrix<double, 6, 1> desired_torque_buffer_{ Eigen::Matrix<double, 6, 1>::Zero() };
 
   PoseReference reference_pose_;
-  PoseReference hold_pose_;
+  PoseReference reference_target_pose_;
   Vector6 integral_error_{};
   Vector6 previous_torque_{};
   PoseReference last_target_pose_;
   std::uint64_t last_target_sequence_{ 0 };
   bool has_last_target_pose_{ false };
-  bool timed_out_{ false };
   std::atomic<std::uint64_t> target_sequence_counter_{ 0 };
   realtime_tools::RealtimeBuffer<PoseTarget> target_buffer_;
   rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr target_subscription_;

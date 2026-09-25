@@ -35,7 +35,9 @@
     max_torque_rate: [200.0, 200.0, 200.0, 100.0, 100.0, 100.0]
     linear_reference_speed: 0.05
     angular_reference_speed: 0.2
-    command_timeout: 0.5
+    # 每个控制周期的一阶滤波系数。目标永久锁存，直到下一条目标覆盖它；
+    # 0 为不更新参考，1 为关闭滤波。随后仍由线/角速度限幅提供硬约束。
+    reference_filter_alpha: 0.005
     # KDL evaluates C(q, qdot) with a zero gravity vector. UR direct_torque
     # retains robot-internal gravity compensation, so gravity is never added here.
     use_coriolis: true

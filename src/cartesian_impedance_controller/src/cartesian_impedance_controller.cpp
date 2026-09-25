@@ -106,7 +106,7 @@ controller_interface::CallbackReturn CartesianImpedanceController::on_init()
     node.declare_parameter("max_torque_rate", std::vector<double>{ 200.0, 200.0, 200.0, 100.0, 100.0, 100.0 });
     node.declare_parameter("linear_reference_speed", 0.05);
     node.declare_parameter("angular_reference_speed", 0.2);
-    node.declare_parameter("command_timeout", 0.5);
+    node.declare_parameter("reference_filter_alpha", 0.005);
     node.declare_parameter("integral_reset_position_threshold", 0.005);
     node.declare_parameter("integral_reset_orientation_threshold", 0.05);
     node.declare_parameter("use_coriolis", true);
@@ -181,7 +181,7 @@ controller_interface::CallbackReturn CartesianImpedanceController::on_configure(
     joint_position_max_ = array_parameter(node.get_parameter("joint_position_max").as_double_array(), "joint_position_max");
     linear_reference_speed_ = node.get_parameter("linear_reference_speed").as_double();
     angular_reference_speed_ = node.get_parameter("angular_reference_speed").as_double();
-    command_timeout_ = node.get_parameter("command_timeout").as_double();
+    reference_filter_alpha_ = node.get_parameter("reference_filter_alpha").as_double();
     integral_reset_position_threshold_ = node.get_parameter("integral_reset_position_threshold").as_double();
     integral_reset_orientation_threshold_ = node.get_parameter("integral_reset_orientation_threshold").as_double();
     use_coriolis_ = node.get_parameter("use_coriolis").as_bool();
@@ -192,11 +192,12 @@ controller_interface::CallbackReturn CartesianImpedanceController::on_configure(
         !finite_and_nonnegative(integral_limit_) || !finite_and_nonnegative(max_wrench_) ||
         !finite_and_nonnegative(max_torque_) || !finite_and_nonnegative(max_torque_rate_) ||
         !finite_and_nonnegative(max_measured_wrench_) || !std::isfinite(linear_reference_speed_) ||
-        !std::isfinite(angular_reference_speed_) || !std::isfinite(command_timeout_) ||
+        !std::isfinite(angular_reference_speed_) || !std::isfinite(reference_filter_alpha_) ||
         !std::isfinite(integral_reset_position_threshold_) || !std::isfinite(integral_reset_orientation_threshold_) ||
-        linear_reference_speed_ < 0.0 || angular_reference_speed_ < 0.0 || command_timeout_ < 0.0 ||
+        linear_reference_speed_ < 0.0 || angular_reference_speed_ < 0.0 || reference_filter_alpha_ < 0.0 ||
+        reference_filter_alpha_ > 1.0 ||
         integral_reset_position_threshold_ < 0.0 || integral_reset_orientation_threshold_ < 0.0) {
-      throw std::runtime_error("limits, reference speeds, and command_timeout must be finite and non-negative");
+      throw std::runtime_error("limits and reference speeds must be finite and non-negative; reference_filter_alpha must be within [0, 1]");
     }
     for (std::size_t index = 0; index < joints_.size(); ++index) {
       if (!std::isfinite(joint_position_min_[index]) || !std::isfinite(joint_position_max_[index]) ||
@@ -353,7 +354,6 @@ void CartesianImpedanceController::target_callback(const geometry_msgs::msg::Pos
   PoseTarget target;
   target.pose.position = Eigen::Vector3d(message->pose.position.x, message->pose.position.y, message->pose.position.z);
   target.pose.orientation = orientation.normalized();
-  target.received_time = get_node()->now();
   target.sequence = target_sequence_counter_.fetch_add(1) + 1;
   target.valid = true;
   target_buffer_.writeFromNonRT(target);
@@ -367,12 +367,11 @@ controller_interface::CallbackReturn CartesianImpedanceController::on_activate(c
     return CallbackReturn::ERROR;
   }
   reference_pose_ = pose_reference(pose);
-  hold_pose_ = reference_pose_;
+  reference_target_pose_ = reference_pose_;
   integral_error_.fill(0.0);
   previous_torque_.fill(0.0);
   last_target_sequence_ = 0;
   has_last_target_pose_ = false;
-  timed_out_ = false;
   target_buffer_.writeFromNonRT(PoseTarget{});
   write_zero_torque();
   return CallbackReturn::SUCCESS;
@@ -396,34 +395,21 @@ controller_interface::return_type CartesianImpedanceController::update(const rcl
   }
 
   const PoseTarget* target = target_buffer_.readFromRT();
-  const double target_age = target != nullptr && target->valid ? (time - target->received_time).seconds() : -1.0;
-  const bool has_fresh_target = target != nullptr && target->valid && target_age >= 0.0 &&
-                                (command_timeout_ == 0.0 || target_age <= command_timeout_);
-  PoseReference requested_reference;
-  if (has_fresh_target) {
-    requested_reference = target->pose;
-    if (target->sequence != last_target_sequence_) {
-      if (!has_last_target_pose_ || (target->pose.position - last_target_pose_.position).norm() > integral_reset_position_threshold_ ||
-          orientation_distance(target->pose.orientation, last_target_pose_.orientation) > integral_reset_orientation_threshold_) {
-        integral_error_.fill(0.0);
-      }
-      last_target_pose_ = target->pose;
-      has_last_target_pose_ = true;
-      last_target_sequence_ = target->sequence;
-    }
-    timed_out_ = false;
-  } else {
-    if (!timed_out_) {
-      hold_pose_ = pose_reference(current_pose);
+  if (target != nullptr && target->valid && target->sequence != last_target_sequence_) {
+    if (!has_last_target_pose_ || (target->pose.position - last_target_pose_.position).norm() > integral_reset_position_threshold_ ||
+        orientation_distance(target->pose.orientation, last_target_pose_.orientation) > integral_reset_orientation_threshold_) {
       integral_error_.fill(0.0);
-      timed_out_ = true;
     }
-    requested_reference = hold_pose_;
+    reference_target_pose_ = target->pose;
+    last_target_pose_ = target->pose;
+    has_last_target_pose_ = true;
+    last_target_sequence_ = target->sequence;
   }
 
   const double period_seconds = period.seconds();
   const PoseReference previous_reference = reference_pose_;
-  reference_pose_ = limit_reference_step(reference_pose_, requested_reference, linear_reference_speed_, angular_reference_speed_,
+  const PoseReference filtered_reference = low_pass_reference(reference_pose_, reference_target_pose_, reference_filter_alpha_);
+  reference_pose_ = limit_reference_step(reference_pose_, filtered_reference, linear_reference_speed_, angular_reference_speed_,
                                          period_seconds);
   if (!within_workspace_limits(reference_pose_.position)) {
     write_zero_torque();

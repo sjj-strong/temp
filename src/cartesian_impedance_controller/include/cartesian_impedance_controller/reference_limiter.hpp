@@ -44,6 +44,14 @@ inline PoseReference limit_reference_step(const PoseReference& current, const Po
   return result;
 }
 
+inline PoseReference low_pass_reference(const PoseReference& current, const PoseReference& target, const double alpha)
+{
+  PoseReference filtered;
+  filtered.position = current.position + alpha * (target.position - current.position);
+  filtered.orientation = current.orientation.slerp(alpha, target.orientation).normalized();
+  return filtered;
+}
+
 inline Vector6 reference_twist(const PoseReference& previous, const PoseReference& current, const double period_seconds)
 {
   Vector6 result{};
