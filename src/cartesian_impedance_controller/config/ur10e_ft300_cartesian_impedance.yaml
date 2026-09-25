@@ -1,14 +1,14 @@
-controller_manager:
+/**/cartesian_impedance_controller:
   ros__parameters:
-    cartesian_impedance_controller:
-      type: cartesian_impedance_controller/CartesianImpedanceController
-
-cartesian_impedance_controller:
-  ros__parameters:
+    # Jazzy spawner 从控制器自身参数块读取 type；普通节点名不会匹配
+    # controller_manager 创建的控制器节点。
+    type: cartesian_impedance_controller/CartesianImpedanceController
     # Direct torque controller: do not activate trajectory, velocity, position,
     # forward_effort, or force_mode motion controllers at the same time.
     tf_prefix: ""
-    base_frame: base_link
+    # 与 UR tcp_pose_broadcaster 的 pose.header.frame_id 保持一致，便于以当前
+    # TCP 位姿为基础发布相对 Z 位移目标。
+    base_frame: base
     tip_frame: gripper_tcp
     target_topic: ~/target_pose
     joints:
