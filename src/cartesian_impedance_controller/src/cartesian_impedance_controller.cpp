@@ -93,7 +93,7 @@ controller_interface::CallbackReturn CartesianImpedanceController::on_init()
     auto& node = *get_node();
     node.declare_parameter("tf_prefix", "");
     node.declare_parameter("base_frame", "base_link");
-    node.declare_parameter("tip_frame", "gripper_tcp");
+    node.declare_parameter("tip_frame", "tool0");
     node.declare_parameter("target_topic", "~/target_pose");
     node.declare_parameter("joints", std::vector<std::string>{ "shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint",
                                                                   "wrist_1_joint", "wrist_2_joint", "wrist_3_joint" });
@@ -211,6 +211,8 @@ controller_interface::CallbackReturn CartesianImpedanceController::on_configure(
     }
     target_subscription_ = node.create_subscription<geometry_msgs::msg::PoseStamped>(
         target_topic_, rclcpp::SystemDefaultsQoS(), std::bind(&CartesianImpedanceController::target_callback, this, std::placeholders::_1));
+    current_pose_publisher_ = std::make_shared<realtime_tools::RealtimePublisher<geometry_msgs::msg::PoseStamped>>(
+        node.create_publisher<geometry_msgs::msg::PoseStamped>("~/current_pose", rclcpp::SystemDefaultsQoS()));
   } catch (const std::exception& exception) {
     RCLCPP_ERROR(get_node()->get_logger(), "Configuration failed: %s", exception.what());
     return CallbackReturn::ERROR;
@@ -392,6 +394,21 @@ controller_interface::return_type CartesianImpedanceController::update(const rcl
       !within_joint_and_workspace_limits(position_buffer_, current_pose)) {
     write_zero_torque();
     return controller_interface::return_type::ERROR;
+  }
+
+  if (current_pose_publisher_ && current_pose_publisher_->trylock()) {
+    auto& message = current_pose_publisher_->msg_;
+    const Eigen::Quaterniond orientation(current_pose.rotation());
+    message.header.stamp = time;
+    message.header.frame_id = tf_prefix_ + base_frame_;
+    message.pose.position.x = current_pose.translation().x();
+    message.pose.position.y = current_pose.translation().y();
+    message.pose.position.z = current_pose.translation().z();
+    message.pose.orientation.x = orientation.x();
+    message.pose.orientation.y = orientation.y();
+    message.pose.orientation.z = orientation.z();
+    message.pose.orientation.w = orientation.w();
+    current_pose_publisher_->unlockAndPublish();
   }
 
   const PoseTarget* target = target_buffer_.readFromRT();

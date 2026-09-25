@@ -6,10 +6,10 @@
     # Direct torque controller: do not activate trajectory, velocity, position,
     # forward_effort, or force_mode motion controllers at the same time.
     tf_prefix: ""
-    # 与 UR tcp_pose_broadcaster 的 pose.header.frame_id 保持一致，便于以当前
-    # TCP 位姿为基础发布相对 Z 位移目标。
+    # 使用 UR 原始 tool0，不使用安装在其后的 FT300、夹爪或 gripper_tcp。
+    # 相对位移工具从控制器的 ~/current_pose 获取相同 KDL 链的当前 tool0 位姿。
     base_frame: base
-    tip_frame: gripper_tcp
+    tip_frame: tool0
     target_topic: ~/target_pose
     joints:
       - shoulder_pan_joint

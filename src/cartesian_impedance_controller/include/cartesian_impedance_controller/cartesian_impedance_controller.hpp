@@ -18,6 +18,7 @@
 #include <kdl/jntarray.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <realtime_tools/realtime_buffer.hpp>
+#include <realtime_tools/realtime_publisher.hpp>
 
 #include "cartesian_impedance_controller/impedance_law.hpp"
 #include "cartesian_impedance_controller/reference_limiter.hpp"
@@ -105,5 +106,6 @@ private:
   std::atomic<std::uint64_t> target_sequence_counter_{ 0 };
   realtime_tools::RealtimeBuffer<PoseTarget> target_buffer_;
   rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr target_subscription_;
+  std::shared_ptr<realtime_tools::RealtimePublisher<geometry_msgs::msg::PoseStamped>> current_pose_publisher_;
 };
 }  // namespace cartesian_impedance_controller

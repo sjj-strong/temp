@@ -16,7 +16,7 @@ from rclpy.utilities import remove_ros_args
 
 
 TARGET_TOPIC = "/cartesian_impedance_controller/target_pose"
-POSE_TOPIC = "/tcp_pose_broadcaster/pose"
+POSE_TOPIC = "/cartesian_impedance_controller/current_pose"
 KEYS = {
     "w": ("x", 1), "s": ("x", -1),
     "d": ("y", 1), "a": ("y", -1),
