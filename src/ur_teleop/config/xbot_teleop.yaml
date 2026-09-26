@@ -9,6 +9,10 @@ recorder:
   repo_id: my_user/ur10e_xbot
   root: /ros2_ws/dataset/xbot
   robot_type: ur10e_xbot_teleop
+  action_space: cartesian_velocity
+  record_action_joints: true
+  record_action_gripper: true
+  data_timeout_s: 0.5
   ee_pose_source: tf
   ee_pose_parent_frame: base_link
   ee_pose_child_frame: gripper_tcp

@@ -36,7 +36,10 @@ class FrameBuilder:
                 "dtype": "float32", "shape": (len(state_names),), "names": state_names,
             }
         if self._rec.get("record_action_joints", True):
-            action_names.extend([f"cmd_{n}" for n in UR_JOINT_NAMES])
+            if self._rec.get('action_space') == 'cartesian_velocity':
+                action_names.extend(['vx', 'vy', 'vz', 'wx', 'wy', 'wz'])
+            else:
+                action_names.extend([f"cmd_{n}" for n in UR_JOINT_NAMES])
         if self._rec.get("record_action_gripper", True):
             action_names.append("cmd_gripper")
         if action_names:

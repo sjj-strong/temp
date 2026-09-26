@@ -7,12 +7,14 @@ import os
 import sys
 import threading
 import time
+import queue
+import math
 from pathlib import Path
 
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import JointState, Image as RosImage
-from std_msgs.msg import Bool, Float64MultiArray
+from std_msgs.msg import Bool, Float64MultiArray, String
 
 try:
     from lerobot.datasets import LeRobotDataset
@@ -31,7 +33,11 @@ class DataRecorderNode(Node):
             raise RuntimeError("LeRobot 未安装：source /opt/lerobot_venv/bin/activate")
         self.declare_parameter("config_file", default_config_path())
         cfg = load_config(self.get_parameter("config_file").value)
+        self._xbot = cfg['teleop'].get('control_source', 'alicia') == 'xbot'
         self._rec = cfg.get("recorder", {})
+        if self._xbot:
+            self._rec = dict(self._rec, action_space='cartesian_velocity',
+                             record_action_joints=True, record_action_gripper=True)
         self._fps = int(self._rec.get("fps", 50))
         self._min_frames = int(self._rec.get("min_frames_per_episode", 2))
         self._cameras = self._rec.get("cameras", {})
@@ -46,11 +52,20 @@ class DataRecorderNode(Node):
         self._enable_sent = False
         self._ee_warned = False
         self._missing_cam_warned = set()
+        self._events = queue.Queue(maxsize=32)
+        self._ready = False
+        self._ready_at = self._cmd_at = self._joint_at = -float('inf')
+        self._camera_at = {}
+        self._data_timeout = float(self._rec.get('data_timeout_s', .5))
 
         self._features, _, _ = self._builder.features()
         self._joint_sub = self.create_subscription(JointState, "/joint_states", self._joint_cb, 10)
         self._cmd_sub = self.create_subscription(Float64MultiArray, "/teleop/commands", self._cmd_cb, 10)
         self._enable_pub = self.create_publisher(Bool, "/teleop/enable", 10)
+        self._finished_pub = self.create_publisher(Bool, '/teleop/record_finished', 10)
+        if self._xbot:
+            self.create_subscription(String, '/teleop/record_event', self._event_cb, 10)
+            self.create_subscription(Bool, '/teleop/xbot_ready', self._ready_cb, 1)
 
         self._ee_source = self._rec.get("ee_pose_source", "tf")
         if self._ee_source == "tf":
@@ -73,22 +88,65 @@ class DataRecorderNode(Node):
         self._episode_count = 0
         self._recording = False
         self._frame_count = 0
-        self._kb = KeyboardReader()
+        self._kb = None if self._xbot else KeyboardReader()
 
     # ---------- callbacks ----------
 
+    def _event_cb(self, msg):
+        if msg.data in ('start', 'save', 'discard', 'finalize'):
+            try:
+                self._events.put_nowait((msg.data, time.monotonic()))
+            except queue.Full:
+                self.get_logger().error('录制操作队列已满，请等待当前操作完成')
+
+    def _ready_cb(self, msg):
+        self._ready, self._ready_at = msg.data, time.monotonic()
+
+    def _xbot_data_ready(self):
+        now = time.monotonic()
+        return (self._ready and now - self._ready_at < self._data_timeout and
+                self._teleop_cmd is not None and len(self._teleop_cmd) == 7 and
+                all(math.isfinite(v) for v in self._teleop_cmd) and
+                now - self._cmd_at < self._data_timeout and
+                now - self._joint_at < self._data_timeout and
+                all(now - self._camera_at.get(n, -float('inf')) < self._data_timeout
+                    for n in self._cameras))
+
+    def poll_event(self):
+        """只在录制主线程执行数据集写入，不阻塞 ROS 回调线程。"""
+        try:
+            event, stamp = self._events.get_nowait()
+        except queue.Empty:
+            return False
+        if event == 'finalize':
+            self._finished_pub.publish(Bool(data=True))
+            return True
+        if time.monotonic() - stamp > 2.:
+            self.get_logger().warn('忽略过期录制操作，请重新按键')
+        elif event == 'start':
+            self._start_episode()
+        elif event == 'save':
+            self._save_episode()
+        elif event == 'discard':
+            self._discard_episode()
+        return False
+
     def _joint_cb(self, msg: JointState):
         names = set(msg.name)
-        if not all(n in names for n in UR_JOINT_NAMES):
+        if len(msg.position) != len(msg.name) or not all(n in names for n in UR_JOINT_NAMES):
+            return
+        if self._xbot and not all(math.isfinite(v) for v in msg.position):
             return
         with self._lock:
             self._ur_joints = [msg.position[msg.name.index(n)] for n in UR_JOINT_NAMES]
+            self._joint_at = time.monotonic()
             if UR_GRIPPER_JOINT in names:
                 self._ur_gripper_rad = msg.position[msg.name.index(UR_GRIPPER_JOINT)]
 
     def _cmd_cb(self, msg: Float64MultiArray):
         with self._lock:
             self._teleop_cmd = list(msg.data) if msg.data else None
+            self._cmd_at = time.monotonic()
 
     def _tcp_cb(self, msg):
         p = msg.pose
@@ -102,6 +160,7 @@ class DataRecorderNode(Node):
             img = CvBridge().imgmsg_to_cv2(msg, desired_encoding="rgb8")
             with self._lock:
                 self._camera_frames[cam_name] = img
+                self._camera_at[cam_name] = time.monotonic()
         except Exception:
             pass
 
@@ -118,7 +177,11 @@ class DataRecorderNode(Node):
                 self._rec.get("ee_pose_parent_frame", "base_link"),
                 self._rec.get("ee_pose_child_frame", "tool0"),
                 rclpy.time.Time(),
-                timeout=rclpy.duration.Duration(seconds=0.5))
+                timeout=rclpy.duration.Duration(seconds=0. if self._xbot else 0.5))
+            if self._xbot:
+                age = (self.get_clock().now() - rclpy.time.Time.from_msg(t.header.stamp)).nanoseconds / 1e9
+                if not 0 <= age <= self._data_timeout:
+                    return None
             tr, rot = t.transform.translation, t.transform.rotation
             return [tr.x, tr.y, tr.z, rot.x, rot.y, rot.z, rot.w]
         except Exception:
@@ -143,8 +206,11 @@ class DataRecorderNode(Node):
             self.get_logger().info(f"创建数据集: {repo_id}")
         except FileExistsError:
             import datetime
-            new_id = f"{repo_id}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            suffix = datetime.datetime.now().strftime('%Y%m%d_%H%M%S_%f')
+            new_id = f"{repo_id}_{suffix}"
             kwargs["repo_id"] = new_id
+            if root is not None:
+                kwargs['root'] = root.with_name(root.name + '_' + suffix)
             self._dataset = LeRobotDataset.create(**kwargs)
             self.get_logger().warn(f"数据集已存在，新建带时间戳: {new_id}")
 
@@ -153,6 +219,9 @@ class DataRecorderNode(Node):
     def _start_episode(self):
         if self._recording:
             return
+        if self._xbot and (not self._xbot_data_ready() or self._get_ee_pose() is None):
+            self.get_logger().warn('遥操作/状态/相机未就绪，拒绝开始 episode；就绪后重新按 Menu')
+            return
         missing = [name for name in self._cameras if name not in self._camera_frames]
         if missing:
             self.get_logger().error(
@@ -160,13 +229,14 @@ class DataRecorderNode(Node):
             return
         self._missing_cam_warned = set()
         self._init_dataset()
-        if not self._enable_sent:
+        if not self._xbot and not self._enable_sent:
             self._enable_pub.publish(Bool(data=True))
             self._enable_sent = True
             self.get_logger().info("已发送 /teleop/enable → teleop_node 开始控制")
         self._recording = True
         self._frame_count = 0
-        self.get_logger().info(f"Episode {self._episode_count + 1} 开始（S=保存 D=丢弃 Q=退出）")
+        hint = 'Y=保存 B=丢弃 View长按=退出' if self._xbot else 'S=保存 D=丢弃 Q=退出'
+        self.get_logger().info(f"Episode {self._episode_count + 1} 开始（{hint}）")
 
     def _save_episode(self):
         if not self._recording:
@@ -190,12 +260,16 @@ class DataRecorderNode(Node):
         self._missing_cam_warned = set()
 
     def _record_frame(self):
+        if self._xbot and not self._xbot_data_ready():
+            return
         with self._lock:
             ur = list(self._ur_joints) if self._ur_joints else None
             cmd = list(self._teleop_cmd) if self._teleop_cmd else None
             gripper_rad = self._ur_gripper_rad
             cameras = dict(self._camera_frames)
         ee = self._get_ee_pose()
+        if self._xbot and ee is None:
+            return
         if ee is None and not self._ee_warned and self._ee_source != "none":
             self._ee_warned = True
             self.get_logger().warn("EE 位姿查询失败，该段以 NaN 记录（仅警告一次）")
@@ -242,7 +316,8 @@ def main():
     node = DataRecorderNode()
     node.get_logger().info("=" * 60)
     node.get_logger().info(f"Data Recorder 就绪 — 录制频率 {node._fps} Hz")
-    node.get_logger().info("  键盘: Enter=开始  S=保存  D=丢弃  Q=退出")
+    node.get_logger().info("  手柄: Menu=开始 Y=保存 B=丢弃 View长按=退出" if node._xbot else
+                           "  键盘: Enter=开始  S=保存  D=丢弃  Q=退出")
     node.get_logger().info("=" * 60)
 
     spin_thread = threading.Thread(target=rclpy.spin, args=(node,), daemon=True)
@@ -255,7 +330,9 @@ def main():
             t0 = time.time()
             if node._recording:
                 node._record_frame()
-            key = node._kb.read_key(0.0)
+            if node._xbot and node.poll_event():
+                break
+            key = node._kb.read_key(0.0) if node._kb is not None else None
             if key == "enter":
                 node._start_episode()
             elif key == "s":
@@ -268,7 +345,8 @@ def main():
             if t0 - last_hint >= hint_interval:
                 last_hint = t0
                 state = "录制中" if node._recording else "待机"
-                print(f"[键盘] Enter=开始 S=保存 D=丢弃 Q=退出 | 状态: {state} "
+                hint = '[手柄] Menu=开始 Y=保存 B=丢弃 View长按=退出' if node._xbot else '[键盘] Enter=开始 S=保存 D=丢弃 Q=退出'
+                print(f"{hint} | 状态: {state} "
                       f"| episodes={node._episode_count} frames={node._frame_count} "
                       f"| {node._fps} Hz", flush=True)
             time.sleep(max(0.0, period - (time.time() - t0)))
