@@ -4,7 +4,9 @@
 
 ## 概述
 
-config.py 是全包配置的唯一入口：`load_config()` 被 teleop_node、home_node、data_recorder 等所有节点调用，返回原始 dict（不做默认值填充，默认值由各消费方在读取时用 `.get(key, default)` 自行处理）。文件头定义了两套关节名常量与夹爪单位换算函数，供下游模块（joint_mapper、frame_builder、teleop_node）复用。
+`load_config()` 读取并校验配置，返回合并后的字典；未填默认值由各节点处理。`base_config` 可指定父配置，相对路径以当前配置所在目录解析；字典递归合并，其他值由子配置覆盖，循环继承会报错。
+
+`teleop.control_source` 默认为 `alicia`，也可选择 `xbot`。Xbot 使用 `config/xbot_teleop.yaml`，不要求 Alicia 的映射、主臂 Home 和关节限位字段；操作与专用参数见 [Xbot 手柄](xbot_control.md)。下文的主从映射、Ruckig 和主臂字段仅适用于 Alicia。
 
 ## 公开接口
 
@@ -20,16 +22,16 @@ UR_GRIPPER_JOINT = "robotiq_85_left_knuckle_joint"   # UR 侧夹爪关节名
 
 ### `load_config(path: str | Path) -> dict[str, Any]`
 
-校验顺序（任一失败抛 `ConfigError(ValueError)`，config.py:29-58）：
+主要校验规则：
 
 1. 文件不存在 → `ConfigError("Config file not found: {p}")`。
 2. `yaml.safe_load` 结果空 → 视为 `{}`。
-3. 必需顶层键缺失：`_REQUIRED_TOP = ["mode", "sim", "home", "mapping", "safety", "teleop"]`（`cell` / `gripper` / `recorder` 为可选）。
+3. 必需顶层键为 `mode`、`sim`、`home`、`teleop`；Alicia 还要求 `mapping`、`safety`。
 4. `mode` 必须为 `"teleop"` 或 `"record"`。
-5. 可选的 `teleop.controller` 必须为 `"forward_position"` 或 `"joint_impedance"`；未写时兼容旧配置并使用 `forward_position`。
-6. `mapping` 必需键：`_REQUIRED_MAPPING = ["alicia_joint_order", "ur_joint_order", "sign", "scale"]`；且 `ur_joint_order` 必须恰好 6 项。
-7. `home` 必需键：`_REQUIRED_HOME = ["master", "slave"]`，各自必须恰好 6 项（长度不足时报 `home.master must have 6 values` 之类）。
-8. `safety.limits` 必须包含全部 6 个 `UR_JOINT_NAMES` 关节名（缺失报 `safety.limits missing joint '{joint}'`）。
+5. Alicia 的 `teleop.controller` 为 `forward_position`（默认）或 `joint_impedance`；Xbot 使用笛卡尔阻抗。
+6. Alicia 的 `mapping` 要求 `alicia_joint_order`、`ur_joint_order`、`sign`、`scale`；`ur_joint_order` 为 6 项。
+7. `home.slave` 必须为 6 项；Alicia 还要求 6 项的 `home.master`。
+8. Alicia 的 `safety.limits` 必须包含全部 6 个 UR 关节；提供 `ruckig.enabled` 时必须为布尔值。
 
 ### `default_config_path() -> str`（config.py:61）
 

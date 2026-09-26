@@ -1,56 +1,85 @@
 # Xbot 手柄遥操作
 
-## 模型与启动
+使用 `cartesian_impedance_controller` 控制 `gripper_tcp`，复用 `ur10e_robotiq_ft_description` 的组合 URDF。Xbot 不启动 Alicia 或 Ruckig。
 
-复用 `ur10e_robotiq_ft_description/urdf/ur10e_robotiq_ft.urdf.xacro`，不维护第二份 URDF。先按 [启动说明](xbot_startup.md) 启动 Home，再启动遥操作。真机必须先核对 `gripper_tcp` 与工具标定，并逐轴低速验收。
+## 配置与校准
+
+配置入口为 `config/xbot_teleop.yaml`，继承 `ur_teleop.yaml` 的 `sim`、`home.slave`、机器人 IP 和串口设置。首次验证设为 `sim: true`；真机前核对 TCP 标定。Xbot 的仿真/真机选择以配置文件为准，不使用 Home 的 `sim:=` 参数覆盖。
+
+在两个终端分别加载 ROS 环境后运行：
 
 ```bash
 source /opt/ros/jazzy/setup.bash
 source /ros2_ws/install/setup.bash
+
+# 终端 1：仅发布手柄输入
 ros2 run joy joy_node --ros-args -p autorepeat_rate:=50.0 -p deadzone:=0.0
-# 另一个终端：只读手柄，不连接机器人
+
+# 终端 2：按提示校准，不发送机器人指令
 ros2 run ur_teleop xbot_calibrate
 ```
 
-校准完成后停止上述 `joy_node`，避免两个发布者；正式 launch 会启动它。映射基于 ROS `/joy`，不能直接复制 `xbot_control/scripts` 中 pygame 的轴号。工具分别记录扳机松开零位、按下方向，以及十字键的轴/按钮表示。已有映射不会覆盖；用 `--output` 选择新文件，并更新 `xbot.calibration_file`。
+每次操作推到极限并保持，步骤间松开按键、摇杆回中。结果默认写入 `~/.config/ur_teleop/xbot_joy.yaml`；已有文件不覆盖，另存时用 `--output` 并更新 `xbot.calibration_file`。映射使用 ROS Joy 编号，不能直接复制 pygame 轴号。
+
+校准完成后停止手动启动的 `joy_node`，正式启动会自动运行它。
+
+## 启动
 
 ```bash
+# 终端 1：UR 回 Home，到位后保持此终端运行
 ros2 launch ur_teleop home.launch.py config_file:=/ros2_ws/src/ur_teleop/config/xbot_teleop.yaml
-# Home 到位后，另一个终端
+
+# 终端 2：仅遥操作；录制时改为 mode:=record
 ros2 launch ur_teleop teleop.launch.py config_file:=/ros2_ws/src/ur_teleop/config/xbot_teleop.yaml mode:=teleop
 ```
 
-Xbot 不启动 Alicia、Ruckig 或键盘遥操作。配置继承当前 `ur_teleop.yaml` 的 `sim` 与 `home.slave`，运行前必须检查；首次验收只用 `sim: true`。默认 `mode: record`，单独验证运动时显式传 `mode:=teleop`。
+Home 阶段使用轨迹控制器，笛卡尔阻抗控制器保持 inactive。首次松开所有按键，按 RB 切换控制器；成功后再次松开并按下 RB 才运动。不在 Home 时拒绝切换，不支持 `force_home` 绕过；重启遥操作前重新执行 Home。
 
-## 操作
+仿真使用组合模型的 `xbot_effort_mock` 开关。实机复用 `real_bringup.launch.py`，显式关闭其自动激活阻抗功能，由 Xbot 负责后续切换；FT300 不另开串口驱动。
 
-首次松开所有按键，按 RB 切换控制器；成功后再次松开/按下 RB 才运动。启动时若不在 Home，拒绝切换。不支持 `force_home` 绕过。重启遥操作前应重新执行 Home。
+## 按键与参考系
 
 | 输入 | 功能 |
 | --- | --- |
-| 左摇杆上/左 | +X / +Y 平移 |
+| 左摇杆上 / 左 | +X / +Y 平移 |
 | RT / LT | +Z / -Z 平移 |
-| 右摇杆上/左 | 绕 +X / +Y 旋转 |
-| 十字键左/右 | 绕 +Z / -Z 旋转 |
+| 右摇杆上 / 左 | 绕 +X / +Y 旋转 |
+| 十字键左 / 右 | 绕 +Z / -Z 旋转 |
 | RB | 按住运动使能 |
-| LB | 按住精细速度（默认 25%） |
-| A | RB 有效时切换夹爪；忙时不重复发送 |
-| X | base/TCP 参考系切换，切换当帧不积分 |
-| Menu / Y / B | 开始 / 保存 / 丢弃 episode |
-| View 长按 2 秒 | finalize 并锁定运动，重启节点后才可继续 |
+| LB | 按住精细速度，默认 25% |
+| A | RB 有效时切换夹爪，忙时忽略 |
+| X | 切换 base/TCP 参考系 |
 
-base 模式沿 `base_link` 的轴平移和旋转；TCP 模式沿实测 `gripper_tcp` 当前局部轴运动。两种模式均转换为 `base_link` 中的目标，再发到 `/cartesian_impedance_controller/target_pose`。启动参数覆盖控制器的 base/tip，避免沿用另一任务的 `base → tool0` 配置。
+base 模式沿 `base_link` 的轴运动；TCP 模式沿实测 `gripper_tcp` 当前局部轴运动。平移和旋转均遵循所选参考系，切换当帧不积分，目标不跳变。
 
-`/teleop/commands` 为 `[vx, vy, vz, wx, wy, wz, gripper]`，前六维是本周期采用的 **base_link** 速度（m/s、rad/s），不是 TCP 位姿；第七维为夹爪已接受目标（0 开、1 闭）。停止时前六维为零。
+目标统一转换为 `base_link` 下的 `PoseStamped`，发布到 `/cartesian_impedance_controller/target_pose`。Xbot 启动时覆盖控制器的 base/tip 为 `base_link → gripper_tcp`。
 
-## 保护边界
+录制按键、数据格式及数据集位置见[数据采集](data_recorder.md)。
 
-50 Hz 控制，默认线速度 0.02 m/s、角速度 0.1 rad/s；按向量模长限速。Joy/TF 超过 0.25 秒、关节状态超时、软件急停、定时器卡顿或目标领先实测超过 3 cm / 0.15 rad 都会停止积分，恢复后须重新按 RB。TF 丢失时只能发送最后有效实测位姿，无法保证仍是当前位姿。夹爪停止请求使用 action cancel，实际停止能力取决于夹爪控制器。
+## 保护与限制
 
-`/teleop/e_stop` (`std_msgs/Bool`) 是软件停止请求，不是安全认证急停。当前笛卡尔控制器没有命令超时回到实测位置的机制：遥操作进程崩溃后控制器仍可能追踪最后目标。物理急停、UR 安全配置及人工监护必须保留；不得将本节点作为安全系统。
+- 默认 50 Hz，线速度上限 0.02 m/s、角速度上限 0.1 rad/s，按向量模长限速。
+- 松开 RB、Joy/TF/关节反馈超时、软件急停、定时器卡顿或目标领先实测超过 3 cm / 0.15 rad 时停止积分。Joy/反馈默认超时 0.25 秒，恢复后须重新按 RB。
+- 故障保持位姿在故障开始时锁定；TF 丢失只能使用最后有效实测位姿。夹爪停止使用 action cancel，实际效果取决于夹爪控制器。
+- `/teleop/e_stop` 是软件停止请求，不是安全认证急停。遥操作进程崩溃后，阻抗控制器仍可能追踪最后目标；必须保留物理急停和人工监护。
+- `/teleop/xbot_status` 显示参考系及运动状态，`/teleop/xbot_ready` 提供录制就绪心跳。
 
-`/teleop/xbot_status` 显示当前参考系和运动/保持状态；`/teleop/xbot_ready` 是录制开始的就绪心跳。真实手柄方向、真机运动与停止距离尚须人工验收。
+## 测试
 
-故障保持位姿只在故障开始时锁定，不会随着后续反馈持续漂移。校准采样会继续收集一秒最大行程；请推到极限并保持。重复运动轴或复用功能键的映射被拒绝。夹爪 action 初值取启动时的实测开合状态。
+仅在 `sim: true` 的隔离域中运行。两个终端均设置 `ROS_DOMAIN_ID=225` 和相同的 `ROS_HOME`：
 
-实机入口显式传 `use_cartesian_impedance:=false` 给组合 `real_bringup`，防止其默认行为提前激活阻抗。Xbot 另行加载 inactive 阻抗，先用 active 轨迹控制器完成 Home，再由 RB 切换。
+```bash
+export ROS_DOMAIN_ID=225
+export ROS_HOME=/tmp/ur_xbot_validation
+```
+
+终端 1 按上文启动 Home；到位后，终端 2 执行：
+
+```bash
+UR_XBOT_MOCK_TEST=1 PYTHONPATH=/ros2_ws/src/ur_teleop:$PYTHONPATH \
+  /usr/bin/python3 -m pytest /ros2_ws/src/ur_teleop/tests -q
+```
+
+测试会切换控制器和夹爪，重复执行前恢复轨迹 active、阻抗 inactive、夹爪打开，或重新启动 mock Home。
+
+mock 已覆盖控制器切换、参考系、夹爪、断连恢复和录制事件。曾出现夹爪时序测试间歇性失败，恢复初态后三次复测未重现。物理手柄、真机动作、相机视频编码及 LeRobot 实际落盘尚未验收。

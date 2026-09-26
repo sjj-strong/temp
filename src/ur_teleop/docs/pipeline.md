@@ -101,7 +101,7 @@ Alicia ──100 Hz /joint_states(Joint1..6 弧度 + Gripper 米)──> teleop_
 - **指令链路与频率**：teleop `_tick` 50 Hz 全程运行，仅 ACTIVE/INACTIVE 发布——把映射目标（INACTIVE 时为当前位置 hold，避免跳变）发到 `/ruckig/target_joint_positions`。ruckig_node 以 500 Hz Ruckig OTG 把目标平滑成 jerk-limited 轨迹，按 `teleop.controller` 下发至 `/forward_position_controller/commands` 或 `/joint_impedance_controller/target_joint_state`；平滑由 Ruckig 承担。teleop 与 ruckig 都仅在 teleop 处于 ACTIVE/INACTIVE 时才有数据流；其余状态两者均不发指令（teleop_node.py:299-317）。
 - **watchdog**：`_last_master_stamp` 在每次收到主臂 `/joint_states` 时刷新；超过 `teleop.watchdog_timeout_s`（默认 0.5 s）→ INACTIVE（`/teleop/status=false`），主臂恢复自动回 ACTIVE，无需重新 Enter。
 - **映射参数**：offset 在 CAPTURE_OFFSET 捕获（`SessionOffset`，不写盘）；映射使用 `mapping.*` + `safety.*` 合并后的配置（`build_mapping_config`，teleop_node.py:46-54）。公式与 clamp 细节见 joint_mapper.md。
-- **record 数据流**：teleop_node → `/teleop/commands`（7 维）+ `/teleop/status` → data_recorder；data_recorder → `/teleop/enable` → teleop_node。数据集已存在时以时间戳后缀新建 repo_id，不覆盖不追加。帧结构见 frame_builder.md。
+- **record 数据流**：teleop_node → `/teleop/commands`（7 维）→ data_recorder；data_recorder → `/teleop/enable` → teleop_node。数据集与帧结构见[数据采集](data_recorder.md)。
 
 ## 状态机总览（teleop_node，8 态）
 
