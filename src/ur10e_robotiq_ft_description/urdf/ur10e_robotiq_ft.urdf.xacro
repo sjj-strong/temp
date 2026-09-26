@@ -22,6 +22,7 @@
   <xacro:arg name="ft_sensor_max_retries" default="100"/>
   <xacro:arg name="ft_sensor_read_rate" default="10"/>
   <xacro:arg name="ft_sensor_ftdi_id" default=""/>
+  <xacro:arg name="xbot_effort_mock" default="false"/>
 
   <!-- ===== ros2_control 参数（与官方 ur.urdf.xacro 相同的参数集） ===== -->
   <xacro:arg name="robot_ip" default="0.0.0.0" />
@@ -111,6 +112,7 @@
   </joint>
 
   <!-- ===== 5. ros2_control（复用官方 ur_ros2_control 宏，mock/real 自动切换） ===== -->
+  <xacro:unless value="$(arg xbot_effort_mock)">
   <xacro:ur_ros2_control
     name="$(arg name)"
     tf_prefix="$(arg tf_prefix)"
@@ -141,6 +143,36 @@
     ur_type="$(arg ur_type)"
     verify_robot_model="$(arg verify_robot_model)"
   />
+  </xacro:unless>
+
+  <!-- Xbot 仿真需要将 effort 积分为关节运动；官方 GenericSystem 不提供该行为。 -->
+  <xacro:if value="$(arg xbot_effort_mock)">
+    <ros2_control name="ur10e_xbot_effort_mock" type="system">
+      <hardware>
+        <plugin>joint_impedance_controller/JointImpedanceMockSystem</plugin>
+        <param name="inertia">1.0</param>
+        <param name="viscous_damping">0.2</param>
+        <param name="maximum_velocity">2.0</param>
+      </hardware>
+      <xacro:macro name="xbot_mock_joint" params="name">
+        <joint name="${name}">
+          <command_interface name="position"/>
+          <command_interface name="effort"/>
+          <state_interface name="position">
+            <param name="initial_value">${xacro.load_yaml('$(arg initial_positions_file)')[name]}</param>
+          </state_interface>
+          <state_interface name="velocity"><param name="initial_value">0.0</param></state_interface>
+          <state_interface name="effort"><param name="initial_value">0.0</param></state_interface>
+        </joint>
+      </xacro:macro>
+      <xacro:xbot_mock_joint name="shoulder_pan_joint"/>
+      <xacro:xbot_mock_joint name="shoulder_lift_joint"/>
+      <xacro:xbot_mock_joint name="elbow_joint"/>
+      <xacro:xbot_mock_joint name="wrist_1_joint"/>
+      <xacro:xbot_mock_joint name="wrist_2_joint"/>
+      <xacro:xbot_mock_joint name="wrist_3_joint"/>
+    </ros2_control>
+  </xacro:if>
 
   <!-- FT300 hardware is part of the ros2_control graph even when the Cartesian
        controller leaves use_external_ft=false.  This keeps external sensing a

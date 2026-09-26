@@ -13,6 +13,10 @@ setup(
             "config/ur_controllers_sim.yaml",
             "config/ur_controllers_impedance_sim.yaml",
             "config/opencv_cameras.yaml",
+            "config/xbot_teleop.yaml",
+            "config/xbot_mock_controllers.yaml",
+            "config/xbot_cartesian_sim.yaml",
+            "config/xbot_cartesian_type.yaml",
         ]),
         ("share/" + package_name + "/config/rviz", [
             "config/rviz/ur_teleop.rviz",
@@ -24,6 +28,7 @@ setup(
             "launch/camera.launch.py",
             "launch/rsp_mock.launch.py",
             "launch/ft300_gripper_test.launch.py",
+            "launch/xbot_cell.launch.py",
         ]),
         ("share/ament_index/resource_index/packages", ["resource/ur_teleop"]),
     ],

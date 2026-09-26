@@ -1,0 +1,26 @@
+# 此文件在现有单元配置之上选择 Xbot 控制方式，home.slave 等设置保持一致。
+base_config: ur_teleop.yaml
+mode: record
+cell:
+  launch_rviz: false
+teleop:
+  control_source: xbot
+recorder:
+  repo_id: my_user/ur10e_xbot
+  root: /ros2_ws/dataset/xbot
+  robot_type: ur10e_xbot_teleop
+  ee_pose_source: tf
+  ee_pose_parent_frame: base_link
+  ee_pose_child_frame: gripper_tcp
+xbot:
+  calibration_file: ~/.config/ur_teleop/xbot_joy.yaml
+  control_hz: 50.0
+  joy_timeout_s: 0.25
+  tcp_timeout_s: 0.25
+  max_linear_speed_m_s: 0.02
+  max_angular_speed_rad_s: 0.1
+  precision_scale: 0.25
+  target_lead_m: 0.03
+  target_lead_rad: 0.15
+  deadzone: 0.08
+  view_hold_s: 2.0

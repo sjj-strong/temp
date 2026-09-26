@@ -5,10 +5,12 @@ import os
 import yaml
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+
+from ur_teleop.config import load_config
 
 
 def _yaml_default(config_file: str, *path: str, fallback: str):
@@ -21,6 +23,32 @@ def _yaml_default(config_file: str, *path: str, fallback: str):
         return str(data).lower() if isinstance(data, bool) else str(data)
     except Exception:
         return fallback
+
+
+def _start_cell(context, pkg_share):
+    """按配置选择 Alicia 原有单元或 Xbot 专用单元。"""
+    config_path = LaunchConfiguration("config_file").perform(context)
+    source = load_config(config_path)["teleop"].get("control_source", "alicia")
+    if source == "xbot":
+        launch_file = os.path.join(pkg_share, "launch", "xbot_cell.launch.py")
+        arguments = {"config_file": config_path}
+    else:
+        launch_file = os.path.join(pkg_share, "launch", "cell.launch.py")
+        arguments = {
+            "config_file": LaunchConfiguration("config_file"),
+            "sim": LaunchConfiguration("sim"),
+            "robot_ip": LaunchConfiguration("robot_ip"),
+            "gripper_port": LaunchConfiguration("gripper_port"),
+            "ftdi_id": LaunchConfiguration("ftdi_id"),
+            "launch_rviz": LaunchConfiguration("launch_rviz"),
+            "alicia_port": LaunchConfiguration("alicia_port"),
+            "launch_alicia": LaunchConfiguration("launch_alicia"),
+            "controller": LaunchConfiguration("controller"),
+        }
+    return [IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(launch_file),
+        launch_arguments=arguments.items(),
+    )]
 
 
 def generate_launch_description():
@@ -53,22 +81,7 @@ def generate_launch_description():
                               default_value=_yaml_default(config_file, "teleop", "controller",
                                                          fallback="forward_position"),
                               choices=["forward_position", "joint_impedance"]),
-        IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(
-                os.path.join(pkg_share, "launch", "cell.launch.py")
-            ),
-            launch_arguments={
-                "config_file": LaunchConfiguration("config_file"),
-                "sim": LaunchConfiguration("sim"),
-                "robot_ip": LaunchConfiguration("robot_ip"),
-                "gripper_port": LaunchConfiguration("gripper_port"),
-                "ftdi_id": LaunchConfiguration("ftdi_id"),
-                "launch_rviz": LaunchConfiguration("launch_rviz"),
-                "alicia_port": LaunchConfiguration("alicia_port"),
-                "launch_alicia": LaunchConfiguration("launch_alicia"),
-                "controller": LaunchConfiguration("controller"),
-            }.items(),
-        ),
+        OpaqueFunction(function=_start_cell, args=[pkg_share]),
         Node(
             package="ur_teleop", executable="home_node",
             parameters=[{"config_file": LaunchConfiguration("config_file")}],

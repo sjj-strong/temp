@@ -17,7 +17,7 @@ ALICIA_JOINT_NAMES = ["Joint1", "Joint2", "Joint3", "Joint4", "Joint5", "Joint6"
 GRIPPER_JOINT = "Gripper"
 UR_GRIPPER_JOINT = "robotiq_85_left_knuckle_joint"
 
-_REQUIRED_TOP = ["mode", "sim", "home", "mapping", "safety", "teleop"]
+_REQUIRED_TOP = ["mode", "sim", "home", "teleop"]
 _REQUIRED_MAPPING = ["alicia_joint_order", "ur_joint_order", "sign", "scale"]
 _REQUIRED_HOME = ["master", "slave"]
 _SUPPORTED_TELEOP_CONTROLLERS = ("forward_position", "joint_impedance")
@@ -29,10 +29,8 @@ class ConfigError(ValueError):
 
 def load_config(path: str | Path) -> dict[str, Any]:
     """Load and validate ur_teleop.yaml. Raises ConfigError on any problem."""
+    data = _read_config(Path(path), set())
     p = Path(path)
-    if not p.exists():
-        raise ConfigError(f"Config file not found: {p}")
-    data = yaml.safe_load(p.read_text()) or {}
 
     for key in _REQUIRED_TOP:
         if key not in data:
@@ -41,12 +39,16 @@ def load_config(path: str | Path) -> dict[str, Any]:
     if data["mode"] not in ("teleop", "record"):
         raise ConfigError(f"mode must be 'teleop' or 'record', got '{data['mode']}'")
 
-    controller = data["teleop"].get("controller", "forward_position")
-    if controller not in _SUPPORTED_TELEOP_CONTROLLERS:
-        raise ConfigError(
-            "teleop.controller must be one of "
-            f"{', '.join(_SUPPORTED_TELEOP_CONTROLLERS)}, got '{controller}'"
-        )
+    source = data["teleop"].get("control_source", "alicia")
+    if source not in ("alicia", "xbot"):
+        raise ConfigError("teleop.control_source must be 'alicia' or 'xbot'")
+    if source == "alicia":
+        controller = data["teleop"].get("controller", "forward_position")
+        if controller not in _SUPPORTED_TELEOP_CONTROLLERS:
+            raise ConfigError(
+                "teleop.controller must be one of "
+                f"{', '.join(_SUPPORTED_TELEOP_CONTROLLERS)}, got '{controller}'"
+            )
 
     ruckig = data.get("ruckig", {})
     if not isinstance(ruckig, dict):
@@ -54,22 +56,57 @@ def load_config(path: str | Path) -> dict[str, Any]:
     if "enabled" in ruckig and not isinstance(ruckig["enabled"], bool):
         raise ConfigError("ruckig.enabled must be a boolean")
 
-    for key in _REQUIRED_MAPPING:
-        if key not in data["mapping"]:
-            raise ConfigError(f"Missing required key 'mapping.{key}' in {p}")
-    if len(data["mapping"]["ur_joint_order"]) != 6:
-        raise ConfigError("mapping.ur_joint_order must have 6 joints")
+    if source == "alicia":
+        for key in ("mapping", "safety"):
+            if key not in data:
+                raise ConfigError(f"Missing required top-level key '{key}' in {p}")
+        for key in _REQUIRED_MAPPING:
+            if key not in data["mapping"]:
+                raise ConfigError(f"Missing required key 'mapping.{key}' in {p}")
+        if len(data["mapping"]["ur_joint_order"]) != 6:
+            raise ConfigError("mapping.ur_joint_order must have 6 joints")
 
-    for key in _REQUIRED_HOME:
+    home_keys = _REQUIRED_HOME if source == "alicia" else ["slave"]
+    for key in home_keys:
         if len(data["home"].get(key, [])) != 6:
             raise ConfigError(f"home.{key} must have 6 values in {p}")
 
-    limits = data["safety"].get("limits", {})
-    for joint in UR_JOINT_NAMES:
-        if joint not in limits:
-            raise ConfigError(f"safety.limits missing joint '{joint}' in {p}")
+    if source == "alicia":
+        limits = data["safety"].get("limits", {})
+        for joint in UR_JOINT_NAMES:
+            if joint not in limits:
+                raise ConfigError(f"safety.limits missing joint '{joint}' in {p}")
 
     return data
+
+
+def _read_config(path: Path, visited: set[Path]) -> dict[str, Any]:
+    """读取配置，可用相对路径 base_config 继承现有单元设置。"""
+    p = path.resolve()
+    if p in visited:
+        raise ConfigError(f"配置继承出现循环: {p}")
+    if not p.exists():
+        raise ConfigError(f"Config file not found: {p}")
+    data = yaml.safe_load(p.read_text()) or {}
+    if not isinstance(data, dict):
+        raise ConfigError(f"配置必须是映射: {p}")
+    parent_name = data.pop("base_config", None)
+    if parent_name is None:
+        return data
+    if not isinstance(parent_name, str) or not parent_name:
+        raise ConfigError("base_config 必须是非空路径")
+    parent = _read_config(p.parent / parent_name, visited | {p})
+    return _merge_config(parent, data)
+
+
+def _merge_config(base: dict, override: dict) -> dict:
+    result = dict(base)
+    for key, value in override.items():
+        if isinstance(value, dict) and isinstance(result.get(key), dict):
+            result[key] = _merge_config(result[key], value)
+        else:
+            result[key] = value
+    return result
 
 
 def default_config_path() -> str:

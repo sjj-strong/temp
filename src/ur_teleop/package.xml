@@ -22,6 +22,9 @@
   <exec_depend>data_collection</exec_depend>
   <exec_depend>rqt_image_view</exec_depend>
   <exec_depend>joint_impedance_controller</exec_depend>
+  <exec_depend>cartesian_impedance_controller</exec_depend>
+  <exec_depend>joy</exec_depend>
+  <exec_depend>ur10e_robotiq_ft_description</exec_depend>
   <exec_depend>robotiq_ft_sensor_hardware</exec_depend>
   <exec_depend>robotiq_description</exec_depend>
   <!-- lerobot 可选：record 模式需要，source /opt/lerobot_venv/bin/activate（纯逻辑模块不依赖） -->

@@ -33,8 +33,9 @@ class HomeNode(rclpy.node.Node):
         super().__init__("home_node")
         self.declare_parameter("config_file", default_config_path())
         cfg = load_config(self.get_parameter("config_file").value)
+        self._source = cfg["teleop"].get("control_source", "alicia")
         home = cfg["home"]
-        self._master_home = list(home["master"])
+        self._master_home = list(home["master"]) if self._source == "alicia" else []
         self._slave_home = list(home["slave"])
         self._gripper_value = float(home.get("master_gripper_value", 1000.0))
         self._tolerance = float(home.get("at_home_tolerance_rad", 0.05))
@@ -147,10 +148,12 @@ class HomeNode(rclpy.node.Node):
 
     def at_home(self) -> bool:
         m, s = self.master_q(), self.slave_q()
-        if m is None or s is None:
+        if s is None or (self._source == "alicia" and m is None):
             return False
-        m_err = max(abs(a - b) for a, b in zip(m, self._master_home))
         s_err = max(abs(a - b) for a, b in zip(s, self._slave_home))
+        if self._source == "xbot":
+            return s_err <= self._tolerance
+        m_err = max(abs(a - b) for a, b in zip(m, self._master_home))
         return m_err <= self._tolerance and s_err <= self._tolerance
 
 
@@ -173,13 +176,17 @@ def main():
         elif not node.send_ur_home_trajectory(executor):
             rc = 1
         else:
-            node.get_logger().info(f"Alicia home -> {node._master_home}（夹爪开）")
+            if node._source == "alicia":
+                node.get_logger().info(f"Alicia home -> {node._master_home}（夹爪开）")
+            else:
+                node.get_logger().info("Xbot 模式：仅验证 UR home，不启动 Alicia")
             deadline = time.time() + node._move_timeout
             ok_verified = False
             hold_since = None
             while rclpy.ok() and time.time() < deadline:
                 executor.spin_once(timeout_sec=0.05)
-                node.publish_alicia_home()          # 持续命令，直到到位
+                if node._source == "alicia":
+                    node.publish_alicia_home()      # Alicia 模式持续命令，直到到位
                 if node.at_home():
                     hold_since = hold_since if hold_since is not None else time.time()
                     if time.time() - hold_since >= node._verify_duration:
@@ -190,17 +197,17 @@ def main():
             if not ok_verified:
                 m, s = node.master_q(), node.slave_q()
                 node.get_logger().error(
-                    f"到位超时（未在 move_timeout 内验证双臂位于 home）。"
-                    f"master 目标={node._master_home}, "
-                    f"当前={m if m is not None else '无 /joint_states'}; "
-                    f"UR 目标={node._slave_home}, "
-                    f"当前={s if s is not None else '无 /joint_states'}. "
-                    "可用 teleop.launch force_home:=true 跳过验证。"
+                    f"到位超时。UR 目标={node._slave_home}, "
+                    f"当前={s if s is not None else '无 /joint_states'}。"
+                    + (f"Alicia 目标={node._master_home}, 当前={m}; "
+                       "可用 teleop.launch force_home:=true 跳过验证。"
+                       if node._source == "alicia" else "")
                 )
                 rc = 1
             else:
                 node.get_logger().info("=" * 50)
-                node.get_logger().info("HOME REACHED — 双臂已到位。现在运行 teleop.launch（阶段 2）。")
+                label = "双臂" if node._source == "alicia" else "UR"
+                node.get_logger().info(f"HOME REACHED — {label}已到位。现在运行 teleop.launch（阶段 2）。")
                 node.get_logger().info("=" * 50)
     finally:
         executor.shutdown()

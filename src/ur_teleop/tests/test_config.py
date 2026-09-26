@@ -50,6 +50,38 @@ def test_joint_impedance_controller_config_is_accepted(tmp_path):
     assert cfg["teleop"]["controller"] == "joint_impedance"
 
 
+def test_xbot_config_inherits_current_ur_home(tmp_path):
+    parent = tmp_path / "ur_teleop.yaml"
+    parent.write_text(BASE)
+    child = tmp_path / "xbot.yaml"
+    child.write_text("base_config: ur_teleop.yaml\nteleop:\n  control_source: xbot\n")
+    cfg = load_config(child)
+    assert cfg["home"]["slave"] == [0.0, -1.57, 0.0, -1.57, 0.0, 0.0]
+    assert cfg["teleop"]["control_source"] == "xbot"
+    assert cfg["teleop"]["command_rate_hz"] == 50
+
+
+def test_xbot_config_does_not_require_alicia_fields(tmp_path):
+    cfg = load_config(_write(tmp_path, """\
+mode: record
+sim: true
+home:
+  slave: [0, 0, 0, 0, 0, 0]
+teleop:
+  control_source: xbot
+"""))
+    assert "master" not in cfg["home"]
+
+
+def test_config_rejects_inheritance_cycle(tmp_path):
+    a = tmp_path / "a.yaml"
+    b = tmp_path / "b.yaml"
+    a.write_text("base_config: b.yaml\n")
+    b.write_text("base_config: a.yaml\n")
+    with pytest.raises(ConfigError, match="循环"):
+        load_config(a)
+
+
 def test_unknown_teleop_controller_is_rejected(tmp_path):
     with pytest.raises(ConfigError, match="teleop.controller"):
         load_config(_write(tmp_path, BASE + """
