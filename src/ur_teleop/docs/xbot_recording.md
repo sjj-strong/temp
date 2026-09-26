@@ -17,3 +17,5 @@ Xbot 使用独立的 `repo_id: my_user/ur10e_xbot` 和 `root: /ros2_ws/dataset/x
 `/teleop/record_event` 是 `std_msgs/String`：`start/save/discard/finalize`。回调只入队，保存和编码在录制主线程执行；过期两秒的非 finalize 操作忽略，避免耗时保存结束后执行旧的开始命令。
 
 自动测试使用内存数据集验证开始、保存、丢弃、finalize 和超时门控；真实相机、视频编码及 LeRobot 落盘需要在目标采集环境验收。
+
+支持实机独立夹爪 controller_manager 发布的仅含夹爪的 `JointState`，不要求与六个 UR 关节出现在同一消息中。启用夹爪 observation 时，夹爪反馈也参与录制新鲜度检查。

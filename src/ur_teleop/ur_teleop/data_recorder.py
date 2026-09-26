@@ -55,6 +55,7 @@ class DataRecorderNode(Node):
         self._events = queue.Queue(maxsize=32)
         self._ready = False
         self._ready_at = self._cmd_at = self._joint_at = -float('inf')
+        self._gripper_at = -float('inf')
         self._camera_at = {}
         self._data_timeout = float(self._rec.get('data_timeout_s', .5))
 
@@ -109,6 +110,8 @@ class DataRecorderNode(Node):
                 all(math.isfinite(v) for v in self._teleop_cmd) and
                 now - self._cmd_at < self._data_timeout and
                 now - self._joint_at < self._data_timeout and
+                (not self._rec.get('record_ur_gripper', True) or
+                 now - self._gripper_at < self._data_timeout) and
                 all(now - self._camera_at.get(n, -float('inf')) < self._data_timeout
                     for n in self._cameras))
 
@@ -133,15 +136,18 @@ class DataRecorderNode(Node):
 
     def _joint_cb(self, msg: JointState):
         names = set(msg.name)
-        if len(msg.position) != len(msg.name) or not all(n in names for n in UR_JOINT_NAMES):
+        if len(msg.position) != len(msg.name):
             return
         if self._xbot and not all(math.isfinite(v) for v in msg.position):
             return
         with self._lock:
-            self._ur_joints = [msg.position[msg.name.index(n)] for n in UR_JOINT_NAMES]
-            self._joint_at = time.monotonic()
+            if all(n in names for n in UR_JOINT_NAMES):
+                self._ur_joints = [msg.position[msg.name.index(n)] for n in UR_JOINT_NAMES]
+                self._joint_at = time.monotonic()
+            # 实机夹爪是独立 controller_manager，可能单独发布 JointState。
             if UR_GRIPPER_JOINT in names:
                 self._ur_gripper_rad = msg.position[msg.name.index(UR_GRIPPER_JOINT)]
+                self._gripper_at = time.monotonic()
 
     def _cmd_cb(self, msg: Float64MultiArray):
         with self._lock:

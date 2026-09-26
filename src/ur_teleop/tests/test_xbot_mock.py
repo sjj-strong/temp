@@ -15,7 +15,7 @@ def test_joy_switch_motion_and_fault(tmp_path):
     from rclpy.node import Node
     from rclpy.executors import SingleThreadedExecutor
     from sensor_msgs.msg import Joy
-    from std_msgs.msg import Bool, Float64MultiArray
+    from std_msgs.msg import Bool, Float64MultiArray, String
     from ur_teleop.xbot_core import AXES, BUTTONS
     from ur_teleop.xbot_teleop_node import XbotTeleopNode
 
@@ -37,7 +37,9 @@ def test_joy_switch_motion_and_fault(tmp_path):
     joy = probe.create_publisher(Joy, '/joy', 1)
     estop = probe.create_publisher(Bool, '/teleop/e_stop', 1)
     commands = []
+    events = []
     probe.create_subscription(Float64MultiArray, '/teleop/commands', lambda m: commands.append(list(m.data)), 10)
+    probe.create_subscription(String, '/teleop/record_event', lambda m: events.append(m.data), 10)
     axes, buttons = [0.]*7, [0]*8
 
     def run(seconds, send=True):
@@ -52,6 +54,17 @@ def test_joy_switch_motion_and_fault(tmp_path):
 
     try:
         run(2.)
+        # DDS 发现和首次 TF 查询异步完成；不将固定等待时间当作就绪条件。
+        deadline = time.monotonic() + 8.
+        while time.monotonic() < deadline:
+            if (node.controllers.get('scaled_joint_trajectory_controller') == 'active' and
+                    node.controllers.get('cartesian_impedance_controller') == 'inactive' and
+                    node.actual_pose() is not None and not node.previous_rb and
+                    time.monotonic() - node.joints_at < .1):
+                break
+            run(.05)
+        else:
+            pytest.fail(f'mock 未就绪: {node.controllers}')
         buttons[0] = 1
         run(2.)
         assert node.controller_active, (node.controllers, node.actual_pose(), node.joints)
@@ -61,7 +74,12 @@ def test_joy_switch_motion_and_fault(tmp_path):
         commands.clear()
         run(.3)
         assert any(c[0] > 0 for c in commands)
-        before = node.core.target.copy()
+        axes[1] = 0.
+        buttons[2] = 1
+        run(1.)
+        assert node.gripper_command == 1., (node.gripper_state, node.gripper_pending,
+                                            node.gripper.server_is_ready(), node.core.enabled)
+        buttons[2] = 0
         buttons[3] = 1
         run(.1)
         assert node.core.frame == 'tcp'
@@ -82,6 +100,17 @@ def test_joy_switch_motion_and_fault(tmp_path):
         estop.publish(Bool(data=False))
         run(.15)
         assert not node.core.enabled
+        buttons[0] = 0
+        run(.2)
+        for index in (4, 5, 6):
+            buttons[index] = 1
+            run(.1)
+            buttons[index] = 0
+            run(.1)
+        assert events[-3:] == ['start', 'save', 'discard']
+        buttons[7] = 1
+        run(2.2)
+        assert events[-1] == 'finalize' and node.finished
     finally:
         buttons[:] = [0]*8
         run(.2)

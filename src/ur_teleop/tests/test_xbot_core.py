@@ -57,6 +57,29 @@ def test_lead_limit_and_timer_stall():
     assert not c.step(pose, a, b, .5, True).any()
 
 
+def test_fault_latches_hold_pose_instead_of_following_feedback():
+    c = PoseIntegrator(CFG)
+    pose = np.array([0., 0., 0., 0., 0., 0., 1.])
+    a, b = inputs()
+    c.step(pose, a, b, .02, True)
+    c.step(pose, a, b, .02, False)
+    moved = pose.copy()
+    moved[0] = .01
+    c.step(moved, a, b, .02, False)
+    np.testing.assert_array_equal(c.target, pose)
+
+
+def test_precision_and_vector_speed_limit():
+    c = PoseIntegrator(CFG)
+    pose = np.array([0., 0., 0., 0., 0., 0., 1.])
+    a, b = inputs()
+    c.step(pose, a, b, .02, True)
+    a['ly'] = a['lx'] = a['rt'] = 1.
+    b['rb'] = b['lb'] = True
+    action = c.step(pose, a, b, .02, True)
+    assert np.linalg.norm(action[:3]) == pytest.approx(.005)
+
+
 def test_button_edges_and_view_hold():
     e = ButtonEvents()
     _, b = inputs()

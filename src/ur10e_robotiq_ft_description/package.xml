@@ -17,6 +17,7 @@
   <exec_depend>ur_robot_driver</exec_depend>
   <exec_depend>controller_manager</exec_depend>
   <exec_depend>cartesian_impedance_controller</exec_depend>
+  <exec_depend>joint_impedance_controller</exec_depend>
   <exec_depend>robotiq_description</exec_depend>
   <exec_depend>robotiq_ft_sensor_description</exec_depend>
   <exec_depend>robotiq_ft_sensor_hardware</exec_depend>

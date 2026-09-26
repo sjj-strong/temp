@@ -20,3 +20,12 @@
 ## 假设
 
 Alicia 与 Xbot 由配置文件选择，不同时运行；实际 Joy 轴号需在首次实机使用前校准。当前工作区没有现成的流式笛卡尔速度控制器，因此本方案沿用指定的笛卡尔阻抗控制器。参见 [UR 官方控制器说明](https://docs.universal-robots.com/Universal_Robots_ROS_Documentation/rolling/doc/ur_robot_driver/ur_robot_driver/doc/usage/position_velocity_control.html)。
+
+## 实施记录（2026-09-26）
+
+- 已复用 `ur10e_robotiq_ft_description`，只增加默认关闭的 effort mock 开关，不维护独立 URDF。
+- 已实现 Xbot Home 分支、Joy 校准、RB 使能与严格控制器切换、base/TCP 积分、夹爪和故障恢复保护。
+- 已实现手柄 episode 事件、七维基座速度 action 和独立数据集配置，Alicia 流程保留。
+- 使用说明：[启动](xbot_startup.md)、[校准与控制](xbot_control.md)、[录制](xbot_recording.md)。
+- 真机动作、物理手柄校准、相机视频编码及 LeRobot 实际落盘尚未验收；mock 不能替代实机安全验收。
+- 当前阻抗控制器永久锁存目标，没有进程失联超时保护。节点只能在仍运行时处理输入/反馈超时；物理急停和人工监护不可省略。

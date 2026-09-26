@@ -15,4 +15,3 @@ cartesian_impedance_controller:
     damping: [15.0, 15.0, 15.0, 1.5, 1.5, 1.5]
     linear_reference_speed: 0.05
     angular_reference_speed: 0.2
-    command_timeout: 0.5

@@ -33,6 +33,7 @@ def test_episode_events_and_stale_gate(monkeypatch):
     node._ready = True
     node._data_timeout = .5
     node._ready_at = node._cmd_at = node._joint_at = time.monotonic()
+    node._gripper_at = time.monotonic()
     node._camera_at, node._cameras, node._camera_frames = {}, {}, {}
     node._teleop_cmd = [.01, 0, 0, 0, 0, 0, 1.]
     node._ur_joints = [0.]*6
@@ -80,3 +81,19 @@ def test_episode_events_and_stale_gate(monkeypatch):
     assert event('finalize')
     node.finalize()
     assert finished == [True] and len(saved) == 2
+
+
+def test_independent_gripper_joint_state():
+    pytest.importorskip('rclpy')
+    from ur_teleop.data_recorder import DataRecorderNode
+    from ur_teleop.config import UR_GRIPPER_JOINT
+    from sensor_msgs.msg import JointState
+    import threading
+    node = object.__new__(DataRecorderNode)
+    node._xbot = True
+    node._lock = threading.Lock()
+    node._ur_joints = [1.]*6
+    node._ur_gripper_rad = 0.
+    node._joint_cb(JointState(name=[UR_GRIPPER_JOINT], position=[.79]))
+    assert node._ur_gripper_rad == .79
+    assert node._ur_joints == [1.]*6

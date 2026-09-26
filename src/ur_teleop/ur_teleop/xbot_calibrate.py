@@ -52,8 +52,17 @@ def main():
                 changes = [abs(a-b) for a, b in zip(msg.axes, baseline.axes)]
                 if changes and max(changes) > .75:
                     index = changes.index(max(changes))
+                    # 首次跨阈值不是端点，继续采样以记录推到极限后的最大行程。
+                    endpoint = float(msg.axes[index])
+                    end = time.monotonic() + 1.
+                    while time.monotonic() < end:
+                        peak = sample()
+                        if peak is not None and len(peak.axes) == len(baseline.axes):
+                            value = float(peak.axes[index])
+                            if abs(value - baseline.axes[index]) > abs(endpoint - baseline.axes[index]):
+                                endpoint = value
                     return {'kind': 'axis', 'index': index,
-                            'rest': float(baseline.axes[index]), 'positive': float(msg.axes[index])}
+                            'rest': float(baseline.axes[index]), 'positive': endpoint}
         raise TimeoutError('未收到清晰输入；请检查 joy_node 后重试')
 
     def neutral():

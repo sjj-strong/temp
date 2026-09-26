@@ -14,3 +14,7 @@ xacro /ros2_ws/src/ur10e_robotiq_ft_description/urdf/ur10e_robotiq_ft.urdf.xacro
   ft_sensor_use_fake_mode:=true xbot_effort_mock:=true | \
   rg 'JointImpedanceMockSystem|gripper_tcp'
 ```
+
+## 运行依赖
+
+组合包显式声明 `joint_impedance_controller` 运行依赖，用于提供 `JointImpedanceMockSystem` 插件；该插件仅在 `xbot_effort_mock:=true` 时使用。

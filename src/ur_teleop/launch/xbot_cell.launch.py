@@ -63,6 +63,10 @@ def _build_cell(context):
                 "ft_sensor_ftdi_id": str(cell_cfg["ftdi_id"]),
                 "gripper_com_port": str(cell_cfg["gripper_port"]),
                 "launch_rviz": str(bool(cell_cfg.get("launch_rviz", False))).lower(),
+                # 先由轨迹控制器回 Home；此处禁止组合 bringup 自动激活阻抗。
+                "use_cartesian_impedance": "false",
+                "initial_joint_controller": "scaled_joint_trajectory_controller",
+                "activate_joint_controller": "true",
             }.items(),
         )]
         cart_config = os.path.join(

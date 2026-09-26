@@ -45,12 +45,17 @@ class JoyMapping:
         for name in AXES:
             axis = cfg['axes'][name]
             if axis.get('kind', 'axis') == 'buttons' and name == 'yaw':
-                if any(not 0 <= axis[n] < cfg['button_count'] for n in ('positive', 'negative')):
+                if (any(not isinstance(axis[n], int) or not 0 <= axis[n] < cfg['button_count']
+                        for n in ('positive', 'negative')) or axis['positive'] == axis['negative'] or
+                        any(axis[n] in cfg['buttons'].values() for n in ('positive', 'negative'))):
                     raise ValueError('十字键映射越界')
-            elif (not 0 <= axis['index'] < cfg['axis_count'] or
+            elif (not isinstance(axis['index'], int) or not 0 <= axis['index'] < cfg['axis_count'] or
                   not math.isfinite(axis['rest']) or not math.isfinite(axis['positive']) or
                   abs(axis['positive'] - axis['rest']) < 0.3):
                 raise ValueError(f'轴映射无效: {name}')
+        indices = [cfg['axes'][n]['index'] for n in AXES if cfg['axes'][n].get('kind') != 'buttons']
+        if len(set(indices)) != len(indices):
+            raise ValueError('运动轴不允许复用，请检查校准')
 
     def decode(self, axes, buttons):
         if len(axes) != self.cfg['axis_count'] or len(buttons) != self.cfg['button_count']:
@@ -102,10 +107,12 @@ class PoseIntegrator:
         self.target = None
         self.enabled = False
         self.released = False
+        self.fault_pose_latched = False
 
     def stop(self, actual=None):
-        if actual is not None:
+        if actual is not None and not self.fault_pose_latched:
             self.target = np.array(actual, dtype=float)
+            self.fault_pose_latched = True
         self.enabled = False
         self.released = False
 
@@ -114,6 +121,7 @@ class PoseIntegrator:
         if not safe or actual is None or not 0 < dt <= 0.1:
             self.stop(actual)
             return action
+        self.fault_pose_latched = False
         if toggle:
             self.frame = 'tcp' if self.frame == 'base' else 'base'
             return action  # 切换当帧目标严格不变。

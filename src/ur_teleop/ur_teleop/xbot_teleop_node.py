@@ -43,7 +43,9 @@ class XbotTeleopNode(Node):
         self.joy_at = self.joints_at = -float('inf')
         self.joints = None
         self.gripper_state = None
+        self.gripper_at = -float('inf')
         self.gripper_command = 0.
+        self.gripper_initialized = False
         self.gripper_pending = False
         self.gripper_goal = None
         self.estop = False
@@ -57,7 +59,6 @@ class XbotTeleopNode(Node):
         self.controllers_at = -float('inf')
         self.previous_rb = True
         self.previous_time = time.monotonic()
-        self.previous_safe = False
         self.last_status = ''
         self.last_actual = None
         self.buffer = Buffer()
@@ -102,6 +103,10 @@ class XbotTeleopNode(Node):
             self.joints_at = time.monotonic()
         if UR_GRIPPER_JOINT in values and np.isfinite(values[UR_GRIPPER_JOINT]):
             self.gripper_state = values[UR_GRIPPER_JOINT]
+            self.gripper_at = time.monotonic()
+            if not self.gripper_initialized:
+                self.gripper_command = float(self.gripper_state > .4)
+                self.gripper_initialized = True
 
     def on_estop(self, msg):
         self.estop = msg.data
@@ -123,7 +128,7 @@ class XbotTeleopNode(Node):
                 return None
             p, q = transform.transform.translation, transform.transform.rotation
             pose = np.array([p.x, p.y, p.z, q.x, q.y, q.z, q.w])
-            if not np.isfinite(pose).all() or np.linalg.norm(pose[3:]) < .5:
+            if not np.isfinite(pose).all() or not .5 <= np.linalg.norm(pose[3:]) <= 1.5:
                 return None
             pose[3:] /= np.linalg.norm(pose[3:])
             return pose
@@ -137,9 +142,11 @@ class XbotTeleopNode(Node):
     def toggle_gripper(self):
         grip = self.cfg.get('gripper', {})
         if (not grip.get('enabled', False) or self.gripper_pending or
-                self.gripper_state is None or not self.gripper.server_is_ready()):
+                self.gripper_state is None or time.monotonic() - self.gripper_at > self.x['tcp_timeout_s'] or
+                not self.gripper.server_is_ready()):
             return
         desired = 0. if self.gripper_state > .4 else 1.
+        self.get_logger().info(f'夹爪请求: 实测={self.gripper_state:.3f}, 目标={desired}')
         goal = ParallelGripperCommand.Goal()
         goal.command.name = [UR_GRIPPER_JOINT]
         goal.command.position = [float(grip.get('close_pos_rad', .79) if desired else grip.get('open_pos_rad', 0.))]
@@ -152,9 +159,11 @@ class XbotTeleopNode(Node):
                 handle = f.result()
                 if not handle.accepted:
                     self.gripper_pending = False
+                    self.get_logger().warn('夹爪 action 拒绝目标，请检查命令字段及控制器接口')
                     return
                 self.gripper_goal = handle
                 self.gripper_command = desired
+                self.get_logger().info(f'夹爪目标已接受: {desired}')
                 if not self.core.enabled or self.estop or self.finished:
                     handle.cancel_goal_async()
                 handle.get_result_async().add_done_callback(done)
