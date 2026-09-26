@@ -42,6 +42,8 @@ setup(
         "console_scripts": [
             "home_node = ur_teleop.home_node:main",
             "teleop_node = ur_teleop.teleop_node:main",
+            "xbot_teleop_node = ur_teleop.xbot_teleop_node:main",
+            "xbot_calibrate = ur_teleop.xbot_calibrate:main",
             "data_recorder = ur_teleop.data_recorder:main",
             "ruckig_node = ur_teleop.ruckig_node:main",
             "camera_mosaic_viewer = ur_teleop.camera_mosaic_viewer:main",

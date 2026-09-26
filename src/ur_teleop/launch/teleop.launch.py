@@ -11,62 +11,57 @@ UR 目标发到 /ruckig/target_joint_positions，ruckig_node 以 control_hz（�
 
 import os
 
-import yaml
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
-from launch.conditions import IfCondition
-from launch.substitutions import LaunchConfiguration, PythonExpression
+from launch.actions import DeclareLaunchArgument, OpaqueFunction
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+from ur_teleop.config import load_config
+
+
+def _nodes(context):
+    config = LaunchConfiguration('config_file').perform(context)
+    cfg = load_config(config)
+    mode = LaunchConfiguration('mode').perform(context) or cfg.get('mode', 'teleop')
+    if mode not in ('teleop', 'record'):
+        raise ValueError('mode 必须为 teleop 或 record')
+    if cfg['teleop'].get('control_source', 'alicia') == 'xbot':
+        nodes = [
+            Node(package='joy', executable='joy_node', parameters=[{
+                'autorepeat_rate': 50.0, 'deadzone': 0.0,
+                'device_id': int(cfg.get('xbot', {}).get('device_id', 0)),
+            }]),
+            Node(package='ur_teleop', executable='xbot_teleop_node',
+                 parameters=[{'config_file': config}], output='screen'),
+        ]
+    else:
+        nodes = [Node(package='ur_teleop', executable='teleop_node', parameters=[{
+            'config_file': config, 'mode': mode,
+            'force_home': LaunchConfiguration('force_home'),
+        }])]
+        controller = cfg['teleop'].get('controller', 'forward_position')
+        enabled = LaunchConfiguration('use_ruckig').perform(context)
+        if (enabled == 'true' or (not enabled and
+                (controller != 'joint_impedance' or cfg.get('ruckig', {}).get('enabled', True)))):
+            hz = LaunchConfiguration('ruckig_control_hz').perform(context)
+            nodes.append(Node(package='ur_teleop', executable='ruckig_node', parameters=[{
+                'config_file': config,
+                'control_hz': float(hz) if hz else float(cfg.get('ruckig', {}).get('control_hz', 500.)),
+            }]))
+    if mode == 'record':
+        nodes.append(Node(package='ur_teleop', executable='data_recorder',
+                          parameters=[{'config_file': config}]))
+    return nodes
 
 
 def generate_launch_description():
     pkg_share = get_package_share_directory("ur_teleop")
     config_file = os.path.join(pkg_share, "config", "ur_teleop.yaml")
-    try:
-        with open(config_file) as f:
-            cfg = yaml.safe_load(f)
-        mode_default = cfg.get("mode", "teleop")
-        ruckig_hz_default = str(cfg.get("ruckig", {}).get("control_hz", 500.0))
-        controller_default = cfg.get("teleop", {}).get("controller", "forward_position")
-        ruckig_enabled = cfg.get("ruckig", {}).get("enabled", True)
-        # forward_position 始终使用 Ruckig；开关只对 joint_impedance 生效。
-        use_ruckig_default = str(
-            controller_default != "joint_impedance" or ruckig_enabled).lower()
-    except Exception:
-        mode_default = "teleop"
-        ruckig_hz_default = "500.0"
-        use_ruckig_default = "true"
-
     return LaunchDescription([
         DeclareLaunchArgument("config_file", default_value=config_file),
-        DeclareLaunchArgument("mode", default_value=mode_default,
-                              choices=["teleop", "record"]),
+        DeclareLaunchArgument("mode", default_value=""),
         DeclareLaunchArgument("force_home", default_value="false"),
-        DeclareLaunchArgument("ruckig_control_hz", default_value=ruckig_hz_default),
-        DeclareLaunchArgument("use_ruckig", default_value=use_ruckig_default),
-        Node(
-            package="ur_teleop", executable="teleop_node",
-            parameters=[
-                {"config_file": LaunchConfiguration("config_file"),
-                 "mode": LaunchConfiguration("mode"),
-                 "force_home": LaunchConfiguration("force_home")},
-            ],
-        ),
-        # 仅阻抗控制且 use_ruckig=false 时跳过平滑节点；teleop_node 直接向
-        # 阻抗控制器发送目标，仍由控制器实施自身保护。
-        Node(
-            package="ur_teleop", executable="ruckig_node",
-            parameters=[{
-                "config_file": LaunchConfiguration("config_file"),
-                "control_hz": LaunchConfiguration("ruckig_control_hz"),
-            }],
-            condition=IfCondition(LaunchConfiguration("use_ruckig")),
-        ),
-        Node(
-            package="ur_teleop", executable="data_recorder",
-            parameters=[{"config_file": LaunchConfiguration("config_file")}],
-            condition=IfCondition(PythonExpression(
-                ["'", LaunchConfiguration("mode"), "' == 'record'"])),
-        ),
+        DeclareLaunchArgument("ruckig_control_hz", default_value=""),
+        DeclareLaunchArgument("use_ruckig", default_value=""),
+        OpaqueFunction(function=_nodes),
     ])
