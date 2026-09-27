@@ -152,10 +152,6 @@ class PoseIntegrator:
         candidate[:3] += delta_p
         candidate[3:] = multiply(delta_quaternion(delta_r), candidate[3:])
         candidate[3:] /= np.linalg.norm(candidate[3:])
-        if (np.linalg.norm(candidate[:3] - actual[:3]) > self.cfg['target_lead_m'] or
-                orientation_distance(candidate[3:], actual[3:]) > self.cfg['target_lead_rad']):
-            self.stop(actual)
-            return action
         self.target = candidate
         # 返回 base 中的平移增量和旋转向量；录制 action 单独编码。
         return np.r_[delta_p, delta_r]

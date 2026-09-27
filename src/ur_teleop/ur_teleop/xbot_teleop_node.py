@@ -36,7 +36,7 @@ class XbotTeleopNode(Node):
         if any(key in self.x for key in ('max_linear_speed_m_s', 'max_angular_speed_rad_s')):
             raise ValueError('旧速度参数已停用，请改用 max_translation_delta_m 和 max_rotation_delta_rad（米/弧度）')
         for key in ('control_hz', 'joy_timeout_s', 'tcp_timeout_s', 'max_translation_delta_m',
-                    'max_rotation_delta_rad', 'precision_scale', 'target_lead_m', 'target_lead_rad'):
+                    'max_rotation_delta_rad', 'precision_scale'):
             if not np.isfinite(self.x[key]) or self.x[key] <= 0:
                 raise ValueError(f'Xbot 参数必须为正数: {key}')
         with Path(self.x['calibration_file']).expanduser().open() as stream:

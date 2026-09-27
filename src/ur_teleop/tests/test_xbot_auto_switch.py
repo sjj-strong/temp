@@ -18,7 +18,7 @@ def fixture_node():
     node.joints = np.zeros(6)
     node.cfg = {'home': {'slave': [0.]*6}}
     node.core = PoseIntegrator(dict(max_translation_delta_m=.0004, max_rotation_delta_rad=.002,
-                                   precision_scale=.25, target_lead_m=.03, target_lead_rad=.15))
+                                   precision_scale=.25))
     calls = []
     def switch(*args):
         calls.append(args)

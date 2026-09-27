@@ -5,7 +5,7 @@ from ur_teleop.xbot_core import AXES, BUTTONS, ButtonEvents, JoyMapping, PoseInt
 
 
 CFG = dict(precision_scale=.25, max_translation_delta_m=.0004,
-           max_rotation_delta_rad=.002, target_lead_m=.03, target_lead_rad=.15)
+           max_rotation_delta_rad=.002)
 
 
 def inputs():
@@ -44,16 +44,28 @@ def test_toggle_continuity_and_fault_requires_release():
     assert c.step(pose, a, b, .02, True).any()
 
 
-def test_lead_limit_and_timer_stall():
-    c = PoseIntegrator(dict(CFG, target_lead_m=.0001))
+def test_timer_stall_still_stops():
+    c = PoseIntegrator(CFG)
     pose = np.array([0., 0., 0., 0., 0., 0., 1.])
     a, b = inputs()
     c.step(pose, a, b, .02, True)
     b['rb'], a['ly'] = True, 1.
-    assert not c.step(pose, a, b, .02, True).any()
+    assert c.step(pose, a, b, .02, True).any()
+    assert not c.step(pose, a, b, .5, True).any()
     assert not c.enabled
     np.testing.assert_allclose(c.target, pose)
-    assert not c.step(pose, a, b, .5, True).any()
+
+
+def test_configured_delta_has_no_extra_lead_threshold():
+    # 纯数学测试：超过旧阈值的增量仍由明确的增量参数限定，不发送机器人命令。
+    c = PoseIntegrator(dict(CFG, max_translation_delta_m=.04, max_rotation_delta_rad=.2))
+    pose = np.array([0., 0., 0., 0., 0., 0., 1.])
+    a, b = inputs()
+    c.step(pose, a, b, .02, True)
+    b['rb'], a['ly'], a['ry'] = True, 1., 1.
+    delta = c.step(pose, a, b, .02, True)
+    np.testing.assert_allclose(delta, [.04, 0, 0, .2, 0, 0])
+    assert c.enabled
 
 
 def test_fixed_feedback_does_not_accumulate_target():
