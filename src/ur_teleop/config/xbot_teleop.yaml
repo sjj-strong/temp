@@ -8,7 +8,7 @@ cell:
   robot_ip: 169.254.138.15
   gripper_port: /dev/ttyUSB0
   ftdi_id: ttyUSB2
-  launch_rviz: false
+  launch_rviz: true              # 仿真和真机 Home 均打开 RViz。
 
 # home_node 仅使用 slave；值按 UR_JOINT_NAMES 顺序：
 # shoulder_pan、shoulder_lift、elbow、wrist_1、wrist_2、wrist_3（单位 rad）。

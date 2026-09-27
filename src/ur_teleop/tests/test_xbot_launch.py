@@ -21,6 +21,27 @@ def test_real_home_does_not_activate_impedance(tmp_path):
     assert arguments['initial_joint_controller'] == 'scaled_joint_trajectory_controller'
 
 
+@pytest.mark.parametrize('sim', [True, False])
+def test_home_enables_rviz_for_mock_and_real(tmp_path, sim):
+    """只检查启动动作，不连接真机或打开图形窗口。"""
+    pytest.importorskip('launch')
+    from launch import LaunchContext
+    from launch_ros.actions import Node
+    path = Path(__file__).resolve().parents[1]
+    config = tmp_path / 'config.yaml'
+    config.write_text(yaml.safe_dump(dict(
+        base_config=str(path / 'config/xbot_teleop.yaml'), sim=sim)))
+    context = LaunchContext()
+    context.launch_configurations['config_file'] = str(config)
+    module = runpy.run_path(str(path / 'launch/xbot_cell.launch.py'))
+    actions = module['_build_cell'](context)
+    if sim:
+        assert any(isinstance(action, Node) and action.node_executable == 'rviz2'
+                   for action in actions)
+    else:
+        assert dict(actions[0].launch_arguments)['launch_rviz'] == 'true'
+
+
 def test_xbot_launch_skips_alicia_and_ruckig():
     pytest.importorskip('launch')
     from launch import LaunchContext
