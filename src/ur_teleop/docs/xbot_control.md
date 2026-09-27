@@ -76,7 +76,9 @@ ros2 launch ur_teleop teleop.launch.py config_file:=/ros2_ws/src/ur_teleop/confi
 
 ## Home 后接管（仿真与真机共用）
 
-Home 阶段使用轨迹控制器，笛卡尔阻抗控制器保持 inactive。首次松开所有按键，按 RB 切换控制器；成功后再次松开并按下 RB 才运动。不在 Home 时拒绝切换，不支持 `force_home` 绕过；重启遥操作前重新执行 Home。
+Home 阶段使用轨迹控制器，笛卡尔阻抗控制器保持 inactive。teleop 启动后，在关节/TF 反馈有效且已到 Home 时自动切换阻抗，不需要按 RB，也不依赖手柄消息触发。切换失败或超时锁定遥操作，需检查后重启。
+
+若阻抗控制器已经 active，teleop 在反馈有效后自动从当前实测位姿接管，不必再次回 Home。启动时松开 RB；就绪后只有按住 RB 并操作运动输入才产生位姿增量或夹爪命令。RB 不再负责切换控制器；启动时已按住 RB 或发生故障后，仍需先松开再按下，防止意外运动。
 
 ## 按键与参考系
 

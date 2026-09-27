@@ -83,7 +83,7 @@ class XbotTeleopNode(Node):
         self.gripper = ActionClient(self, ParallelGripperCommand,
                                     grip.get('action_server', '/robotiq_gripper_controller/gripper_cmd'))
         self.create_timer(1. / self.x['control_hz'], self.tick)
-        self.get_logger().info('Xbot 就绪：先完成 Home；松开 RB 后首次按下切换控制器，再松开/按下开始运动')
+        self.get_logger().info('Xbot 启动：反馈就绪且已到 Home 后自动切换阻抗；RB 仅用于运动使能')
 
     def on_joy(self, msg):
         try:
@@ -198,6 +198,26 @@ class XbotTeleopNode(Node):
 
         future.add_done_callback(accepted)
 
+    def ensure_impedance(self, actual, feedback_ready, now):
+        """自动切换或接管；与 RB/Joy 输入无关，不在回调中阻塞等待。"""
+        if (not feedback_ready or self.estop or self.finished or self.controller_active
+                or self.switch_future is not None or now - self.controllers_at >= 2.):
+            return
+        state = self.controllers.get('cartesian_impedance_controller')
+        if state == 'active':
+            # 已激活时从当前实测位姿接管，不沿用旧进程的目标。
+            self.core.stop(actual)
+            self.controller_active = True
+            self.get_logger().info('已接管激活的阻抗控制器；松开 RB 后按住 RB 操作')
+            return
+        home_ok = (self.joints is not None and np.max(np.abs(self.joints - self.cfg['home']['slave']))
+                   <= self.cfg['home'].get('at_home_tolerance_rad', .05))
+        if (home_ok and state == 'inactive'
+                and self.controllers.get('scaled_joint_trajectory_controller') == 'active'):
+            self.switch_future = self.switcher.switch(['cartesian_impedance_controller'],
+                                                      ['scaled_joint_trajectory_controller'])
+            self.switch_at = now
+
     def tick(self):
         now = time.monotonic()
         dt, self.previous_time = now - self.previous_time, now
@@ -205,12 +225,10 @@ class XbotTeleopNode(Node):
         target_transform = self.controller_transform()
         if actual is not None:
             self.last_actual = actual.copy()
-        fresh = (now - self.joy_at <= self.x['joy_timeout_s'] and
-                 now - self.joints_at <= self.x['tcp_timeout_s'] and actual is not None
-                 and target_transform is not None)
+        feedback_ready = (now - self.joints_at <= self.x['tcp_timeout_s'] and actual is not None
+                          and target_transform is not None)
+        fresh = now - self.joy_at <= self.x['joy_timeout_s'] and feedback_ready
         edges, self.edges = self.edges, set()
-        rb_edge = self.buttons['rb'] and not self.previous_rb
-        self.previous_rb = self.buttons['rb'] if fresh else True
         if self.list_future is not None and self.list_future.done():
             try:
                 self.controllers = self.switcher.list_result(self.list_future)
@@ -228,18 +246,14 @@ class XbotTeleopNode(Node):
                 self.controller_active = False
             self.switch_future = None
             self.core.stop(actual)
-            self.get_logger().info(f'笛卡尔控制器切换结果: {self.controller_active}；请重新按 RB')
+            self.get_logger().info(f'笛卡尔控制器自动切换结果: {self.controller_active}')
+            if not self.controller_active:
+                self.finished = True
+                self.get_logger().error('自动切换失败，锁定遥操作；检查控制器后重启')
             # 下一次查询确认 active 前禁止运动。
             self.controllers = {}
-        home_ok = (self.joints is not None and np.max(np.abs(self.joints - self.cfg['home']['slave']))
-                   <= self.cfg['home'].get('at_home_tolerance_rad', .05))
         available = fresh and not self.estop and not self.finished
-        if (rb_edge and available and not self.controller_active and self.switch_future is None and home_ok
-                and self.controllers.get('cartesian_impedance_controller') == 'inactive'
-                and self.controllers.get('scaled_joint_trajectory_controller') == 'active'):
-            self.switch_future = self.switcher.switch(['cartesian_impedance_controller'],
-                                                      ['scaled_joint_trajectory_controller'])
-            self.switch_at = now
+        self.ensure_impedance(actual, feedback_ready, now)
         if self.switch_future is not None and now - self.switch_at > 10.:
             self.finished = True
             self.get_logger().error('切换超时，锁定遥操作；检查控制器状态后重启', throttle_duration_sec=5.)
