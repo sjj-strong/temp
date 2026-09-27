@@ -11,7 +11,7 @@ Xbot 不定义阻抗刚度、阻尼、wrench、力矩或速度限制。`xbot_cel
 配置入口为 `config/xbot_teleop.yaml`，该文件是完整的 XBot 独立配置，**不继承** `ur_teleop.yaml`。
 其中 `home.slave` 是 UR 的六关节 Home 位姿，按 `shoulder_pan`、`shoulder_lift`、`elbow`、`wrist_1`、
 `wrist_2`、`wrist_3` 顺序填写，单位为 rad。XBot 模式不需要 Alicia 的 `home.master`、关节映射或 Alicia
-串口字段。首次验证设为 `sim: true`；真机前核对 TCP 标定。Xbot 的仿真/真机选择以配置文件为准，不使用 Home 的 `sim:=` 参数覆盖。
+串口字段。Xbot 的仿真/真机选择以配置文件的 `sim` 为准，不使用 Home 的 `sim:=` 参数覆盖。
 
 在两个终端分别加载 ROS 环境后运行：
 
@@ -30,19 +30,52 @@ ros2 run ur_teleop xbot_calibrate
 
 校准完成后停止手动启动的 `joy_node`，正式启动会自动运行它。
 
-## 启动
+## 仿真启动
+
+在 `config/xbot_teleop.yaml` 中设置 `sim: true`。使用组合模型的 `xbot_effort_mock`，不连接 UR 真机；手柄仍使用真实设备。
+
+两个终端均加载上述 ROS 环境，并设置独立的仿真域，避免与真机的 `/robot_description`、`/controller_manager` 混用：
 
 ```bash
-# 终端 1：UR 回 Home，到位后保持此终端运行
+export ROS_DOMAIN_ID=225
+```
+
+```bash
+# 终端 1：模拟 UR 回 Home，到位后保持此终端运行
 ros2 launch ur_teleop home.launch.py config_file:=/ros2_ws/src/ur_teleop/config/xbot_teleop.yaml
 
 # 终端 2：仅遥操作；录制时改为 mode:=record
 ros2 launch ur_teleop teleop.launch.py config_file:=/ros2_ws/src/ur_teleop/config/xbot_teleop.yaml mode:=teleop
 ```
 
-Home 阶段使用轨迹控制器，笛卡尔阻抗控制器保持 inactive。首次松开所有按键，按 RB 切换控制器；成功后再次松开并按下 RB 才运动。不在 Home 时拒绝切换，不支持 `force_home` 绕过；重启遥操作前重新执行 Home。
+日志中应加载 `joint_impedance_controller/JointImpedanceMockSystem`；夹爪为 `mock_components/GenericSystem`。此模式的 `HOME REACHED` 仅表示模拟机械臂到位。
 
-仿真使用组合模型的 `xbot_effort_mock` 开关。实机复用 `real_bringup.launch.py`，显式关闭其自动激活阻抗功能，由 Xbot 负责后续切换；FT300 不另开串口驱动。
+## 真机启动
+
+在 `config/xbot_teleop.yaml` 中设置 `sim: false`，核对 `cell.robot_ip`、`cell.gripper_port`、`cell.ftdi_id` 和 `home.slave`。
+
+启动前确认：
+
+- 停止仿真及重复的机器人控制栈，两个终端使用相同的真机 `ROS_DOMAIN_ID`，不得沿用仍有 mock 节点的域。
+- 无其他 RTDE 控制客户端占用机器人；出现 `speed_slider_mask ... controlled by another RTDE client` 时先排除占用，不继续遥操作。
+- 使用该机器人对应的运动学标定，TCP 为 `tool0`；出现 calibration mismatch 时先处理标定，不继续笛卡尔遥操作。
+- 确认 Home 运动路径无障碍，物理急停可用并有人工监护。**Home 启动会自动发送运动目标，不只是启动驱动。**
+
+两个终端均加载上述 ROS 环境后运行：
+
+```bash
+# 终端 1：启动真机控制栈并回 Home，到位后保持运行
+ros2 launch ur_teleop home.launch.py config_file:=/ros2_ws/src/ur_teleop/config/xbot_teleop.yaml
+
+# 终端 2：确认真机 Home 成功后启动；录制时改为 mode:=record
+ros2 launch ur_teleop teleop.launch.py config_file:=/ros2_ws/src/ur_teleop/config/xbot_teleop.yaml mode:=teleop
+```
+
+实机复用 `real_bringup.launch.py`，FT300 不另开串口驱动。日志应显示 UR 真机硬件 `ur_robot_driver/URPositionHardwareInterface` 成功连接并激活，而非 `JointImpedanceMockSystem`；不能仅凭 `HOME REACHED` 判断连接了真机。
+
+## Home 后接管（仿真与真机共用）
+
+Home 阶段使用轨迹控制器，笛卡尔阻抗控制器保持 inactive。首次松开所有按键，按 RB 切换控制器；成功后再次松开并按下 RB 才运动。不在 Home 时拒绝切换，不支持 `force_home` 绕过；重启遥操作前重新执行 Home。
 
 ## 按键与参考系
 
