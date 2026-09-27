@@ -1,11 +1,14 @@
 """手柄参考系与恢复保护测试。"""
 import numpy as np
 import pytest
-from ur_teleop.xbot_core import AXES, BUTTONS, ButtonEvents, JoyMapping, PoseIntegrator
+from ur_teleop.xbot_core import (
+    AXES, BUTTONS, ButtonEvents, JoyMapping, PoseIntegrator, delta_quaternion, multiply,
+)
 
 
 CFG = dict(precision_scale=.25, max_translation_delta_m=.0004,
-           max_rotation_delta_rad=.002)
+           max_rotation_delta_rad=.002, max_target_position_error_m=.02,
+           max_target_orientation_error_rad=.1)
 
 
 def inputs():
@@ -56,8 +59,7 @@ def test_timer_stall_still_stops():
     np.testing.assert_allclose(c.target, pose)
 
 
-def test_configured_delta_has_no_extra_lead_threshold():
-    # 纯数学测试：超过旧阈值的增量仍由明确的增量参数限定，不发送机器人命令。
+def test_large_configured_delta_respects_target_lead_limit():
     c = PoseIntegrator(dict(CFG, max_translation_delta_m=.04, max_rotation_delta_rad=.2))
     pose = np.array([0., 0., 0., 0., 0., 0., 1.])
     a, b = inputs()
@@ -65,10 +67,12 @@ def test_configured_delta_has_no_extra_lead_threshold():
     b['rb'], a['ly'], a['ry'] = True, 1., 1.
     delta = c.step(pose, a, b, .02, True)
     np.testing.assert_allclose(delta, [.04, 0, 0, .2, 0, 0])
+    np.testing.assert_allclose(c.target[:3], [.02, 0, 0])
+    np.testing.assert_allclose(c.target[3:], [np.sin(.05), 0, 0, np.cos(.05)])
     assert c.enabled
 
 
-def test_fixed_feedback_does_not_accumulate_target():
+def test_fixed_feedback_continuously_accumulates_target_while_input_held():
     c = PoseIntegrator(CFG)
     actual = np.array([.2, .1, .3, 0., 0., 0., 1.])
     a, b = inputs()
@@ -77,27 +81,67 @@ def test_fixed_feedback_does_not_accumulate_target():
     a['ly'] = a['ry'] = 1.
     for _ in range(100):
         c.step(actual, a, b, .02, True)
-        np.testing.assert_allclose(c.target[:3], [.2004, .1, .3])
-        np.testing.assert_allclose(c.target[3:], [np.sin(.001), 0., 0., np.cos(.001)])
         assert c.enabled
+    np.testing.assert_allclose(c.target[:3], [.22, .1, .3])
+    np.testing.assert_allclose(c.target[3:], [np.sin(.05), 0., 0., np.cos(.05)])
+
+
+def test_target_continues_after_actual_catches_up():
+    c = PoseIntegrator(CFG)
+    actual = np.array([0., 0., 0., 0., 0., 0., 1.])
+    a, b = inputs()
+    c.step(actual, a, b, .02, True)
+    b['rb'], a['ly'] = True, 1.
+    for _ in range(100):
+        c.step(actual, a, b, .02, True)
+    np.testing.assert_allclose(c.target[:3], [.02, 0., 0.])
+    actual[0] = .01
+    c.step(actual, a, b, .02, True)
+    np.testing.assert_allclose(c.target[:3], [.0204, 0., 0.])
+
+
+def test_release_and_center_still_limit_target_after_feedback_moves():
+    c = PoseIntegrator(CFG)
+    actual = np.array([0., 0., 0., 0., 0., 0., 1.])
+    a, b = inputs()
+    c.step(actual, a, b, .02, True)
+    b['rb'], a['ly'], a['ry'] = True, 1., 1.
+    for _ in range(100):
+        c.step(actual, a, b, .02, True)
+    target = c.target.copy()
+    a['ly'] = a['ry'] = 0.
+    c.step(actual, a, b, .02, True)
+    np.testing.assert_array_equal(c.target, target)
+    b['rb'] = False
+    actual[:3] = [-.01, 0., 0.]
+    actual[3:] = delta_quaternion(np.array([-.05, 0., 0.]))
+    c.step(actual, a, b, .02, True)
+    np.testing.assert_allclose(c.target[:3], [.01, 0., 0.])
+    np.testing.assert_allclose(c.target[3:], [np.sin(.025), 0., 0., np.cos(.025)], atol=1e-12)
+    assert not c.enabled
 
 
 @pytest.mark.parametrize('frame', ['base', 'tcp'])
-def test_each_step_uses_latest_measured_position_and_orientation(frame):
-    c = PoseIntegrator(CFG)
+def test_each_step_accumulates_from_previous_target(frame):
+    c = PoseIntegrator(dict(CFG, max_target_position_error_m=.5,
+                            max_target_orientation_error_rad=np.pi))
     c.frame = frame
     a, b = inputs()
     c.step(np.array([0., 0., 0., 0., 0., 0., 1.]), a, b, .02, True)
     b['rb'] = True
     a['ly'] = a['ry'] = 1.
     c.step(np.array([0., 0., 0., 0., 0., 0., 1.]), a, b, .02, True)
-    # 新反馈与旧目标不同：目标必须从新位置、新姿态重新计算。
+    # 新反馈与旧目标不同：目标仍必须从旧目标连续累加，不能被实测位姿重置。
     h = np.sqrt(.5)
     actual = np.array([.1, .2, .3, 0., 0., h, h])
     c.step(actual, a, b, .04, True)
-    expected_position = [.1004, .2, .3] if frame == 'base' else [.1, .2004, .3]
-    s, co = np.sin(.001), np.cos(.001)
-    expected_orientation = [s*h, (-1 if frame == 'base' else 1)*s*h, co*h, co*h]
+    expected_position = [.0008, 0., 0.] if frame == 'base' else [.0004, .0004, 0.]
+    if frame == 'base':
+        expected_orientation = [np.sin(.002), 0., 0., np.cos(.002)]
+    else:
+        first = np.array([np.sin(.001), 0., 0., np.cos(.001)])
+        second = multiply(delta_quaternion(np.array([0., .002, 0.])), first)
+        expected_orientation = second
     np.testing.assert_allclose(c.target[:3], expected_position)
     np.testing.assert_allclose(c.target[3:], expected_orientation, atol=1e-12)
     assert c.enabled
@@ -126,7 +170,7 @@ def test_release_and_repress_without_input_keep_target():
     b['rb'], a['ly'] = True, 1.
     c.step(actual, a, b, .02, True)
     target = c.target.copy()
-    actual[1] = .02
+    actual[1] = .01
     b['rb'] = False
     c.step(actual, a, b, .02, True)
     assert not c.enabled
@@ -136,7 +180,7 @@ def test_release_and_repress_without_input_keep_target():
     np.testing.assert_array_equal(c.target, target)
     a['ly'] = 1.
     c.step(actual, a, b, .02, True)
-    np.testing.assert_allclose(c.target[:3], [.0004, .02, 0.])
+    np.testing.assert_allclose(c.target[:3], [.0008, 0., 0.])
     c.step(actual, a, b, .02, False)
     np.testing.assert_array_equal(c.target, actual)
 

@@ -101,7 +101,7 @@ class ButtonEvents:
 
 
 class PoseIntegrator:
-    """每周期以实测位姿合成目标，不累加历史目标；类名保留兼容。"""
+    """按住 RB 时将手柄增量连续积分到锁存目标位姿；类名保留兼容。"""
     def __init__(self, cfg):
         self.cfg = cfg
         self.frame = 'base'
@@ -117,26 +117,49 @@ class PoseIntegrator:
         self.enabled = False
         self.released = False
 
+    def _limit_target_lead(self, candidate, actual):
+        """分别约束目标相对实测位姿的平移距离和最短姿态角。"""
+        limited = np.array(candidate, dtype=float)
+        offset = limited[:3] - actual[:3]
+        distance = np.linalg.norm(offset)
+        position_limit = self.cfg['max_target_position_error_m']
+        if distance > position_limit:
+            limited[:3] = actual[:3] + offset * (position_limit / distance)
+
+        actual_q = np.asarray(actual[3:], dtype=float)
+        target_q = limited[3:]
+        error_q = multiply(target_q, np.r_[-actual_q[:3], actual_q[3]])
+        if error_q[3] < 0:
+            error_q = -error_q
+        angle = 2. * math.atan2(np.linalg.norm(error_q[:3]), error_q[3])
+        orientation_limit = self.cfg['max_target_orientation_error_rad']
+        if angle > orientation_limit:
+            axis = error_q[:3] / np.linalg.norm(error_q[:3])
+            limited[3:] = multiply(delta_quaternion(axis * orientation_limit), actual_q)
+            limited[3:] /= np.linalg.norm(limited[3:])
+        return limited
+
     def step(self, actual, axes, buttons, dt, safe, toggle=False):
         action = np.zeros(6)
         if not safe or actual is None or not 0 < dt <= 0.1:
             self.stop(actual)
             return action
         self.fault_pose_latched = False
+        if self.target is None:
+            self.target = np.array(actual, dtype=float)
+        else:
+            # 实测位姿可能在松手后继续变化，保持目标也必须受超前上限约束。
+            self.target = self._limit_target_lead(self.target, actual)
         if toggle:
             self.frame = 'tcp' if self.frame == 'base' else 'base'
-            return action  # 切换当帧目标严格不变。
+            return action  # 切换当帧不叠加手柄增量。
         if not buttons['rb']:
-            if self.target is None:
-                self.target = np.array(actual, dtype=float)
             self.enabled = False
             self.released = True
             return action
         if not self.enabled:
             if not self.released:
                 return action
-            if self.target is None:
-                self.target = np.array(actual, dtype=float)
             self.enabled = True
             self.released = False
         v = np.array([axes['ly'], axes['lx'], axes['rt'] - axes['lt']])
@@ -151,11 +174,12 @@ class PoseIntegrator:
         if self.frame == 'tcp':
             delta_p = rotate(np.asarray(actual[3:]), delta_p)
             delta_r = rotate(np.asarray(actual[3:]), delta_r)
-        # 所有增量已在 base 中：位置相加，旋转四元数左乘实测姿态。
-        candidate = np.array(actual, dtype=float)
+        # 所有增量已在 base 中。以已锁存目标为基准连续积分，按住手柄时
+        # 每个控制周期都会推进目标，而不是反复发布“实测位姿 + 单步偏移”。
+        candidate = np.array(self.target, dtype=float)
         candidate[:3] += delta_p
         candidate[3:] = multiply(delta_quaternion(delta_r), candidate[3:])
         candidate[3:] /= np.linalg.norm(candidate[3:])
-        self.target = candidate
+        self.target = self._limit_target_lead(candidate, actual)
         # 返回 base 中的平移增量和旋转向量；录制 action 单独编码。
         return np.r_[delta_p, delta_r]

@@ -11,20 +11,27 @@ from ur_teleop.xbot_core import PoseIntegrator, AXES, BUTTONS
 def fixture_node():
     node = object.__new__(XbotTeleopNode)
     node.estop = node.finished = node.controller_active = False
+    node.awaiting_controller_confirmation = False
     node.switch_future = None
+    node.list_future = None
+    node.list_at = 10.
     node.controllers_at = 10.
     node.controllers = {'cartesian_impedance_controller': 'inactive',
                         'scaled_joint_trajectory_controller': 'active'}
     node.joints = np.zeros(6)
     node.cfg = {'home': {'slave': [0.]*6}}
     node.core = PoseIntegrator(dict(max_translation_delta_m=.0004, max_rotation_delta_rad=.002,
-                                   precision_scale=.25))
+                                   max_target_position_error_m=.02,
+                                   max_target_orientation_error_rad=.1, precision_scale=.25))
     calls = []
     def switch(*args):
         calls.append(args)
         return object()
-    node.switcher = SimpleNamespace(switch=switch)
-    node.get_logger = lambda: SimpleNamespace(info=lambda *args: None)
+    node.switcher = SimpleNamespace(switch=switch, list_controllers=lambda: None,
+                                    list_result=lambda future: future.result())
+    node.get_logger = lambda: SimpleNamespace(info=lambda *args: None,
+                                               warn=lambda *args, **kwargs: None,
+                                               error=lambda *args, **kwargs: None)
     return node, calls
 
 
@@ -63,3 +70,32 @@ def test_active_controller_adoption_still_requires_rb_release():
     buttons['rb'] = True
     node.core.step(pose, axes, buttons, .02, True)
     assert node.core.enabled
+
+
+def test_query_delay_keeps_controller_active_but_explicit_inactive_latches_fault():
+    node, _ = fixture_node()
+    node.controller_active = True
+    node.controllers['cartesian_impedance_controller'] = 'active'
+    node.controllers_at = 10.
+    pose = np.array([0., 0., 0., 0., 0., 0., 1.])
+    node.monitor_controllers(12.1, pose)
+    assert node.controller_active and not node.finished
+    node.list_future = SimpleNamespace(done=lambda: True, result=lambda: None)
+    node.monitor_controllers(12.15, pose)
+    assert node.controller_active and not node.finished and node.controllers_at == 10.
+    node.list_future = SimpleNamespace(done=lambda: True,
+                                       result=lambda: {'cartesian_impedance_controller': 'inactive'})
+    node.monitor_controllers(12.2, pose)
+    assert node.finished and not node.controller_active
+
+
+def test_controller_state_unconfirmed_for_ten_seconds_latches_fault():
+    node, _ = fixture_node()
+    node.controller_active = True
+    node.controllers_at = 10.
+    node.list_future = SimpleNamespace(done=lambda: False)
+    pose = np.array([0., 0., 0., 0., 0., 0., 1.])
+    node.monitor_controllers(19.9, pose)
+    assert node.controller_active and not node.finished
+    node.monitor_controllers(20., pose)
+    assert node.finished and not node.controller_active

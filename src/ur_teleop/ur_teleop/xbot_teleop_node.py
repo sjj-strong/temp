@@ -1,4 +1,4 @@
-"""Xbot 遥操作：以每周期实测 tool0 位姿生成基座坐标系中的目标。"""
+"""Xbot 遥操作：每周期将手柄位姿增量累加到基座坐标系中的锁存目标。"""
 
 import time
 from pathlib import Path
@@ -36,9 +36,12 @@ class XbotTeleopNode(Node):
         if any(key in self.x for key in ('max_linear_speed_m_s', 'max_angular_speed_rad_s')):
             raise ValueError('旧速度参数已停用，请改用 max_translation_delta_m 和 max_rotation_delta_rad（米/弧度）')
         for key in ('control_hz', 'joy_timeout_s', 'tcp_timeout_s', 'max_translation_delta_m',
-                    'max_rotation_delta_rad', 'precision_scale'):
+                    'max_rotation_delta_rad', 'precision_scale', 'max_target_position_error_m',
+                    'max_target_orientation_error_rad'):
             if not np.isfinite(self.x[key]) or self.x[key] <= 0:
                 raise ValueError(f'Xbot 参数必须为正数: {key}')
+        if self.x['max_target_orientation_error_rad'] > np.pi:
+            raise ValueError('目标姿态超前上限不能超过 π rad')
         with Path(self.x['calibration_file']).expanduser().open() as stream:
             self.mapping = JoyMapping(yaml.safe_load(stream), self.x['deadzone'])
         self.core = PoseIntegrator(self.x)
@@ -57,6 +60,7 @@ class XbotTeleopNode(Node):
         self.estop = False
         self.finished = False
         self.controller_active = False
+        self.awaiting_controller_confirmation = False
         self.switch_future = None
         self.switch_at = 0.
         self.list_future = None
@@ -208,6 +212,7 @@ class XbotTeleopNode(Node):
             # 已激活时从当前实测位姿接管，不沿用旧进程的目标。
             self.core.stop(actual)
             self.controller_active = True
+            self.awaiting_controller_confirmation = False
             self.get_logger().info('已接管激活的阻抗控制器；松开 RB 后按住 RB 操作')
             return
         home_ok = (self.joints is not None and np.max(np.abs(self.joints - self.cfg['home']['slave']))
@@ -217,6 +222,33 @@ class XbotTeleopNode(Node):
             self.switch_future = self.switcher.switch(['cartesian_impedance_controller'],
                                                       ['scaled_joint_trajectory_controller'])
             self.switch_at = now
+
+    def monitor_controllers(self, now, actual):
+        """低频确认控制器状态；短暂查询延迟不打断手柄积分。"""
+        if self.list_future is not None and self.list_future.done():
+            try:
+                if self.list_future.result() is None:
+                    raise RuntimeError('未收到控制器状态响应')
+                self.controllers = self.switcher.list_result(self.list_future)
+                self.controllers_at = now
+                if self.controller_active and self.controllers.get('cartesian_impedance_controller') == 'active':
+                    self.awaiting_controller_confirmation = False
+                elif self.controller_active:
+                    self.controller_active = False
+                    self.finished = True
+                    self.core.stop(actual)
+                    self.get_logger().error('阻抗控制器已失活，锁定遥操作；检查后重启')
+            except Exception as exc:
+                self.get_logger().warn(f'控制器状态查询失败，保留上次状态: {exc}', throttle_duration_sec=2.)
+            self.list_future = None
+        if now - self.list_at >= .5 and self.list_future is None:
+            self.list_future = self.switcher.list_controllers()
+            self.list_at = now
+        if self.controller_active and now - self.controllers_at >= 10.:
+            self.controller_active = False
+            self.finished = True
+            self.core.stop(actual)
+            self.get_logger().error('控制器状态连续 10 秒未确认，锁定遥操作；检查后重启')
 
     def tick(self):
         now = time.monotonic()
@@ -229,16 +261,7 @@ class XbotTeleopNode(Node):
                           and target_transform is not None)
         fresh = now - self.joy_at <= self.x['joy_timeout_s'] and feedback_ready
         edges, self.edges = self.edges, set()
-        if self.list_future is not None and self.list_future.done():
-            try:
-                self.controllers = self.switcher.list_result(self.list_future)
-                self.controllers_at = now
-            except Exception:
-                self.controllers = {}
-            self.list_future = None
-        if now - self.list_at >= .5 and self.list_future is None:
-            self.list_future = self.switcher.list_controllers()
-            self.list_at = now
+        self.monitor_controllers(now, actual)
         if self.switch_future is not None and self.switch_future.done():
             try:
                 self.controller_active = self.switcher.switch_ok(self.switch_future)
@@ -246,6 +269,7 @@ class XbotTeleopNode(Node):
                 self.controller_active = False
             self.switch_future = None
             self.core.stop(actual)
+            self.awaiting_controller_confirmation = self.controller_active
             self.get_logger().info(f'笛卡尔控制器自动切换结果: {self.controller_active}')
             if not self.controller_active:
                 self.finished = True
@@ -257,9 +281,8 @@ class XbotTeleopNode(Node):
         if self.switch_future is not None and now - self.switch_at > 10.:
             self.finished = True
             self.get_logger().error('切换超时，锁定遥操作；检查控制器状态后重启', throttle_duration_sec=5.)
-        safe = (available and not self.finished and self.controller_active and
-                now - self.controllers_at < 2. and
-                self.controllers.get('cartesian_impedance_controller') == 'active')
+        safe = (available and not self.finished and self.controller_active
+                and not self.awaiting_controller_confirmation)
         was_enabled = self.core.enabled
         self.core.step(actual, self.axes, self.buttons, dt, safe, toggle=fresh and 'x' in edges)
         if actual is None:

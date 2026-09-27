@@ -59,9 +59,8 @@ def test_joy_switch_motion_and_fault(tmp_path):
         # DDS 发现和首次 TF 查询异步完成；不将固定等待时间当作就绪条件。
         deadline = time.monotonic() + 8.
         while time.monotonic() < deadline:
-            if (node.controllers.get('scaled_joint_trajectory_controller') == 'active' and
-                    node.controllers.get('cartesian_impedance_controller') == 'inactive' and
-                    node.actual_pose() is not None and not node.previous_rb and
+            if (node.controller_active and node.core.released and
+                    node.actual_pose() is not None and
                     time.monotonic() - node.joints_at < .1):
                 break
             run(.05)
