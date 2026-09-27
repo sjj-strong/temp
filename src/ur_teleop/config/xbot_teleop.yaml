@@ -1,24 +1,30 @@
-# 此文件在现有单元配置之上选择 Xbot 控制方式，home.slave 等设置保持一致。
-base_config: ur_teleop.yaml
+# XBot 专用配置：不继承 ur_teleop.yaml。
+# 修改本文件即可完成 XBot 的 Home、真机连接、遥操作和采集配置。
 mode: record
+sim: true
+
 cell:
+  ur_type: ur10e
+  robot_ip: 169.254.138.15
+  gripper_port: /dev/ttyUSB0
+  ftdi_id: ttyUSB2
   launch_rviz: false
+
+# home_node 仅使用 slave；值按 UR_JOINT_NAMES 顺序：
+# shoulder_pan、shoulder_lift、elbow、wrist_1、wrist_2、wrist_3（单位 rad）。
+home:
+  slave: [1.6531028747558594, -1.4480312851122399, 1.9757979551898401, -2.4209891758360804, -1.5772712866412562, -1.3048065344439905]
+  at_home_tolerance_rad: 0.1
+  move_timeout_s: 60.0
+  move_duration_s: 8.0
+  verify_duration_s: 2.0
+
 teleop:
   control_source: xbot
   controller: cartesian_impedance
-recorder:
-  repo_id: my_user/ur10e_xbot
-  root: /ros2_ws/dataset/xbot
-  robot_type: ur10e_xbot_teleop
-  action_space: cartesian_pose
-  action_mode: abs  # abs：目标位置+四元数+夹爪（8维）；rel：位置/旋转增量+夹爪（7维）
-  record_action_joints: true
-  record_action_gripper: true
-  data_timeout_s: 0.5
-  ee_pose_source: tf
-  ee_pose_parent_frame: base_link
-  ee_pose_child_frame: tool0
+
 xbot:
+  device_id: 0
   calibration_file: /ros2_ws/src/ur_teleop/config/xbot_joy.yaml
   control_hz: 50.0
   joy_timeout_s: 0.25
@@ -30,3 +36,31 @@ xbot:
   target_lead_rad: 0.15
   deadzone: 0.08
   view_hold_s: 2.0
+
+gripper:
+  enabled: true
+  action_server: /robotiq_gripper_controller/gripper_cmd
+  close_threshold_m: 0.0125
+  open_threshold_m: 0.005
+  open_pos_rad: 0.0
+  close_pos_rad: 0.79
+  max_effort: 50.0
+
+recorder:
+  repo_id: my_user/ur10e_xbot
+  root: /ros2_ws/dataset/xbot
+  fps: 20
+  robot_type: ur10e_xbot_teleop
+  action_space: cartesian_pose
+  action_mode: abs  # abs：目标位置+四元数+夹爪（8维）；rel：位置/旋转增量+夹爪（7维）
+  record_action_joints: true
+  record_action_gripper: true
+  data_timeout_s: 0.5
+  ee_pose_source: tf
+  ee_pose_parent_frame: base_link
+  ee_pose_child_frame: tool0
+  use_videos: true
+  cameras: {}
+  task: xbot_teleoperation
+  min_frames_per_episode: 2
+  state_threshold_rad: 0.4
