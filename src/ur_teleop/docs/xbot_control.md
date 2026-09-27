@@ -95,7 +95,9 @@ base 模式沿 `base_link` 的轴运动；TCP 模式沿实测 `tool0` 当前局�
 
 每周期以实测 `tool0` 位姿叠加手柄增量生成目标，不累加上一周期目标。平移增量为速度乘周期时长，旋转增量用四元数合成；RB 按住且输入为零时，目标等于本周期实测位姿。
 
-目标统一转换为 `base_link` 下的 `PoseStamped`，发布到 `/cartesian_impedance_controller/target_pose`。实测 TF、控制器 base/tip 和录制末端均使用 `base_link → tool0`。
+内部实测 TF 和录制动作统一使用 `base_link → tool0`。发布到 `/cartesian_impedance_controller/target_pose` 前，读取本模式安装的控制器 YAML 中的 `tf_prefix`、`base_frame`、`tip_frame`，通过 TF 同时转换目标位置和姿态：默认仿真为 `base_link`，真机为 `base`，TCP 始终为 `tool0`。缺少有效基座变换时禁止使能及发布目标。
+
+`Ignoring target_pose outside base frame or with non-finite position` 表示控制器拒收目标，也可能由工作空间越界触发。检查消息坐标系是否与控制器一致；不能仅修改 `frame_id` 而不转换位姿。修改控制器坐标系配置后需在安全停止后重新启动 Home 和 teleop，确保两端加载相同配置。
 
 录制按键、数据格式及数据集位置见[数据采集](data_recorder.md)。
 

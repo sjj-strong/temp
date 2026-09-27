@@ -74,6 +74,8 @@ recorder:
 
 以上均位于 `recorder` 下。Xbot 默认使用 `repo_id: my_user/ur10e_xbot`、`root: /ros2_ws/dataset/xbot`，与 Alicia 数据集分开。已有数据集不覆盖、不追加，另建带时间戳的标识和目录。
 
+Xbot 的 abs/rel 动作始终以 `base_link` 表达；真机控制目标会在发布前转换为控制器的 `base` 表达，录制保留转换前同一目标，不改变数据集坐标定义。
+
 相机发布与预览配置独立放在 `config/camera.yaml`，不决定数据集内容。在所用的 `ur_teleop.yaml` 或 `xbot_teleop.yaml` 中配置 `recorder.cameras`；默认 `{}` 不保存图像。以下示例仅保存前视图，话题类型必须为 `sensor_msgs/Image`，尺寸须与发布端一致：
 
 ```yaml

@@ -20,6 +20,7 @@ from ur_teleop.config import load_config, default_config_path, UR_JOINT_NAMES, U
 from ur_teleop.controller_switcher import ControllerSwitcher
 from ur_teleop.xbot_core import AXES, BUTTONS, JoyMapping, ButtonEvents, PoseIntegrator
 from ur_teleop.cartesian_action import encode_action, action_label
+from ur_teleop.controller_frame import controller_base_frame, transform_pose
 
 
 class XbotTeleopNode(Node):
@@ -30,6 +31,7 @@ class XbotTeleopNode(Node):
         if self.cfg['teleop'].get('control_source') != 'xbot':
             raise ValueError('节点只接受 control_source: xbot')
         self.x = self.cfg['xbot']
+        self.controller_frame = controller_base_frame(self.cfg['sim'])
         self.action_mode = self.cfg.get('recorder', {}).get('action_mode', 'abs')
         for key in ('control_hz', 'joy_timeout_s', 'tcp_timeout_s', 'max_linear_speed_m_s',
                     'max_angular_speed_rad_s', 'precision_scale', 'target_lead_m', 'target_lead_rad'):
@@ -137,6 +139,21 @@ class XbotTeleopNode(Node):
         except TransformException:
             return None
 
+    def controller_transform(self):
+        """内部始终使用 base_link，发布时转换到控制器要求的坐标系。"""
+        if self.controller_frame == 'base_link':
+            return np.array([0., 0., 0., 0., 0., 0., 1.])
+        try:
+            tf = self.buffer.lookup_transform(self.controller_frame, 'base_link', Time())
+            p, q = tf.transform.translation, tf.transform.rotation
+            transform = np.array([p.x, p.y, p.z, q.x, q.y, q.z, q.w])
+            # base 与 base_link 为模型中的固定变换；时间戳为零的静态 TF 有效。
+            transform_pose([0., 0., 0., 0., 0., 0., 1.], transform)
+            return transform
+        except (TransformException, ValueError):
+            self.get_logger().error('控制器基座 TF 无效，禁止发布目标', throttle_duration_sec=2.)
+            return None
+
     def cancel_gripper(self):
         if self.gripper_goal is not None:
             self.gripper_goal.cancel_goal_async()
@@ -183,10 +200,12 @@ class XbotTeleopNode(Node):
         now = time.monotonic()
         dt, self.previous_time = now - self.previous_time, now
         actual = self.actual_pose()
+        target_transform = self.controller_transform()
         if actual is not None:
             self.last_actual = actual.copy()
         fresh = (now - self.joy_at <= self.x['joy_timeout_s'] and
-                 now - self.joints_at <= self.x['tcp_timeout_s'] and actual is not None)
+                 now - self.joints_at <= self.x['tcp_timeout_s'] and actual is not None
+                 and target_transform is not None)
         edges, self.edges = self.edges, set()
         rb_edge = self.buttons['rb'] and not self.previous_rb
         self.previous_rb = self.buttons['rb'] if fresh else True
@@ -242,17 +261,18 @@ class XbotTeleopNode(Node):
                         self.core.stop(actual)
                         self.cancel_gripper()
         # TF 失效只能保持最后有效实测位姿；不能假设控制器提供命令超时保护。
-        if self.controller_active and self.core.target is not None:
+        if self.controller_active and self.core.target is not None and target_transform is not None:
             msg = PoseStamped()
             msg.header.stamp = self.get_clock().now().to_msg()
-            msg.header.frame_id = 'base_link'
-            p = self.core.target
+            msg.header.frame_id = self.controller_frame
+            p = transform_pose(self.core.target, target_transform)
             msg.pose.position.x, msg.pose.position.y, msg.pose.position.z = map(float, p[:3])
             (msg.pose.orientation.x, msg.pose.orientation.y,
              msg.pose.orientation.z, msg.pose.orientation.w) = map(float, p[3:])
             self.pose_pub.publish(msg)
             if actual is not None:
-                values = encode_action(p, actual, self.gripper_command, self.action_mode).tolist()
+                # 数据集继续统一为 base_link，不混入真机控制器的 base 表达。
+                values = encode_action(self.core.target, actual, self.gripper_command, self.action_mode).tolist()
                 command = Float64MultiArray(data=values)
                 command.layout.dim = [MultiArrayDimension(
                     label=action_label(self.action_mode), size=len(values), stride=len(values))]
