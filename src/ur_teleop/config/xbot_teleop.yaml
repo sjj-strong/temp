@@ -31,8 +31,8 @@ xbot:
   joy_timeout_s: 0.25
   tcp_timeout_s: 0.25
   # 满摇杆每个控制周期累积到锁存目标的最大增量，不乘控制周期。
-  max_translation_delta_m: 0.01
-  max_rotation_delta_rad: 0.08
+  max_translation_delta_m: 0.0004
+  max_rotation_delta_rad: 0.002
   # 目标相对实测 tool0 的最大超前量，不限制累计行程。
   max_target_position_error_m: 0.02
   max_target_orientation_error_rad: 0.10

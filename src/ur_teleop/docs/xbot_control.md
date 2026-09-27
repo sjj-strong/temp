@@ -1,6 +1,6 @@
 # Xbot 手柄遥操作
 
-使用 `cartesian_impedance_controller` 控制 `tool0`（TCP），复用 `ur10e_robotiq_ft_description` 的组合 URDF。Xbot 不启动 Alicia 或 Ruckig。
+使用 `cartesian_impedance_controller` 控制 `tool0` 法兰位姿，复用 `ur10e_robotiq_ft_description` 的组合 URDF。夹爪末端 `gripper_tcp` 与 `tool0` 不重合。Xbot 不启动 Alicia 或 Ruckig。
 
 Xbot 不定义阻抗刚度、阻尼、wrench、力矩或速度限制。`xbot_cell.launch.py` 在仿真时加载
 `cartesian_impedance_controller/config/ur10e_xbot_sim_cartesian_impedance.yaml`，在真机时加载
@@ -99,9 +99,11 @@ base 模式沿 `base_link` 的轴运动；TCP 模式沿实测 `tool0` 当前局�
 
 松开 RB、摇杆回中或无输入地再次按下 RB，均不再累加手柄增量，控制器继续跟踪锁存目标。每周期仍会根据实测位姿约束目标超前量；若实测位姿变化导致超限，锁存目标会向实测位姿收回。遥操作节点会持续发布约束后的目标。
 
-当前配置的最大增量为每周期 10 mm / 0.08 rad；50 Hz 下持续满杆可快速推进目标。每周期增量不乘周期时长。目标相对实测 `tool0` 的超前上限分别为 `max_target_position_error_m: 0.02` 和 `max_target_orientation_error_rad: 0.10`：机械臂跟随时目标可持续前进，实测位姿停滞时目标停止继续超前。这两个上限不限制累计行程；实际运动仍受阻抗控制器的参考速度、力矩和安全限制约束。旧速度参数不再接受。
+当前配置的最大增量为每周期 0.4 mm / 0.002 rad；50 Hz 下持续满杆对应目标每秒推进 20 mm / 0.10 rad，低于控制器当前 0.05 m/s / 0.2 rad/s 的内部参考速度上限。此前 10 mm / 0.08 rad 每周期的配置会在约两个控制周期内触及 20 mm / 0.10 rad 超前上限，造成目标反复被限幅。每周期增量不乘周期时长。目标相对实测 `tool0` 的超前上限分别为 `max_target_position_error_m: 0.02` 和 `max_target_orientation_error_rad: 0.10`：机械臂跟随时目标可持续前进，实测位姿停滞时目标停止继续超前。这两个上限不限制累计行程；实际运动仍受阻抗控制器的参考速度、力矩和安全限制约束。旧速度参数不再接受。
 
-内部实测 TF 和录制动作统一使用 `base_link → tool0`。发布到 `/cartesian_impedance_controller/target_pose` 前，读取本模式安装的控制器 YAML 中的 `tf_prefix`、`base_frame`、`tip_frame`，通过 TF 同时转换目标位置和姿态：默认仿真为 `base_link`，真机为 `base`，TCP 始终为 `tool0`。缺少有效基座变换时禁止使能及发布目标。
+平移超前限幅优先收回最近操作的轴。例如仅操作 X 时，即使实测 Z 出现少量漂移，目标 Z 也保持不变；只有非操作轴的误差单独超过 20 mm 时才收回该轴。目标与实测位姿的三维总距离始终限制在 20 mm 内。
+
+内部实测 TF 和录制动作统一使用 `base_link → tool0`。发布到 `/cartesian_impedance_controller/target_pose` 前，读取本模式安装的控制器 YAML 中的 `tf_prefix`、`base_frame`、`tip_frame`，通过 TF 同时转换目标位置和姿态：默认仿真为 `base_link`，真机为 `base`，受控末端始终为 `tool0`。缺少有效基座变换时禁止使能及发布目标。
 
 `Ignoring target_pose outside base frame or with non-finite position` 表示控制器拒收目标，也可能由工作空间越界触发。检查消息坐标系是否与控制器一致；不能仅修改 `frame_id` 而不转换位姿。修改控制器坐标系配置后需在安全停止后重新启动 Home 和 teleop，确保两端加载相同配置。
 

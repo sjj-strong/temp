@@ -109,6 +109,7 @@ class PoseIntegrator:
         self.enabled = False
         self.released = False
         self.fault_pose_latched = False
+        self.translation_axes = np.zeros(3, dtype=bool)
 
     def stop(self, actual=None):
         if actual is not None and not self.fault_pose_latched:
@@ -116,6 +117,7 @@ class PoseIntegrator:
             self.fault_pose_latched = True
         self.enabled = False
         self.released = False
+        self.translation_axes[:] = False
 
     def _limit_target_lead(self, candidate, actual):
         """分别约束目标相对实测位姿的平移距离和最短姿态角。"""
@@ -124,7 +126,23 @@ class PoseIntegrator:
         distance = np.linalg.norm(offset)
         position_limit = self.cfg['max_target_position_error_m']
         if distance > position_limit:
-            limited[:3] = actual[:3] + offset * (position_limit / distance)
+            # 优先缩短正在操作的轴，避免球形限幅将实测的非操作轴漂移写回目标。
+            active = self.translation_axes
+            if np.any(active):
+                inactive = ~active
+                inactive_distance = np.linalg.norm(offset[inactive])
+                if inactive_distance >= position_limit:
+                    # 非操作轴自身已越界时才不得不收回该轴目标。
+                    limited[:3][inactive] = actual[:3][inactive] + offset[inactive] * (
+                        position_limit / inactive_distance)
+                    limited[:3][active] = actual[:3][active]
+                else:
+                    radius = math.sqrt(max(0., position_limit ** 2 - inactive_distance ** 2))
+                    active_distance = np.linalg.norm(offset[active])
+                    if active_distance > radius:
+                        limited[:3][active] = actual[:3][active] + offset[active] * (radius / active_distance)
+            else:
+                limited[:3] = actual[:3] + offset * (position_limit / distance)
 
         actual_q = np.asarray(actual[3:], dtype=float)
         target_q = limited[3:]
@@ -174,6 +192,8 @@ class PoseIntegrator:
         if self.frame == 'tcp':
             delta_p = rotate(np.asarray(actual[3:]), delta_p)
             delta_r = rotate(np.asarray(actual[3:]), delta_r)
+        if np.any(delta_p):
+            self.translation_axes = np.abs(delta_p) > 1e-12
         # 所有增量已在 base 中。以已锁存目标为基准连续积分，按住手柄时
         # 每个控制周期都会推进目标，而不是反复发布“实测位姿 + 单步偏移”。
         candidate = np.array(self.target, dtype=float)

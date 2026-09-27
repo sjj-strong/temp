@@ -121,6 +121,22 @@ def test_release_and_center_still_limit_target_after_feedback_moves():
     assert not c.enabled
 
 
+def test_lead_limit_does_not_copy_uncommanded_axis_drift_into_target():
+    c = PoseIntegrator(CFG)
+    actual = np.array([0., 0., 0., 0., 0., 0., 1.])
+    a, b = inputs()
+    c.step(actual, a, b, .02, True)
+    a['ly'], b['rb'] = 1., True
+    for _ in range(100):
+        c.step(actual, a, b, .02, True)
+    np.testing.assert_allclose(c.target[:3], [.02, 0., 0.])
+    a['ly'] = 0.
+    actual[2] = .01
+    c.step(actual, a, b, .02, True)
+    np.testing.assert_allclose(c.target[:3], [np.sqrt(.02 ** 2 - .01 ** 2), 0., 0.])
+    assert np.linalg.norm(c.target[:3] - actual[:3]) == pytest.approx(.02)
+
+
 @pytest.mark.parametrize('frame', ['base', 'tcp'])
 def test_each_step_accumulates_from_previous_target(frame):
     c = PoseIntegrator(dict(CFG, max_target_position_error_m=.5,
