@@ -98,6 +98,9 @@ def main():
             if publisher.get_subscription_count() == 0:
                 print("\r控制器目标话题没有订阅者，拒绝发布。")
                 continue
+            if node.count_publishers(args.target_topic) > 1:
+                print("\r目标话题存在其他发布者，请退出多余的键盘/Xbot 进程后重试，拒绝发布。")
+                continue
 
             if key == " ":
                 target = copy.deepcopy(latest_pose)
