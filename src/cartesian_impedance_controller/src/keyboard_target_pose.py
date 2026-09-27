@@ -36,18 +36,29 @@ def valid_pose(message, frame):
         and quaternion_norm > 1e-16
 
 
+def relative_target(current, held_orientation, axis, direction, step):
+    """每次从最新实测 tool0 位置生成单步目标，保留锁存的目标姿态。"""
+    result = copy.deepcopy(current)
+    result.pose.orientation = copy.deepcopy(held_orientation)
+    setattr(result.pose.position, axis,
+            getattr(result.pose.position, axis) + direction * step)
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--step", type=float, default=0.005, help="每次按键的平移量，单位 m，默认 0.005")
-    parser.add_argument("--max-lead", type=float, default=0.03, help="目标与当前 TCP 的最大距离，单位 m，默认 0.03")
-    parser.add_argument("--frame", default="base", help="当前 TCP 与目标的坐标系，默认 base")
-    parser.add_argument("--pose-topic", default=POSE_TOPIC, help="当前 TCP 位姿话题")
+    parser.add_argument("--max-lead", type=float, default=0.03, help="单步目标与当前 tool0 的最大距离，单位 m，默认 0.03")
+    parser.add_argument("--frame", default="base", help="当前 tool0 与目标的坐标系，默认 base")
+    parser.add_argument("--pose-topic", default=POSE_TOPIC, help="当前 tool0 位姿话题")
     parser.add_argument("--target-topic", default=TARGET_TOPIC, help="控制器目标位姿话题")
     args = parser.parse_args(remove_ros_args(args=sys.argv)[1:])
     if not math.isfinite(args.step) or args.step <= 0 or args.step > 0.01:
         parser.error("--step 必须在 (0, 0.01] m 范围内")
     if not math.isfinite(args.max_lead) or args.max_lead <= 0 or args.max_lead > 0.05:
         parser.error("--max-lead 必须在 (0, 0.05] m 范围内")
+    if args.step > args.max_lead:
+        parser.error("--step 不能大于 --max-lead")
     if not sys.stdin.isatty():
         parser.error("需要在交互式终端运行")
 
@@ -57,6 +68,7 @@ def main():
     latest_pose = None
     latest_time = 0.0
     target = None
+    held_orientation = None
 
     def on_pose(message):
         nonlocal latest_pose, latest_time
@@ -68,7 +80,7 @@ def main():
     _ = subscription
     old_terminal = termios.tcgetattr(sys.stdin.fileno())
     print("按键：W/S = X±，D/A = Y±，R/F = Z±；空格 = 保持当前位姿；Q = 退出")
-    print(f"每步 {args.step:.3f} m；目标相对当前 TCP 最大偏移 {args.max_lead:.3f} m")
+    print(f"每键基于最新实测 tool0 前进一步 {args.step:.3f} m；单步安全上限 {args.max_lead:.3f} m")
     try:
         tty.setcbreak(sys.stdin.fileno())
         while rclpy.ok():
@@ -81,28 +93,27 @@ def main():
             if key not in KEYS and key != " ":
                 continue
             if latest_pose is None or time.monotonic() - latest_time > 1.0:
-                print("\r未收到新鲜且坐标系正确的 TCP 位姿，拒绝发布。")
+                print("\r未收到新鲜且坐标系正确的 tool0 位姿，拒绝发布。")
                 continue
             if publisher.get_subscription_count() == 0:
                 print("\r控制器目标话题没有订阅者，拒绝发布。")
                 continue
 
-            if key == " " or target is None:
+            if key == " ":
                 target = copy.deepcopy(latest_pose)
+                held_orientation = copy.deepcopy(latest_pose.pose.orientation)
             if key in KEYS:
                 axis, direction = KEYS[key]
-                setattr(target.pose.position, axis,
-                        getattr(target.pose.position, axis) + direction * args.step)
+                if held_orientation is None:
+                    held_orientation = copy.deepcopy(latest_pose.pose.orientation)
+                target = relative_target(latest_pose, held_orientation, axis, direction, args.step)
 
             delta = [
                 getattr(target.pose.position, axis) - getattr(latest_pose.pose.position, axis)
                 for axis in "xyz"
             ]
             if math.sqrt(sum(value * value for value in delta)) > args.max_lead:
-                print("\r目标距离当前 TCP 超过上限，拒绝本次按键。")
-                if key in KEYS:
-                    setattr(target.pose.position, axis,
-                            getattr(target.pose.position, axis) - direction * args.step)
+                print("\r目标距离当前 tool0 超过上限，拒绝本次按键。")
                 continue
 
             target.header.frame_id = args.frame
