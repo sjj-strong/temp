@@ -141,10 +141,9 @@ class PoseIntegrator:
         v = np.array([axes['ly'], axes['lx'], axes['rt'] - axes['lt']])
         w = np.array([axes['ry'], axes['rx'], axes['yaw']])
         scale = self.cfg['precision_scale'] if buttons['lb'] else 1.
-        v *= self.cfg['max_linear_speed_m_s'] * scale / max(1., np.linalg.norm(v))
-        w *= self.cfg['max_angular_speed_rad_s'] * scale / max(1., np.linalg.norm(w))
-        # 本周期手柄输出为平移增量（米）和旋转向量（弧度）。
-        delta_p, delta_r = v * dt, w * dt
+        # 摇杆直接映射位姿增量；dt 仅用于上方的周期卡顿保护。
+        delta_p = v * self.cfg['max_translation_delta_m'] * scale / max(1., np.linalg.norm(v))
+        delta_r = w * self.cfg['max_rotation_delta_rad'] * scale / max(1., np.linalg.norm(w))
         if self.frame == 'tcp':
             delta_p = rotate(np.asarray(actual[3:]), delta_p)
             delta_r = rotate(np.asarray(actual[3:]), delta_r)
@@ -158,5 +157,5 @@ class PoseIntegrator:
             self.stop(actual)
             return action
         self.target = candidate
-        # 返回等效 base 速度供逻辑测试；录制 action 由实际下发目标单独编码。
-        return np.r_[delta_p, delta_r] / dt
+        # 返回 base 中的平移增量和旋转向量；录制 action 单独编码。
+        return np.r_[delta_p, delta_r]

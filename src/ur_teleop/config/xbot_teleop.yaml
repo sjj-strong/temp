@@ -29,8 +29,9 @@ xbot:
   control_hz: 50.0
   joy_timeout_s: 0.25
   tcp_timeout_s: 0.25
-  max_linear_speed_m_s: 0.02
-  max_angular_speed_rad_s: 0.1
+  # 满摇杆相对本周期实测位姿的最大增量，不乘控制周期、不累积旧目标。
+  max_translation_delta_m: 0.0004
+  max_rotation_delta_rad: 0.002
   precision_scale: 0.25
   target_lead_m: 0.03
   target_lead_rad: 0.15

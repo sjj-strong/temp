@@ -4,8 +4,8 @@ import pytest
 from ur_teleop.xbot_core import AXES, BUTTONS, ButtonEvents, JoyMapping, PoseIntegrator
 
 
-CFG = dict(precision_scale=.25, max_linear_speed_m_s=.02,
-           max_angular_speed_rad_s=.1, target_lead_m=.03, target_lead_rad=.15)
+CFG = dict(precision_scale=.25, max_translation_delta_m=.0004,
+           max_rotation_delta_rad=.002, target_lead_m=.03, target_lead_rad=.15)
 
 
 def inputs():
@@ -22,8 +22,8 @@ def test_tcp_rotation_and_translation():
         b['rb'] = True
         a['ly'] = a['ry'] = 1.
         action = core.step(pose, a, b, .02, True)
-        np.testing.assert_allclose(action[:3], np.array(expected) * .02, atol=1e-10)
-        np.testing.assert_allclose(action[3:], np.array(expected) * .1, atol=1e-10)
+        np.testing.assert_allclose(action[:3], np.array(expected) * .0004, atol=1e-10)
+        np.testing.assert_allclose(action[3:], np.array(expected) * .002, atol=1e-10)
 
 
 def test_toggle_continuity_and_fault_requires_release():
@@ -83,8 +83,8 @@ def test_each_step_uses_latest_measured_position_and_orientation(frame):
     h = np.sqrt(.5)
     actual = np.array([.1, .2, .3, 0., 0., h, h])
     c.step(actual, a, b, .04, True)
-    expected_position = [.1008, .2, .3] if frame == 'base' else [.1, .2008, .3]
-    s, co = np.sin(.002), np.cos(.002)
+    expected_position = [.1004, .2, .3] if frame == 'base' else [.1, .2004, .3]
+    s, co = np.sin(.001), np.cos(.001)
     expected_orientation = [s*h, (-1 if frame == 'base' else 1)*s*h, co*h, co*h]
     np.testing.assert_allclose(c.target[:3], expected_position)
     np.testing.assert_allclose(c.target[3:], expected_orientation, atol=1e-12)
@@ -117,7 +117,7 @@ def test_fault_latches_hold_pose_instead_of_following_feedback():
     np.testing.assert_array_equal(c.target, pose)
 
 
-def test_precision_and_vector_speed_limit():
+def test_precision_and_vector_delta_limit():
     c = PoseIntegrator(CFG)
     pose = np.array([0., 0., 0., 0., 0., 0., 1.])
     a, b = inputs()
@@ -125,7 +125,21 @@ def test_precision_and_vector_speed_limit():
     a['ly'] = a['lx'] = a['rt'] = 1.
     b['rb'] = b['lb'] = True
     action = c.step(pose, a, b, .02, True)
-    assert np.linalg.norm(action[:3]) == pytest.approx(.005)
+    assert np.linalg.norm(action[:3]) == pytest.approx(.0001)
+
+
+@pytest.mark.parametrize('dt', [.005, .01, .02, .04])
+@pytest.mark.parametrize('frame', ['base', 'tcp'])
+def test_delta_does_not_depend_on_control_period(dt, frame):
+    c = PoseIntegrator(CFG)
+    c.frame = frame
+    pose = np.array([0., 0., 0., 0., 0., 0., 1.])
+    a, b = inputs()
+    c.step(pose, a, b, dt, True)
+    a['ly'], a['ry'], b['rb'] = 1., 1., True
+    delta = c.step(pose, a, b, dt, True)
+    np.testing.assert_allclose(delta, [.0004, 0, 0, .002, 0, 0])
+    np.testing.assert_allclose(c.target[:3], [.0004, 0, 0])
 
 
 def test_button_edges_and_view_hold():
