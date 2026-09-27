@@ -1,4 +1,4 @@
-"""手柄映射、按键边沿与笛卡尔积分；不依赖 ROS。"""
+"""手柄映射、按键边沿与相对实测位姿的笛卡尔增量；不依赖 ROS。"""
 
 import math
 import numpy as np
@@ -101,6 +101,7 @@ class ButtonEvents:
 
 
 class PoseIntegrator:
+    """每周期以实测位姿合成目标，不累加历史目标；类名保留兼容。"""
     def __init__(self, cfg):
         self.cfg = cfg
         self.frame = 'base'
@@ -142,15 +143,20 @@ class PoseIntegrator:
         scale = self.cfg['precision_scale'] if buttons['lb'] else 1.
         v *= self.cfg['max_linear_speed_m_s'] * scale / max(1., np.linalg.norm(v))
         w *= self.cfg['max_angular_speed_rad_s'] * scale / max(1., np.linalg.norm(w))
+        # 本周期手柄输出为平移增量（米）和旋转向量（弧度）。
+        delta_p, delta_r = v * dt, w * dt
         if self.frame == 'tcp':
-            v, w = rotate(np.asarray(actual[3:]), v), rotate(np.asarray(actual[3:]), w)
-        candidate = self.target.copy()
-        candidate[:3] += v * dt
-        candidate[3:] = multiply(delta_quaternion(w * dt), candidate[3:])
+            delta_p = rotate(np.asarray(actual[3:]), delta_p)
+            delta_r = rotate(np.asarray(actual[3:]), delta_r)
+        # 所有增量已在 base 中：位置相加，旋转四元数左乘实测姿态。
+        candidate = np.array(actual, dtype=float)
+        candidate[:3] += delta_p
+        candidate[3:] = multiply(delta_quaternion(delta_r), candidate[3:])
         candidate[3:] /= np.linalg.norm(candidate[3:])
         if (np.linalg.norm(candidate[:3] - actual[:3]) > self.cfg['target_lead_m'] or
                 orientation_distance(candidate[3:], actual[3:]) > self.cfg['target_lead_rad']):
             self.stop(actual)
             return action
         self.target = candidate
-        return np.r_[v, w]
+        # 录制接口仍保留 base 速度语义，不改变现有数据集的单位。
+        return np.r_[delta_p, delta_r] / dt

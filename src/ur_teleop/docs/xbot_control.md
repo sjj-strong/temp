@@ -1,6 +1,6 @@
 # Xbot 手柄遥操作
 
-使用 `cartesian_impedance_controller` 控制 `gripper_tcp`，复用 `ur10e_robotiq_ft_description` 的组合 URDF。Xbot 不启动 Alicia 或 Ruckig。
+使用 `cartesian_impedance_controller` 控制 `tool0`（TCP），复用 `ur10e_robotiq_ft_description` 的组合 URDF。Xbot 不启动 Alicia 或 Ruckig。
 
 ## 配置与校准
 
@@ -50,9 +50,11 @@ Home 阶段使用轨迹控制器，笛卡尔阻抗控制器保持 inactive。首
 | A | RB 有效时切换夹爪，忙时忽略 |
 | X | 切换 base/TCP 参考系 |
 
-base 模式沿 `base_link` 的轴运动；TCP 模式沿实测 `gripper_tcp` 当前局部轴运动。平移和旋转均遵循所选参考系，切换当帧不积分，目标不跳变。
+base 模式沿 `base_link` 的轴运动；TCP 模式沿实测 `tool0` 当前局部轴运动。平移和旋转均遵循所选参考系，切换当帧目标不变。
 
-目标统一转换为 `base_link` 下的 `PoseStamped`，发布到 `/cartesian_impedance_controller/target_pose`。Xbot 启动时覆盖控制器的 base/tip 为 `base_link → gripper_tcp`。
+每周期以实测 `tool0` 位姿叠加手柄增量生成目标，不累加上一周期目标。平移增量为速度乘周期时长，旋转增量用四元数合成；RB 按住且输入为零时，目标等于本周期实测位姿。
+
+目标统一转换为 `base_link` 下的 `PoseStamped`，发布到 `/cartesian_impedance_controller/target_pose`。实测 TF、控制器 base/tip 和录制末端均使用 `base_link → tool0`。
 
 录制按键、数据格式及数据集位置见[数据采集](data_recorder.md)。
 

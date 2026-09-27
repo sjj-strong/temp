@@ -1,4 +1,4 @@
-"""Xbot 遥操作：只向基座坐标系中的 gripper_tcp 目标发送指令。"""
+"""Xbot 遥操作：以每周期实测 tool0 位姿生成基座坐标系中的目标。"""
 
 import time
 from pathlib import Path
@@ -122,7 +122,7 @@ class XbotTeleopNode(Node):
 
     def actual_pose(self):
         try:
-            transform = self.buffer.lookup_transform('base_link', 'gripper_tcp', Time())
+            transform = self.buffer.lookup_transform('base_link', 'tool0', Time())
             age = (self.get_clock().now() - Time.from_msg(transform.header.stamp)).nanoseconds / 1e9
             if not 0 <= age <= self.x['tcp_timeout_s']:
                 return None

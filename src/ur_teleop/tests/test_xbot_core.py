@@ -45,16 +45,64 @@ def test_toggle_continuity_and_fault_requires_release():
 
 
 def test_lead_limit_and_timer_stall():
-    c = PoseIntegrator(CFG)
+    c = PoseIntegrator(dict(CFG, target_lead_m=.0001))
     pose = np.array([0., 0., 0., 0., 0., 0., 1.])
     a, b = inputs()
     c.step(pose, a, b, .02, True)
     b['rb'], a['ly'] = True, 1.
-    for _ in range(100):
-        c.step(pose, a, b, .02, True)
+    assert not c.step(pose, a, b, .02, True).any()
     assert not c.enabled
     np.testing.assert_allclose(c.target, pose)
     assert not c.step(pose, a, b, .5, True).any()
+
+
+def test_fixed_feedback_does_not_accumulate_target():
+    c = PoseIntegrator(CFG)
+    actual = np.array([.2, .1, .3, 0., 0., 0., 1.])
+    a, b = inputs()
+    c.step(actual, a, b, .02, True)
+    b['rb'] = True
+    a['ly'] = a['ry'] = 1.
+    for _ in range(100):
+        c.step(actual, a, b, .02, True)
+        np.testing.assert_allclose(c.target[:3], [.2004, .1, .3])
+        np.testing.assert_allclose(c.target[3:], [np.sin(.001), 0., 0., np.cos(.001)])
+        assert c.enabled
+
+
+@pytest.mark.parametrize('frame', ['base', 'tcp'])
+def test_each_step_uses_latest_measured_position_and_orientation(frame):
+    c = PoseIntegrator(CFG)
+    c.frame = frame
+    a, b = inputs()
+    c.step(np.array([0., 0., 0., 0., 0., 0., 1.]), a, b, .02, True)
+    b['rb'] = True
+    a['ly'] = a['ry'] = 1.
+    c.step(np.array([0., 0., 0., 0., 0., 0., 1.]), a, b, .02, True)
+    # 新反馈与旧目标不同：目标必须从新位置、新姿态重新计算。
+    h = np.sqrt(.5)
+    actual = np.array([.1, .2, .3, 0., 0., h, h])
+    c.step(actual, a, b, .04, True)
+    expected_position = [.1008, .2, .3] if frame == 'base' else [.1, .2008, .3]
+    s, co = np.sin(.002), np.cos(.002)
+    expected_orientation = [s*h, (-1 if frame == 'base' else 1)*s*h, co*h, co*h]
+    np.testing.assert_allclose(c.target[:3], expected_position)
+    np.testing.assert_allclose(c.target[3:], expected_orientation, atol=1e-12)
+    assert c.enabled
+    np.testing.assert_array_equal(actual, [.1, .2, .3, 0., 0., h, h])
+
+
+def test_zero_increment_uses_current_feedback_when_enabled():
+    c = PoseIntegrator(CFG)
+    actual = np.array([0., 0., 0., 0., 0., 0., 1.])
+    a, b = inputs()
+    c.step(actual, a, b, .02, True)
+    b['rb'], a['ly'] = True, 1.
+    c.step(actual, a, b, .02, True)
+    a['ly'] = 0.
+    actual[1] = .01
+    assert not c.step(actual, a, b, .02, True).any()
+    np.testing.assert_array_equal(c.target, actual)
 
 
 def test_fault_latches_hold_pose_instead_of_following_feedback():

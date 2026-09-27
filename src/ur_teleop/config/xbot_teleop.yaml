@@ -15,7 +15,7 @@ recorder:
   data_timeout_s: 0.5
   ee_pose_source: tf
   ee_pose_parent_frame: base_link
-  ee_pose_child_frame: gripper_tcp
+  ee_pose_child_frame: tool0
 xbot:
   calibration_file: ~/.config/ur_teleop/xbot_joy.yaml
   control_hz: 50.0
