@@ -19,7 +19,7 @@ ros2 run joy joy_node --ros-args -p autorepeat_rate:=50.0 -p deadzone:=0.0
 ros2 run ur_teleop xbot_calibrate
 ```
 
-每次操作推到极限并保持，步骤间松开按键、摇杆回中。结果默认写入 `~/.config/ur_teleop/xbot_joy.yaml`；已有文件不覆盖，另存时用 `--output` 并更新 `xbot.calibration_file`。映射使用 ROS Joy 编号，不能直接复制 pygame 轴号。
+每次操作推到极限并保持，步骤间松开按键、摇杆回中。结果默认写入 `/ros2_ws/src/ur_teleop/config/xbot_joy.yaml`，遥操作从同一路径读取；已有文件不覆盖，另存时用 `--output` 并更新 `xbot.calibration_file`。映射使用 ROS Joy 编号，不能直接复制 pygame 轴号。
 
 校准完成后停止手动启动的 `joy_node`，正式启动会自动运行它。
 

@@ -12,10 +12,14 @@ from sensor_msgs.msg import Joy
 from ur_teleop.xbot_core import BUTTONS, JoyMapping
 
 
-def main():
+def parse_args(args=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--output', default='~/.config/ur_teleop/xbot_joy.yaml')
-    args = parser.parse_args()
+    parser.add_argument('--output', default='/ros2_ws/src/ur_teleop/config/xbot_joy.yaml')
+    return parser.parse_args(args)
+
+
+def main():
+    args = parse_args()
     output = Path(args.output).expanduser()
     if output.exists():
         raise FileExistsError(f'不覆盖已有校准，请指定新的 --output: {output}')

@@ -1,0 +1,48 @@
+version: 1
+axis_count: 8
+button_count: 19
+buttons:
+  rb: 7
+  lb: 6
+  a: 0
+  x: 3
+  menu: 10
+  y: 4
+  b: 1
+  view: 11
+axes:
+  ly:
+    kind: axis
+    index: 1
+    rest: -0.003906369209289551
+    positive: 1.0
+  lx:
+    kind: axis
+    index: 0
+    rest: -0.003906369209289551
+    positive: 0.9529709815979004
+  ry:
+    kind: axis
+    index: 3
+    rest: -0.003906369209289551
+    positive: 1.0
+  rx:
+    kind: axis
+    index: 2
+    rest: -0.003906369209289551
+    positive: 1.0
+  lt:
+    kind: axis
+    index: 5
+    rest: 1.0
+    positive: -1.0
+  rt:
+    kind: axis
+    index: 4
+    rest: 1.0
+    positive: -1.0
+  yaw:
+    kind: axis
+    index: 6
+    rest: 0.0
+    positive: 1.0
