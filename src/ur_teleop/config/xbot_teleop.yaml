@@ -27,6 +27,7 @@ xbot:
   device_id: 0
   calibration_file: /ros2_ws/src/ur_teleop/config/xbot_joy.yaml
   control_hz: 50.0
+  diagnostic_hz: 5.0
   joy_timeout_s: 0.25
   tcp_timeout_s: 0.25
   # 满摇杆每个控制周期累积到锁存目标的最大增量，不乘控制周期。

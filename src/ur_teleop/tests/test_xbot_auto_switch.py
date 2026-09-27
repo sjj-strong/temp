@@ -99,3 +99,35 @@ def test_controller_state_unconfirmed_for_ten_seconds_latches_fault():
     assert node.controller_active and not node.finished
     node.monitor_controllers(20., pose)
     assert node.finished and not node.controller_active
+
+
+def test_diagnostic_shows_comparable_poses_and_is_rate_limited():
+    node = object.__new__(XbotTeleopNode)
+    messages = []
+    node.get_logger = lambda: SimpleNamespace(info=messages.append)
+    node.diagnostic_hz = 5.
+    node.last_diagnostic_at = -float('inf')
+    node.x = {'joy_timeout_s': .25, 'tcp_timeout_s': .25}
+    node.core = SimpleNamespace(target=np.array([.12, .2, .3, 0., 0., 0., 1.]),
+                                frame='base', enabled=True)
+    node.finished = node.estop = node.awaiting_controller_confirmation = False
+    node.controller_active = True
+    node.controllers = {'cartesian_impedance_controller': 'active'}
+    node.axes = dict.fromkeys(AXES, 0.)
+    node.axes['ly'] = 1.
+    node.buttons = dict.fromkeys(BUTTONS, False)
+    node.buttons['rb'] = True
+    node.joy_at = node.joints_at = node.controllers_at = 10.
+    node.tcp_age_s = .01
+    actual = np.array([.1, .2, .3, 0., 0., 0., 1.])
+    identity = np.array([0., 0., 0., 0., 0., 0., 1.])
+    node.log_diagnostic(10., actual, True, identity)
+    assert len(messages) == 1
+    assert '当前=xyz=(0.1000,0.2000,0.3000)' in messages[0]
+    assert '目标=xyz=(0.1200,0.2000,0.3000)' in messages[0]
+    assert '超前=20.0mm/0.000rad' in messages[0]
+    assert '目标已发布=1' in messages[0]
+    node.log_diagnostic(10.1, actual, True, identity)
+    assert len(messages) == 1
+    node.log_diagnostic(10.21, actual, True, identity)
+    assert len(messages) == 2

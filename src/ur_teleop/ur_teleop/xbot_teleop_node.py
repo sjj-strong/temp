@@ -18,7 +18,7 @@ from tf2_ros import Buffer, TransformListener, TransformException
 
 from ur_teleop.config import load_config, default_config_path, UR_JOINT_NAMES, UR_GRIPPER_JOINT
 from ur_teleop.controller_switcher import ControllerSwitcher
-from ur_teleop.xbot_core import AXES, BUTTONS, JoyMapping, ButtonEvents, PoseIntegrator
+from ur_teleop.xbot_core import AXES, BUTTONS, JoyMapping, ButtonEvents, PoseIntegrator, orientation_distance
 from ur_teleop.cartesian_action import encode_action, action_label
 from ur_teleop.controller_frame import controller_base_frame, transform_pose
 
@@ -31,6 +31,7 @@ class XbotTeleopNode(Node):
         if self.cfg['teleop'].get('control_source') != 'xbot':
             raise ValueError('节点只接受 control_source: xbot')
         self.x = self.cfg['xbot']
+        self.diagnostic_hz = float(self.x.get('diagnostic_hz', 5.))
         self.controller_frame = controller_base_frame(self.cfg['sim'])
         self.action_mode = self.cfg.get('recorder', {}).get('action_mode', 'abs')
         if any(key in self.x for key in ('max_linear_speed_m_s', 'max_angular_speed_rad_s')):
@@ -40,6 +41,8 @@ class XbotTeleopNode(Node):
                     'max_target_orientation_error_rad'):
             if not np.isfinite(self.x[key]) or self.x[key] <= 0:
                 raise ValueError(f'Xbot 参数必须为正数: {key}')
+        if not np.isfinite(self.diagnostic_hz) or self.diagnostic_hz <= 0:
+            raise ValueError('Xbot 诊断日志频率必须为正数')
         if self.x['max_target_orientation_error_rad'] > np.pi:
             raise ValueError('目标姿态超前上限不能超过 π rad')
         with Path(self.x['calibration_file']).expanduser().open() as stream:
@@ -69,8 +72,10 @@ class XbotTeleopNode(Node):
         self.controllers_at = -float('inf')
         self.previous_rb = True
         self.previous_time = time.monotonic()
+        self.last_diagnostic_at = -float('inf')
         self.last_status = ''
         self.last_actual = None
+        self.tcp_age_s = float('inf')
         self.buffer = Buffer()
         self.listener = TransformListener(self.buffer, self)
         self.switcher = ControllerSwitcher(self)
@@ -131,9 +136,11 @@ class XbotTeleopNode(Node):
             self.cancel_gripper()
 
     def actual_pose(self):
+        self.tcp_age_s = float('inf')
         try:
             transform = self.buffer.lookup_transform('base_link', 'tool0', Time())
             age = (self.get_clock().now() - Time.from_msg(transform.header.stamp)).nanoseconds / 1e9
+            self.tcp_age_s = age
             if not 0 <= age <= self.x['tcp_timeout_s']:
                 return None
             p, q = transform.transform.translation, transform.transform.rotation
@@ -250,6 +257,60 @@ class XbotTeleopNode(Node):
             self.core.stop(actual)
             self.get_logger().error('控制器状态连续 10 秒未确认，锁定遥操作；检查后重启')
 
+    def log_diagnostic(self, now, actual, published, target_transform):
+        """定频输出同一 base_link 坐标系中的实测与目标位姿。"""
+        if now - self.last_diagnostic_at < 1. / self.diagnostic_hz:
+            return
+        self.last_diagnostic_at = now
+
+        def pose_text(pose):
+            if pose is None:
+                return '无'
+            return ('xyz=(' + ','.join(f'{value:.4f}' for value in pose[:3]) + ') '
+                    'xyzw=(' + ','.join(f'{value:.4f}' for value in pose[3:]) + ')')
+
+        def age_text(age):
+            return f'{age:.2f}s' if np.isfinite(age) and age >= 0 else '无'
+
+        target = self.core.target
+        if actual is not None and target is not None:
+            lead_mm = 1000. * np.linalg.norm(target[:3] - actual[:3])
+            lead_rad = orientation_distance(target[3:], actual[3:])
+            error = f'{lead_mm:.1f}mm/{lead_rad:.3f}rad'
+        else:
+            error = '无'
+        if self.finished:
+            state = '已锁定'
+        elif self.estop:
+            state = '急停'
+        elif now - self.joy_at > self.x['joy_timeout_s']:
+            state = 'Joy超时'
+        elif actual is None:
+            state = 'tool0反馈无效'
+        elif target_transform is None:
+            state = '控制器基座TF无效'
+        elif now - self.joints_at > self.x['tcp_timeout_s']:
+            state = '关节反馈超时'
+        elif not self.controller_active:
+            state = '等待阻抗控制器'
+        elif self.awaiting_controller_confirmation:
+            state = '等待控制器确认'
+        elif self.core.enabled:
+            state = '运动使能'
+        else:
+            state = '等待RB'
+        translation = (self.axes['ly'], self.axes['lx'], self.axes['rt'] - self.axes['lt'])
+        rotation = (self.axes['ry'], self.axes['rx'], self.axes['yaw'])
+        self.get_logger().info(
+            f'遥操作诊断 [{state}] 坐标系=base_link 模式={self.core.frame} '
+            f'RB={int(self.buttons["rb"])} LB={int(self.buttons["lb"])} '
+            f'输入平移={tuple(round(value, 2) for value in translation)} '
+            f'输入旋转={tuple(round(value, 2) for value in rotation)} '
+            f'目标已发布={int(published)} 控制器={self.controllers.get("cartesian_impedance_controller", "未知")} '
+            f'数据龄 Joy={age_text(now - self.joy_at)} TF={age_text(self.tcp_age_s)} '
+            f'关节={age_text(now - self.joints_at)} 状态查询={age_text(now - self.controllers_at)} '
+            f'当前={pose_text(actual)} 目标={pose_text(target)} 超前={error}')
+
     def tick(self):
         now = time.monotonic()
         dt, self.previous_time = now - self.previous_time, now
@@ -300,6 +361,7 @@ class XbotTeleopNode(Node):
                         self.core.stop(actual)
                         self.cancel_gripper()
         # TF 失效只能保持最后有效实测位姿；不能假设控制器提供命令超时保护。
+        published_target = False
         if self.controller_active and self.core.target is not None and target_transform is not None:
             msg = PoseStamped()
             msg.header.stamp = self.get_clock().now().to_msg()
@@ -309,6 +371,7 @@ class XbotTeleopNode(Node):
             (msg.pose.orientation.x, msg.pose.orientation.y,
              msg.pose.orientation.z, msg.pose.orientation.w) = map(float, p[3:])
             self.pose_pub.publish(msg)
+            published_target = True
             if actual is not None:
                 # 数据集继续统一为 base_link，不混入真机控制器的 base 表达。
                 values = encode_action(self.core.target, actual, self.gripper_command, self.action_mode).tolist()
@@ -322,6 +385,7 @@ class XbotTeleopNode(Node):
             self.get_logger().info(status)
             self.last_status = status
         self.status_pub.publish(String(data=status))
+        self.log_diagnostic(now, actual, published_target, target_transform)
 
 
 def main(args=None):

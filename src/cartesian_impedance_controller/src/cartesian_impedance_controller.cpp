@@ -362,6 +362,13 @@ void CartesianImpedanceController::target_callback(const geometry_msgs::msg::Pos
   target.sequence = target_sequence_counter_.fetch_add(1) + 1;
   target.valid = true;
   target_buffer_.writeFromNonRT(target);
+  // 订阅回调不在实时 update 环内；限频记录真正通过校验并写入目标缓冲区的位姿。
+  RCLCPP_INFO_THROTTLE(
+      get_node()->get_logger(), *get_node()->get_clock(), 200,
+      "已接收目标 pose 坐标系=%s xyz=(%.4f,%.4f,%.4f) xyzw=(%.4f,%.4f,%.4f,%.4f) 序号=%llu",
+      base_frame.c_str(), target.pose.position.x(), target.pose.position.y(), target.pose.position.z(),
+      target.pose.orientation.x(), target.pose.orientation.y(), target.pose.orientation.z(),
+      target.pose.orientation.w(), static_cast<unsigned long long>(target.sequence));
 }
 
 controller_interface::CallbackReturn CartesianImpedanceController::on_activate(const rclcpp_lifecycle::State&)
