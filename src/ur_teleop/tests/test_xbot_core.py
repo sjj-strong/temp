@@ -104,16 +104,40 @@ def test_each_step_uses_latest_measured_position_and_orientation(frame):
     np.testing.assert_array_equal(actual, [.1, .2, .3, 0., 0., h, h])
 
 
-def test_zero_increment_uses_current_feedback_when_enabled():
+def test_zero_increment_keeps_last_target():
     c = PoseIntegrator(CFG)
     actual = np.array([0., 0., 0., 0., 0., 0., 1.])
     a, b = inputs()
     c.step(actual, a, b, .02, True)
     b['rb'], a['ly'] = True, 1.
     c.step(actual, a, b, .02, True)
+    target = c.target.copy()
     a['ly'] = 0.
     actual[1] = .01
     assert not c.step(actual, a, b, .02, True).any()
+    np.testing.assert_array_equal(c.target, target)
+
+
+def test_release_and_repress_without_input_keep_target():
+    c = PoseIntegrator(CFG)
+    actual = np.array([0., 0., 0., 0., 0., 0., 1.])
+    a, b = inputs()
+    c.step(actual, a, b, .02, True)
+    b['rb'], a['ly'] = True, 1.
+    c.step(actual, a, b, .02, True)
+    target = c.target.copy()
+    actual[1] = .02
+    b['rb'] = False
+    c.step(actual, a, b, .02, True)
+    assert not c.enabled
+    np.testing.assert_array_equal(c.target, target)
+    b['rb'], a['ly'] = True, 0.
+    c.step(actual, a, b, .02, True)
+    np.testing.assert_array_equal(c.target, target)
+    a['ly'] = 1.
+    c.step(actual, a, b, .02, True)
+    np.testing.assert_allclose(c.target[:3], [.0004, .02, 0.])
+    c.step(actual, a, b, .02, False)
     np.testing.assert_array_equal(c.target, actual)
 
 

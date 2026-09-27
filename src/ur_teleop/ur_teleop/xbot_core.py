@@ -127,7 +127,7 @@ class PoseIntegrator:
             self.frame = 'tcp' if self.frame == 'base' else 'base'
             return action  # 切换当帧目标严格不变。
         if not buttons['rb']:
-            if self.enabled or self.target is None:
+            if self.target is None:
                 self.target = np.array(actual, dtype=float)
             self.enabled = False
             self.released = True
@@ -135,7 +135,8 @@ class PoseIntegrator:
         if not self.enabled:
             if not self.released:
                 return action
-            self.target = np.array(actual, dtype=float)
+            if self.target is None:
+                self.target = np.array(actual, dtype=float)
             self.enabled = True
             self.released = False
         v = np.array([axes['ly'], axes['lx'], axes['rt'] - axes['lt']])
@@ -144,6 +145,9 @@ class PoseIntegrator:
         # 摇杆直接映射位姿增量；dt 仅用于上方的周期卡顿保护。
         delta_p = v * self.cfg['max_translation_delta_m'] * scale / max(1., np.linalg.norm(v))
         delta_r = w * self.cfg['max_rotation_delta_rad'] * scale / max(1., np.linalg.norm(w))
+        # 回中不覆盖已锁存的目标；仅 RB 配合非零运动输入更新位姿。
+        if not np.any(delta_p) and not np.any(delta_r):
+            return action
         if self.frame == 'tcp':
             delta_p = rotate(np.asarray(actual[3:]), delta_p)
             delta_r = rotate(np.asarray(actual[3:]), delta_r)

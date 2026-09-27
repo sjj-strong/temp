@@ -294,7 +294,7 @@ class XbotTeleopNode(Node):
                     label=action_label(self.action_mode), size=len(values), stride=len(values))]
                 self.command_pub.publish(command)
         self.ready_pub.publish(Bool(data=bool(safe and not self.finished)))
-        status = f'{self.core.frame}: ' + ('运动' if self.core.enabled else '保持/等待重新使能')
+        status = f'{self.core.frame}: ' + ('允许输入更新目标' if self.core.enabled else '目标更新禁用，末次目标仍可被跟踪')
         if status != self.last_status:
             self.get_logger().info(status)
             self.last_status = status
