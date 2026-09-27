@@ -5,7 +5,7 @@ import os
 import yaml
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, ExecuteProcess, IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, ExecuteProcess, IncludeLaunchDescription, OpaqueFunction
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
@@ -35,16 +35,31 @@ def _yaml_topics(config_file: str) -> list[str]:
 
 def generate_launch_description():
     pkg_share = get_package_share_directory("ur_teleop")
-    config_file = os.path.join(pkg_share, "config", "ur_teleop.yaml")
+    return LaunchDescription([
+        DeclareLaunchArgument("config_file", default_value=os.path.join(
+            pkg_share, "config", "camera.yaml")),
+        OpaqueFunction(function=_camera_actions),
+    ])
+
+
+def _camera_actions(context):
+    # 在展开启动描述时读取实际传入的配置，保留命令行参数覆盖能力。
+    pkg_share = get_package_share_directory("ur_teleop")
+    config_file = LaunchConfiguration("config_file").perform(context)
+    with open(config_file) as stream:
+        config = yaml.safe_load(stream)
+    if not isinstance(config, dict) or not isinstance(config.get("cameras"), dict):
+        raise ValueError("相机配置必须包含 cameras 映射，请使用 camera.yaml")
     opencv_config = _yaml_default(
         config_file, "cameras", "opencv", "config_file", fallback="")
     if not opencv_config:
         opencv_config = os.path.join(pkg_share, "config", "opencv_cameras.yaml")
+    elif not os.path.isabs(opencv_config):
+        opencv_config = os.path.join(os.path.dirname(os.path.abspath(config_file)), opencv_config)
     data_collection_share = get_package_share_directory("data_collection")
     image_topics = _yaml_topics(config_file)
 
-    return LaunchDescription([
-        DeclareLaunchArgument("config_file", default_value=config_file),
+    return [
         DeclareLaunchArgument("launch_realsense", default_value=_yaml_default(
             config_file, "cameras", "realsense", "enabled", fallback="false")),
         DeclareLaunchArgument("launch_opencv_cameras", default_value=_yaml_default(
@@ -100,4 +115,4 @@ def generate_launch_description():
             output="screen",
             condition=IfCondition(LaunchConfiguration("launch_image_viewers")),
         ),
-    ])
+    ]

@@ -8,29 +8,6 @@ cell:
   launch_rviz: true
   alicia_port: "/dev/ttyACM0"                 # 空=自动检测；可指定如 /dev/ttyACM0
   launch_alicia: true             # 主臂始终真实；纯 sim 无 Alicia 时设 false
-# 相机发布由独立的 camera.launch.py 启动，不会随 UR 控制栈启动。
-# 当前工作站默认使用三台 USB 相机；RealSense 保持关闭。
-cameras:
-  realsense:
-    enabled: false
-    d435i_serial: "405622073956"
-    d455_serial: "311322304687"
-    enable_d435i: true
-    enable_color: true
-    enable_depth: false
-    color_profile: "640,480,30"
-    camera_namespace: camera
-  opencv:
-    enabled: true
-    # 每台 USB 相机的设备端口、节点名、图像话题和分辨率在此文件定义。
-    config_file: ""
-  visualization:
-    # 合成单一拼接图像，再由 rqt_image_view 单窗口显示；支持缩放与平移。
-    enabled: true
-    topics:
-      - /camera/usb_front/color/image_raw
-      - /camera/usb_left/color/image_raw
-      - /camera/usb_right/color/image_raw
 home:
   master: [-0.0214676, -0.0781908, -0.1104793, 0.2501057, -0.0015708, -0.0445059]     # 目标 home（用户提前设置，本包不处理含义）
   slave:  [1.5078551769256592, -1.3925983321717759, 2.010801140462057, -2.1436053715147914, -1.54979116121401, 4.581111431121826]
@@ -93,7 +70,7 @@ recorder:
   ee_pose_parent_frame: base_link
   ee_pose_child_frame: tool0     # tool0 在 bare（real）与组合（sim）URDF 中都存在；
                                  # gripper_tcp 只在组合模型里，real 下查不到 → NaN
-  cameras: {}                    # {"wrist": {topic, image_key, height, width}}
+  cameras: {}                    # 仅定义数据集图像；发布与预览见 camera.yaml，示例见 docs/data_recorder.md。
   task: teleoperation
   min_frames_per_episode: 2
   state_threshold_rad: 0.4       # robotiq 夹爪 rad → 0/1 state 阈值

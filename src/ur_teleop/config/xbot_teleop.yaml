@@ -60,7 +60,7 @@ recorder:
   ee_pose_parent_frame: base_link
   ee_pose_child_frame: tool0
   use_videos: true
-  cameras: {}
+  cameras: {}                    # 仅定义数据集图像；发布与预览见 camera.yaml，示例见 docs/data_recorder.md。
   task: xbot_teleoperation
   min_frames_per_episode: 2
   state_threshold_rad: 0.4

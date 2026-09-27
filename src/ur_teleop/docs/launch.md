@@ -58,16 +58,15 @@ ros2 launch ur_teleop teleop.launch.py
 
 ## 相机
 
-相机由 `camera.launch.py` 单独启动，不包含在 Home 或 teleop 中，也不启动机器人。配置 `cameras.realsense.enabled`、`cameras.opencv.enabled` 选择发布源：
+相机由 `camera.launch.py` 单独启动，不包含在 Home 或 teleop 中，也不启动机器人。两种遥操作共用 `config/camera.yaml`，其中 `cameras.realsense.enabled`、`cameras.opencv.enabled` 选择发布源：
 
 ```bash
 ros2 launch ur_teleop camera.launch.py \
-  launch_realsense:=true \
-  launch_opencv_cameras:=true \
-  launch_image_viewers:=true
+  config_file:=/ros2_ws/src/ur_teleop/config/camera.yaml
 ```
 
 - RealSense 使用 `data_collection/launch/dual_realsense.launch.py`，设置位于 `cameras.realsense`。
-- USB/OpenCV 使用 `data_collection/launch/opencv_cameras.launch.py`，设备与图像参数位于 `config/opencv_cameras.yaml`。
-- `recorder.cameras` 的 topic 必须与发布端一致，消息类型为 `sensor_msgs/Image`。
+- USB/OpenCV 使用 `data_collection/launch/opencv_cameras.launch.py`，设备与图像参数由 `cameras.opencv.config_file` 指定，默认 `opencv_cameras.yaml`；相对路径以 `camera.yaml` 所在目录为基准。
+- `ur_teleop.yaml` / `xbot_teleop.yaml` 的 `recorder.cameras` 只选择数据集保存的图像，见[录制配置](data_recorder.md#配置与存储)。
 - `cameras.visualization.topics` 定义预览话题，拼接结果为 `/camera_mosaic/image_raw`，由 rqt 显示。
+- 命令行 `launch_realsense`、`launch_opencv_cameras`、`launch_image_viewers` 等参数可覆盖相机配置。

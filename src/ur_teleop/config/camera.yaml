@@ -1,0 +1,22 @@
+# 相机发布与预览由 camera.launch.py 独立启动，两种遥操作方式共用。
+# 数据集保存哪些图像仅由各遥操作配置中的 recorder.cameras 决定。
+cameras:
+  realsense:
+    enabled: false
+    d435i_serial: "405622073956"
+    d455_serial: "311322304687"
+    enable_d435i: true
+    enable_color: true
+    enable_depth: false
+    color_profile: "640,480,30"
+    camera_namespace: camera
+  opencv:
+    enabled: true
+    # 相对路径以本配置所在目录为基准，设备、话题和分辨率在此文件定义。
+    config_file: opencv_cameras.yaml
+  visualization:
+    enabled: true
+    topics:
+      - /camera/usb_front/color/image_raw
+      - /camera/usb_left/color/image_raw
+      - /camera/usb_right/color/image_raw

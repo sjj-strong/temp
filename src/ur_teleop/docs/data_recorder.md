@@ -74,6 +74,18 @@ recorder:
 
 以上均位于 `recorder` 下。Xbot 默认使用 `repo_id: my_user/ur10e_xbot`、`root: /ros2_ws/dataset/xbot`，与 Alicia 数据集分开。已有数据集不覆盖、不追加，另建带时间戳的标识和目录。
 
+相机发布与预览配置独立放在 `config/camera.yaml`，不决定数据集内容。在所用的 `ur_teleop.yaml` 或 `xbot_teleop.yaml` 中配置 `recorder.cameras`；默认 `{}` 不保存图像。以下示例仅保存前视图，话题类型必须为 `sensor_msgs/Image`，尺寸须与发布端一致：
+
+```yaml
+recorder:
+  cameras:
+    front:
+      topic: /camera/usb_front/color/image_raw
+      image_key: observation.images.front
+      height: 480
+      width: 640
+```
+
 LeRobot 不可导入时，入口会尝试使用 `/opt/lerobot_venv/bin/python` 重启；仍不可用则报错。实际视频编码和落盘需在采集环境验收。
 
 ## 接口
