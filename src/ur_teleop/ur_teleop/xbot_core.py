@@ -158,5 +158,5 @@ class PoseIntegrator:
             self.stop(actual)
             return action
         self.target = candidate
-        # 录制接口仍保留 base 速度语义，不改变现有数据集的单位。
+        # 返回等效 base 速度供逻辑测试；录制 action 由实际下发目标单独编码。
         return np.r_[delta_p, delta_r] / dt

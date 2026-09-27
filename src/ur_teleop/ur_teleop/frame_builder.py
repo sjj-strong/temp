@@ -1,13 +1,9 @@
-"""LeRobot frame assembly — pure logic, no rclpy imports (spec §7).
-
-State = 6 UR joints + 7 EE pose + 1 gripper_state (0/1). Missing EE pose →
-NaN segment (never a zero placeholder). Action = 6 joint commands + 1 gripper
-command signal, taken from /teleop/commands (7 dims).
-"""
+"""LeRobot 帧组装：Alicia 关节目标或 Xbot abs/rel 笛卡尔位姿 action。"""
 
 import numpy as np
 
 from ur_teleop.config import UR_JOINT_NAMES
+from ur_teleop.cartesian_action import action_names
 
 
 class FrameBuilder:
@@ -21,6 +17,8 @@ class FrameBuilder:
         self._state_threshold = float(recorder_config.get("state_threshold_rad", 0.4))
         self._task = recorder_config.get("task", "teleoperation")
         self._use_videos = bool(recorder_config.get("use_videos", True))
+        self._cartesian = recorder_config.get('action_space') == 'cartesian_pose'
+        self._cart_names = action_names(recorder_config.get('action_mode', 'abs')) if self._cartesian else []
 
     def features(self):
         features = {}
@@ -36,8 +34,8 @@ class FrameBuilder:
                 "dtype": "float32", "shape": (len(state_names),), "names": state_names,
             }
         if self._rec.get("record_action_joints", True):
-            if self._rec.get('action_space') == 'cartesian_velocity':
-                action_names.extend(['vx', 'vy', 'vz', 'wx', 'wy', 'wz'])
+            if self._cartesian:
+                action_names.extend(self._cart_names[:-1])
             else:
                 action_names.extend([f"cmd_{n}" for n in UR_JOINT_NAMES])
         if self._rec.get("record_action_gripper", True):
@@ -59,6 +57,8 @@ class FrameBuilder:
         """None when essential data missing; ee_pose None → NaN segment."""
         if ur_joints is None or teleop_cmd is None:
             return None
+        if self._cartesian and (len(teleop_cmd) != len(self._cart_names) or not np.isfinite(teleop_cmd).all()):
+            return None
         state_parts = []
         if self._rec.get("record_ur_joints", True):
             state_parts.extend(ur_joints[:6])
@@ -67,10 +67,11 @@ class FrameBuilder:
         if self._rec.get("record_ur_gripper", True):
             state_parts.append(1.0 if gripper_state_rad > self._state_threshold else 0.0)
         action_parts = []
+        motion_size = len(self._cart_names) - 1 if self._cartesian else 6
         if self._rec.get("record_action_joints", True):
-            action_parts.extend(teleop_cmd[:6])
+            action_parts.extend(teleop_cmd[:motion_size])
         if self._rec.get("record_action_gripper", True):
-            action_parts.append(float(teleop_cmd[6]) if len(teleop_cmd) > 6 else 0.0)
+            action_parts.append(float(teleop_cmd[motion_size]) if len(teleop_cmd) > motion_size else 0.0)
         return {
             "observation.state": np.array(state_parts, dtype=np.float32),
             "action": np.array(action_parts, dtype=np.float32),

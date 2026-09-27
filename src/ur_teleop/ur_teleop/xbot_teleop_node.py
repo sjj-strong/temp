@@ -13,12 +13,13 @@ from rclpy.qos import qos_profile_sensor_data
 from control_msgs.action import ParallelGripperCommand
 from geometry_msgs.msg import PoseStamped
 from sensor_msgs.msg import Joy, JointState
-from std_msgs.msg import Bool, String, Float64MultiArray
+from std_msgs.msg import Bool, String, Float64MultiArray, MultiArrayDimension
 from tf2_ros import Buffer, TransformListener, TransformException
 
 from ur_teleop.config import load_config, default_config_path, UR_JOINT_NAMES, UR_GRIPPER_JOINT
 from ur_teleop.controller_switcher import ControllerSwitcher
 from ur_teleop.xbot_core import AXES, BUTTONS, JoyMapping, ButtonEvents, PoseIntegrator
+from ur_teleop.cartesian_action import encode_action, action_label
 
 
 class XbotTeleopNode(Node):
@@ -29,6 +30,7 @@ class XbotTeleopNode(Node):
         if self.cfg['teleop'].get('control_source') != 'xbot':
             raise ValueError('节点只接受 control_source: xbot')
         self.x = self.cfg['xbot']
+        self.action_mode = self.cfg.get('recorder', {}).get('action_mode', 'abs')
         for key in ('control_hz', 'joy_timeout_s', 'tcp_timeout_s', 'max_linear_speed_m_s',
                     'max_angular_speed_rad_s', 'precision_scale', 'target_lead_m', 'target_lead_rad'):
             if not np.isfinite(self.x[key]) or self.x[key] <= 0:
@@ -224,7 +226,7 @@ class XbotTeleopNode(Node):
                 now - self.controllers_at < 2. and
                 self.controllers.get('cartesian_impedance_controller') == 'active')
         was_enabled = self.core.enabled
-        action = self.core.step(actual, self.axes, self.buttons, dt, safe, toggle=fresh and 'x' in edges)
+        self.core.step(actual, self.axes, self.buttons, dt, safe, toggle=fresh and 'x' in edges)
         if actual is None:
             self.core.stop(self.last_actual)
         if was_enabled and not self.core.enabled:
@@ -239,7 +241,6 @@ class XbotTeleopNode(Node):
                         self.finished = True
                         self.core.stop(actual)
                         self.cancel_gripper()
-                        action[:] = 0.
         # TF 失效只能保持最后有效实测位姿；不能假设控制器提供命令超时保护。
         if self.controller_active and self.core.target is not None:
             msg = PoseStamped()
@@ -250,7 +251,12 @@ class XbotTeleopNode(Node):
             (msg.pose.orientation.x, msg.pose.orientation.y,
              msg.pose.orientation.z, msg.pose.orientation.w) = map(float, p[3:])
             self.pose_pub.publish(msg)
-        self.command_pub.publish(Float64MultiArray(data=[*map(float, action), self.gripper_command]))
+            if actual is not None:
+                values = encode_action(p, actual, self.gripper_command, self.action_mode).tolist()
+                command = Float64MultiArray(data=values)
+                command.layout.dim = [MultiArrayDimension(
+                    label=action_label(self.action_mode), size=len(values), stride=len(values))]
+                self.command_pub.publish(command)
         self.ready_pub.publish(Bool(data=bool(safe and not self.finished)))
         status = f'{self.core.frame}: ' + ('运动' if self.core.enabled else '保持/等待重新使能')
         if status != self.last_status:

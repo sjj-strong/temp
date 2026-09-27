@@ -5,11 +5,13 @@ cell:
   launch_rviz: false
 teleop:
   control_source: xbot
+  controller: cartesian_impedance
 recorder:
   repo_id: my_user/ur10e_xbot
   root: /ros2_ws/dataset/xbot
   robot_type: ur10e_xbot_teleop
-  action_space: cartesian_velocity
+  action_space: cartesian_pose
+  action_mode: abs  # abs：目标位置+四元数+夹爪（8维）；rel：位置/旋转增量+夹爪（7维）
   record_action_joints: true
   record_action_gripper: true
   data_timeout_s: 0.5

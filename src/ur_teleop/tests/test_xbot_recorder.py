@@ -9,17 +9,23 @@ import pytest
 from ur_teleop.frame_builder import FrameBuilder
 
 
-def test_cartesian_features_preserve_alicia():
-    cart = FrameBuilder(dict(action_space='cartesian_velocity'), {})
+@pytest.mark.parametrize('mode, names, action', [
+    ('abs', ['x', 'y', 'z', 'qx', 'qy', 'qz', 'qw', 'cmd_gripper'], [.1, .2, .3, 0, 0, 0, 1, 1]),
+    ('rel', ['dx', 'dy', 'dz', 'drx', 'dry', 'drz', 'cmd_gripper'], [.001, .002, 0, 0, 0, .01, 1]),
+])
+def test_cartesian_features_preserve_alicia(mode, names, action):
+    cart = FrameBuilder(dict(action_space='cartesian_pose', action_mode=mode), {})
     joint = FrameBuilder({}, {})
-    assert cart.features()[2] == ['vx', 'vy', 'vz', 'wx', 'wy', 'wz', 'cmd_gripper']
+    assert cart.features()[2] == names
+    assert cart.features()[0]['action']['shape'] == (len(action),)
     assert joint.features()[2][0] == 'cmd_shoulder_pan_joint'
-    action = [.01, .02, .03, .04, .05, .06, 1.]
     frame = cart.build([0]*6, [0, 0, 0, 0, 0, 0, 1], 0., action)
     np.testing.assert_allclose(frame['action'], action)
+    assert cart.build([0]*6, [0, 0, 0, 0, 0, 0, 1], 0., action[:-1]) is None
 
 
-def test_episode_events_and_stale_gate(monkeypatch):
+@pytest.mark.parametrize('mode', ['abs', 'rel'])
+def test_episode_events_and_stale_gate(monkeypatch, mode):
     pytest.importorskip('rclpy')
     from ur_teleop.data_recorder import DataRecorderNode
     from std_msgs.msg import String
@@ -28,14 +34,15 @@ def test_episode_events_and_stale_gate(monkeypatch):
     # 绕过 ROS 构造，仅测试同一录制线程中的事件与数据写入逻辑。
     node = object.__new__(DataRecorderNode)
     node._xbot = True
-    node._rec = {}
+    node._rec = dict(action_space='cartesian_pose', action_mode=mode)
     node._events = queue.Queue()
     node._ready = True
     node._data_timeout = .5
     node._ready_at = node._cmd_at = node._joint_at = time.monotonic()
     node._gripper_at = time.monotonic()
     node._camera_at, node._cameras, node._camera_frames = {}, {}, {}
-    node._teleop_cmd = [.01, 0, 0, 0, 0, 0, 1.]
+    node._teleop_cmd = [.1, .2, .3, 0, 0, 0, 1., 1.] if mode == 'abs' else [.01, 0, 0, 0, 0, 0, 1.]
+    node._action_size = len(node._teleop_cmd)
     node._ur_joints = [0.]*6
     node._ur_gripper_rad = 0.
     node._recording = False
@@ -43,7 +50,7 @@ def test_episode_events_and_stale_gate(monkeypatch):
     node._min_frames = 2
     node._missing_cam_warned = set()
     node._lock = threading.Lock()
-    node._builder = FrameBuilder(dict(action_space='cartesian_velocity'), {})
+    node._builder = FrameBuilder(node._rec, {})
     node._ee_source, node._ee_warned = 'tf', False
     node._enable_sent = False
     saved, frames, finished = [], [], []

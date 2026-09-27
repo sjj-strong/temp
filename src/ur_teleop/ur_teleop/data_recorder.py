@@ -1,7 +1,4 @@
-"""LeRobot data recorder (record mode). Owns the keyboard; the first Enter
-starts episode 1 AND sends /teleop/enable so teleop_node begins control
-(spec §6). Keys: Enter=开始 S=保存并结束 D=丢弃并重置 Q=退出并 finalize.
-"""
+"""LeRobot 录制器：Alicia 键盘控制，Xbot 手柄事件及 abs/rel 位姿 action。"""
 
 import os
 import sys
@@ -23,6 +20,7 @@ except ImportError:
 
 from ur_teleop.config import UR_GRIPPER_JOINT, UR_JOINT_NAMES, default_config_path, load_config
 from ur_teleop.frame_builder import FrameBuilder
+from ur_teleop.cartesian_action import action_label
 from ur_teleop.keyboard import KeyboardReader
 
 
@@ -36,7 +34,7 @@ class DataRecorderNode(Node):
         self._xbot = cfg['teleop'].get('control_source', 'alicia') == 'xbot'
         self._rec = cfg.get("recorder", {})
         if self._xbot:
-            self._rec = dict(self._rec, action_space='cartesian_velocity',
+            self._rec = dict(self._rec, action_space='cartesian_pose',
                              record_action_joints=True, record_action_gripper=True)
         self._fps = int(self._rec.get("fps", 50))
         self._min_frames = int(self._rec.get("min_frames_per_episode", 2))
@@ -60,6 +58,8 @@ class DataRecorderNode(Node):
         self._data_timeout = float(self._rec.get('data_timeout_s', .5))
 
         self._features, _, _ = self._builder.features()
+        self._action_size = self._features.get('action', {}).get('shape', (0,))[0]
+        self._action_label = action_label(self._rec.get('action_mode', 'abs')) if self._xbot else None
         self._joint_sub = self.create_subscription(JointState, "/joint_states", self._joint_cb, 10)
         self._cmd_sub = self.create_subscription(Float64MultiArray, "/teleop/commands", self._cmd_cb, 10)
         self._enable_pub = self.create_publisher(Bool, "/teleop/enable", 10)
@@ -106,7 +106,7 @@ class DataRecorderNode(Node):
     def _xbot_data_ready(self):
         now = time.monotonic()
         return (self._ready and now - self._ready_at < self._data_timeout and
-                self._teleop_cmd is not None and len(self._teleop_cmd) == 7 and
+                self._teleop_cmd is not None and len(self._teleop_cmd) == self._action_size and
                 all(math.isfinite(v) for v in self._teleop_cmd) and
                 now - self._cmd_at < self._data_timeout and
                 now - self._joint_at < self._data_timeout and
@@ -151,6 +151,12 @@ class DataRecorderNode(Node):
 
     def _cmd_cb(self, msg: Float64MultiArray):
         with self._lock:
+            if self._xbot and (len(msg.data) != self._action_size or len(msg.layout.dim) != 1 or
+                              msg.layout.dim[0].label != self._action_label or
+                              not all(math.isfinite(v) for v in msg.data)):
+                self._teleop_cmd = None
+                self._cmd_at = -float('inf')
+                return
             self._teleop_cmd = list(msg.data) if msg.data else None
             self._cmd_at = time.monotonic()
 

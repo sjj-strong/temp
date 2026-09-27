@@ -49,6 +49,14 @@ def load_config(path: str | Path) -> dict[str, Any]:
                 "teleop.controller must be one of "
                 f"{', '.join(_SUPPORTED_TELEOP_CONTROLLERS)}, got '{controller}'"
             )
+    else:
+        if data['teleop'].get('controller', 'cartesian_impedance') != 'cartesian_impedance':
+            raise ConfigError('Xbot 的 teleop.controller 必须为 cartesian_impedance')
+        rec = data.get('recorder', {})
+        if rec.get('action_mode', 'abs') not in ('abs', 'rel'):
+            raise ConfigError('recorder.action_mode 必须为 abs 或 rel')
+        if rec.get('action_space', 'cartesian_pose') != 'cartesian_pose':
+            raise ConfigError('Xbot 的 recorder.action_space 必须为 cartesian_pose，不再记录速度')
 
     ruckig = data.get("ruckig", {})
     if not isinstance(ruckig, dict):

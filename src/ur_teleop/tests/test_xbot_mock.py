@@ -4,6 +4,7 @@ import time
 
 import pytest
 import yaml
+import numpy as np
 
 pytestmark = pytest.mark.skipif(
     os.environ.get('UR_XBOT_MOCK_TEST') != '1' or os.environ.get('ROS_DOMAIN_ID') != '225',
@@ -27,6 +28,7 @@ def test_joy_switch_motion_and_fault(tmp_path):
     config = tmp_path / 'config.yaml'
     config.write_text(yaml.safe_dump(dict(
         base_config='/ros2_ws/src/ur_teleop/config/xbot_teleop.yaml', sim=True,
+        recorder=dict(action_mode='rel'),
         xbot=dict(calibration_file=str(calibration)))))
     rclpy.init(args=['--ros-args', '-p', f'config_file:={config}'])
     node = XbotTeleopNode()
@@ -75,9 +77,10 @@ def test_joy_switch_motion_and_fault(tmp_path):
         run(.3)
         assert any(c[0] > 0 for c in commands)
         axes[1] = 0.
+        desired_gripper = 0. if node.gripper_state > .4 else 1.
         buttons[2] = 1
         run(1.)
-        assert node.gripper_command == 1., (node.gripper_state, node.gripper_pending,
+        assert node.gripper_command == desired_gripper, (node.gripper_state, node.gripper_pending,
                                             node.gripper.server_is_ready(), node.core.enabled)
         buttons[2] = 0
         buttons[3] = 1
@@ -86,9 +89,11 @@ def test_joy_switch_motion_and_fault(tmp_path):
         buttons[3] = 0
         run(.4, send=False)
         assert not node.core.enabled
+        hold_target = node.core.target.copy()
         commands.clear()
         run(.15)
-        assert all(not any(c[:6]) for c in commands)
+        np.testing.assert_array_equal(node.core.target, hold_target)
+        assert all(len(c) == 7 for c in commands)
         buttons[0] = 0
         run(.2)
         buttons[0] = 1
