@@ -8,9 +8,13 @@
 #include <string>
 #include <vector>
 
+#include <Eigen/Geometry>
 #include <controller_manager/controller_manager.hpp>
 #include <hardware_interface/loaned_command_interface.hpp>
 #include <hardware_interface/loaned_state_interface.hpp>
+#include <kdl/chainfksolverpos_recursive.hpp>
+#include <kdl/chainjnttojacsolver.hpp>
+#include <kdl_parser/kdl_parser.hpp>
 #include <rclcpp/executors/single_threaded_executor.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <ros2_control_test_assets/descriptions.hpp>
@@ -22,6 +26,8 @@ namespace
 const char* const kSixAxisUrdf = R"(
 <robot name="six_axis_test">
   <link name="base_link"/>
+  <link name="base"/>
+  <joint name="base_fixed_joint" type="fixed"><parent link="base_link"/><child link="base"/><origin rpy="0 0 3.141592653589793"/></joint>
   <link name="link_1"/>
   <link name="link_2"/>
   <link name="link_3"/>
@@ -151,6 +157,52 @@ TEST(CartesianImpedanceController, RejectsJointOrderDifferentFromKdlChain)
                   .successful);
 
   EXPECT_NE(controller.configure().id(), lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE);
+}
+
+TEST(CartesianImpedanceController, JacobianMatchesBaseFrameTool0FiniteDifference)
+{
+  KDL::Tree tree;
+  ASSERT_TRUE(kdl_parser::treeFromString(kSixAxisUrdf, tree));
+  KDL::Chain chain;
+  ASSERT_TRUE(tree.getChain("base", "tool0", chain));
+  ASSERT_EQ(chain.getNrOfJoints(), 6u);
+  KDL::ChainFkSolverPos_recursive fk(chain);
+  KDL::ChainJntToJacSolver jacobian_solver(chain);
+  KDL::JntArray q(6);
+  const std::array<double, 6> angles{ 0.3, -1.0, 1.2, -0.4, 0.7, -0.2 };
+  for (unsigned int index = 0; index < 6; ++index) {
+    q(index) = angles[index];
+  }
+  KDL::Jacobian jacobian(6);
+  ASSERT_EQ(jacobian_solver.JntToJac(q, jacobian), 0);
+  constexpr double step = 1e-7;
+  for (unsigned int column = 0; column < 6; ++column) {
+    KDL::JntArray q_plus = q;
+    KDL::JntArray q_minus = q;
+    q_plus(column) += step;
+    q_minus(column) -= step;
+    KDL::Frame plus;
+    KDL::Frame minus;
+    ASSERT_EQ(fk.JntToCart(q_plus, plus), 0);
+    ASSERT_EQ(fk.JntToCart(q_minus, minus), 0);
+    const Eigen::Vector3d linear((plus.p.x() - minus.p.x()) / (2 * step),
+                                 (plus.p.y() - minus.p.y()) / (2 * step),
+                                 (plus.p.z() - minus.p.z()) / (2 * step));
+    Eigen::Matrix3d rotation_plus;
+    Eigen::Matrix3d rotation_minus;
+    for (int row = 0; row < 3; ++row) {
+      for (int col = 0; col < 3; ++col) {
+        rotation_plus(row, col) = plus.M(row, col);
+        rotation_minus(row, col) = minus.M(row, col);
+      }
+    }
+    const Eigen::AngleAxisd delta(rotation_plus * rotation_minus.transpose());
+    const Eigen::Vector3d angular = delta.axis() * delta.angle() / (2 * step);
+    for (int row = 0; row < 3; ++row) {
+      EXPECT_NEAR(jacobian(row, column), linear(row), 1e-7);
+      EXPECT_NEAR(jacobian(row + 3, column), angular(row), 1e-7);
+    }
+  }
 }
 
 TEST(CartesianImpedanceController, UpdateWritesEffortFromCartesianDamping)
