@@ -35,16 +35,17 @@ def test_xbot_launch_skips_alicia_and_ruckig():
 
 def test_controller_and_recording_use_tool0():
     from ur_teleop.config import load_config
-    path = Path(__file__).resolve().parents[1] / 'config'
-    cfg = load_config(path / 'xbot_teleop.yaml')
+    teleop_path = Path(__file__).resolve().parents[1]
+    cfg = load_config(teleop_path / 'config/xbot_teleop.yaml')
     assert cfg['recorder']['ee_pose_parent_frame'] == 'base_link'
     assert cfg['recorder']['ee_pose_child_frame'] == 'tool0'
-    for name in ('xbot_cartesian_sim.yaml', 'xbot_cartesian_type.yaml'):
-        data = yaml.safe_load((path / name).read_text())
-        params = next(value['ros__parameters'] for key, value in data.items()
-                      if key.endswith('cartesian_impedance_controller'))
-        assert params['base_frame'] == 'base_link'
-        assert params['tip_frame'] == 'tool0'
+    controller_config = (teleop_path.parent / 'cartesian_impedance_controller/config'
+                         / 'ur10e_xbot_sim_cartesian_impedance.yaml')
+    data = yaml.safe_load(controller_config.read_text())
+    params = next(value['ros__parameters'] for key, value in data.items()
+                  if key.endswith('cartesian_impedance_controller'))
+    assert params['base_frame'] == 'base_link'
+    assert params['tip_frame'] == 'tool0'
 
 
 def test_feedback_queries_tool0():

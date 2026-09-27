@@ -15,8 +15,6 @@ setup(
             "config/opencv_cameras.yaml",
             "config/xbot_teleop.yaml",
             "config/xbot_mock_controllers.yaml",
-            "config/xbot_cartesian_sim.yaml",
-            "config/xbot_cartesian_type.yaml",
         ]),
         ("share/" + package_name + "/config/rviz", [
             "config/rviz/ur_teleop.rviz",

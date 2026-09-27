@@ -45,7 +45,9 @@ def _build_cell(context):
                      "robotiq_gripper_controller"):
             actions.append(Node(package="controller_manager", executable="spawner",
                                 arguments=[name, "-c", "/controller_manager"]))
-        cart_config = os.path.join(pkg_share, "config", "xbot_cartesian_sim.yaml")
+        cart_config = os.path.join(
+            cart_share, "config", "ur10e_xbot_sim_cartesian_impedance.yaml",
+        )
         if cfg.get("cell", {}).get("launch_rviz", False):
             actions.append(Node(package="rviz2", executable="rviz2",
                                 arguments=["-d", os.path.join(pkg_share, "config", "rviz",
@@ -77,7 +79,6 @@ def _build_cell(context):
         package="controller_manager", executable="spawner",
         arguments=["cartesian_impedance_controller", "-c", "/controller_manager",
                    "--param-file", cart_config,
-                   "--param-file", os.path.join(pkg_share, "config", "xbot_cartesian_type.yaml"),
                    "--inactive"],
     ))
     return actions

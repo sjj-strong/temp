@@ -2,6 +2,10 @@
 
 使用 `cartesian_impedance_controller` 控制 `tool0`（TCP），复用 `ur10e_robotiq_ft_description` 的组合 URDF。Xbot 不启动 Alicia 或 Ruckig。
 
+Xbot 不定义阻抗刚度、阻尼、wrench、力矩或速度限制。`xbot_cell.launch.py` 在仿真时加载
+`cartesian_impedance_controller/config/ur10e_xbot_sim_cartesian_impedance.yaml`，在真机时加载
+`cartesian_impedance_controller/config/ur10e_ft300_cartesian_impedance.yaml`；控制参数只在控制器包内维护。
+
 ## 配置与校准
 
 配置入口为 `config/xbot_teleop.yaml`，该文件是完整的 XBot 独立配置，**不继承** `ur_teleop.yaml`。
