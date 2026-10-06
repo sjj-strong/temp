@@ -101,7 +101,7 @@ class ButtonEvents:
 
 
 class PoseIntegrator:
-    """按住 RB 时将手柄增量连续积分到锁存目标位姿；类名保留兼容。"""
+    """按住 RB 时从每周期实测位姿生成目标；类名保留兼容。"""
     def __init__(self, cfg):
         self.cfg = cfg
         self.frame = 'base'
@@ -186,17 +186,16 @@ class PoseIntegrator:
         # 摇杆直接映射位姿增量；dt 仅用于上方的周期卡顿保护。
         delta_p = v * self.cfg['max_translation_delta_m'] * scale / max(1., np.linalg.norm(v))
         delta_r = w * self.cfg['max_rotation_delta_rad'] * scale / max(1., np.linalg.norm(w))
-        # 回中不覆盖已锁存的目标；仅 RB 配合非零运动输入更新位姿。
+        # 回中或松开 RB 时保持末次目标；有运动输入时使用本周期实测位姿。
         if not np.any(delta_p) and not np.any(delta_r):
             return action
         if self.frame == 'tcp':
             delta_p = rotate(np.asarray(actual[3:]), delta_p)
             delta_r = rotate(np.asarray(actual[3:]), delta_r)
-        if np.any(delta_p):
-            self.translation_axes = np.abs(delta_p) > 1e-12
-        # 所有增量已在 base 中。以已锁存目标为基准连续积分，按住手柄时
-        # 每个控制周期都会推进目标，而不是反复发布“实测位姿 + 单步偏移”。
-        candidate = np.array(self.target, dtype=float)
+        self.translation_axes = np.abs(delta_p) > 1e-12
+        # 所有增量已在 base 中。每个控制周期以最新实测 tool0 位姿为基准，
+        # 不沿用上一个目标；只有机器人实际跟随时，目标才随之推进。
+        candidate = np.array(actual, dtype=float)
         candidate[:3] += delta_p
         candidate[3:] = multiply(delta_quaternion(delta_r), candidate[3:])
         candidate[3:] /= np.linalg.norm(candidate[3:])

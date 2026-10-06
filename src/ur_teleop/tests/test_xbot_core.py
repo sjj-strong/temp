@@ -72,7 +72,7 @@ def test_large_configured_delta_respects_target_lead_limit():
     assert c.enabled
 
 
-def test_fixed_feedback_continuously_accumulates_target_while_input_held():
+def test_fixed_feedback_does_not_accumulate_target_while_input_held():
     c = PoseIntegrator(CFG)
     actual = np.array([.2, .1, .3, 0., 0., 0., 1.])
     a, b = inputs()
@@ -82,11 +82,11 @@ def test_fixed_feedback_continuously_accumulates_target_while_input_held():
     for _ in range(100):
         c.step(actual, a, b, .02, True)
         assert c.enabled
-    np.testing.assert_allclose(c.target[:3], [.22, .1, .3])
-    np.testing.assert_allclose(c.target[3:], [np.sin(.05), 0., 0., np.cos(.05)])
+    np.testing.assert_allclose(c.target[:3], [.2004, .1, .3])
+    np.testing.assert_allclose(c.target[3:], [np.sin(.001), 0., 0., np.cos(.001)])
 
 
-def test_target_continues_after_actual_catches_up():
+def test_target_follows_current_feedback_with_one_increment():
     c = PoseIntegrator(CFG)
     actual = np.array([0., 0., 0., 0., 0., 0., 1.])
     a, b = inputs()
@@ -94,14 +94,14 @@ def test_target_continues_after_actual_catches_up():
     b['rb'], a['ly'] = True, 1.
     for _ in range(100):
         c.step(actual, a, b, .02, True)
-    np.testing.assert_allclose(c.target[:3], [.02, 0., 0.])
+    np.testing.assert_allclose(c.target[:3], [.0004, 0., 0.])
     actual[0] = .01
     c.step(actual, a, b, .02, True)
-    np.testing.assert_allclose(c.target[:3], [.0204, 0., 0.])
+    np.testing.assert_allclose(c.target[:3], [.0104, 0., 0.])
 
 
 def test_release_and_center_still_limit_target_after_feedback_moves():
-    c = PoseIntegrator(CFG)
+    c = PoseIntegrator(dict(CFG, max_translation_delta_m=.02, max_rotation_delta_rad=.1))
     actual = np.array([0., 0., 0., 0., 0., 0., 1.])
     a, b = inputs()
     c.step(actual, a, b, .02, True)
@@ -122,7 +122,7 @@ def test_release_and_center_still_limit_target_after_feedback_moves():
 
 
 def test_lead_limit_does_not_copy_uncommanded_axis_drift_into_target():
-    c = PoseIntegrator(CFG)
+    c = PoseIntegrator(dict(CFG, max_translation_delta_m=.02))
     actual = np.array([0., 0., 0., 0., 0., 0., 1.])
     a, b = inputs()
     c.step(actual, a, b, .02, True)
@@ -138,7 +138,7 @@ def test_lead_limit_does_not_copy_uncommanded_axis_drift_into_target():
 
 
 @pytest.mark.parametrize('frame', ['base', 'tcp'])
-def test_each_step_accumulates_from_previous_target(frame):
+def test_each_step_uses_latest_actual_pose(frame):
     c = PoseIntegrator(dict(CFG, max_target_position_error_m=.5,
                             max_target_orientation_error_rad=np.pi))
     c.frame = frame
@@ -147,17 +147,17 @@ def test_each_step_accumulates_from_previous_target(frame):
     b['rb'] = True
     a['ly'] = a['ry'] = 1.
     c.step(np.array([0., 0., 0., 0., 0., 0., 1.]), a, b, .02, True)
-    # 新反馈与旧目标不同：目标仍必须从旧目标连续累加，不能被实测位姿重置。
+    # 新反馈与旧目标不同：本次目标必须以新的实测位姿为基准。
     h = np.sqrt(.5)
     actual = np.array([.1, .2, .3, 0., 0., h, h])
     c.step(actual, a, b, .04, True)
-    expected_position = [.0008, 0., 0.] if frame == 'base' else [.0004, .0004, 0.]
+    expected_position = [.1004, .2, .3] if frame == 'base' else [.1, .2004, .3]
     if frame == 'base':
-        expected_orientation = [np.sin(.002), 0., 0., np.cos(.002)]
+        expected_orientation = multiply(
+            delta_quaternion(np.array([.002, 0., 0.])), actual[3:])
     else:
-        first = np.array([np.sin(.001), 0., 0., np.cos(.001)])
-        second = multiply(delta_quaternion(np.array([0., .002, 0.])), first)
-        expected_orientation = second
+        expected_orientation = multiply(
+            delta_quaternion(np.array([0., .002, 0.])), actual[3:])
     np.testing.assert_allclose(c.target[:3], expected_position)
     np.testing.assert_allclose(c.target[3:], expected_orientation, atol=1e-12)
     assert c.enabled
@@ -196,7 +196,7 @@ def test_release_and_repress_without_input_keep_target():
     np.testing.assert_array_equal(c.target, target)
     a['ly'] = 1.
     c.step(actual, a, b, .02, True)
-    np.testing.assert_allclose(c.target[:3], [.0008, 0., 0.])
+    np.testing.assert_allclose(c.target[:3], [.0004, .01, 0.])
     c.step(actual, a, b, .02, False)
     np.testing.assert_array_equal(c.target, actual)
 

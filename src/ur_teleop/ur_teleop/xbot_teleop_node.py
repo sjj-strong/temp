@@ -1,4 +1,4 @@
-"""Xbot 遥操作：每周期将手柄位姿增量累加到基座坐标系中的锁存目标。"""
+"""Xbot 遥操作：每周期以实测 tool0 位姿和最新手柄输入生成目标。"""
 
 import time
 from pathlib import Path
