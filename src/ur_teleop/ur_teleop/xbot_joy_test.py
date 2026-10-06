@@ -19,7 +19,7 @@ from sensor_msgs.msg import Joy
 # 支持直接用源码路径运行，无需先构建工作区。
 if __package__ in (None, ''):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from ur_teleop.xbot_core import JoyMapping
+from ur_teleop.xbot_core import JoyMapping, dominant_axis
 
 
 TOPIC = '/xbot_joy_test/joy'
@@ -47,64 +47,161 @@ def parse_args(args=None):
 
 
 class JoyDiagnostics:
-    """记录全部原始按键边沿，即使日志定时器尚未触发也不会漏掉短按。"""
+    """按有效标定项独立解析输入，只预览动作，不依赖机器人反馈。"""
 
-    def __init__(self, mapping=None, timeout=0.25):
+    def __init__(self, mapping=None, timeout=0.25, config=None, gripper_enabled=True):
         self.mapping = mapping
         self.timeout = timeout
-        self.latest = None
+        self.config = config or {}
+        self.gripper_enabled = gripper_enabled
         self.received_at = None
-        self.count = 0
-        self.previous = None
+        self.previous = {}
+        self.layout = None
+        self.unavailable = None
+        self.frame = 'base'
+        self.view_since = None
+        self.view_fired = False
+        self.moving = False
+        self.axes = {}
+        self.buttons = {}
 
-    def button_label(self, index):
-        if self.mapping is not None:
-            for name, number in self.mapping.cfg['buttons'].items():
-                if number == index:
-                    return f'{name.upper()}（{FUNCTIONS.get(name, "自定义功能")}）'
-        return '未映射按键'
+    def decode(self, msg):
+        """总数量不同不影响有效项；越界或非法输入只使对应动作不可用。"""
+        axes, buttons, unavailable = {}, {}, []
+        if self.mapping is None:
+            return axes, buttons, ['未加载有效标定，无法识别动作']
+        cfg = self.mapping.cfg
+        for name, index in cfg['buttons'].items():
+            if 0 <= index < len(msg.buttons):
+                buttons[name] = bool(msg.buttons[index])
+            else:
+                action = FUNCTIONS.get(name, name.upper())
+                unavailable.append(f'{action}（{name.upper()}）不可用：映射超出当前设备范围')
+        for name, spec in cfg['axes'].items():
+            if spec.get('kind') == 'buttons':
+                if not all(0 <= spec[key] < len(msg.buttons) for key in ('positive', 'negative')):
+                    unavailable.append(f'{name.upper()} 运动输入不可用：映射超出当前设备范围')
+                    continue
+                value = (float(bool(msg.buttons[spec['positive']]))
+                         - float(bool(msg.buttons[spec['negative']])))
+            else:
+                index = spec['index']
+                if not 0 <= index < len(msg.axes):
+                    unavailable.append(f'{name.upper()} 运动输入不可用：映射超出当前设备范围')
+                    continue
+                raw = msg.axes[index]
+                if not math.isfinite(raw) or abs(raw) > 1.01:
+                    unavailable.append(f'{name.upper()} 运动输入不可用：输入值非法')
+                    continue
+                value = (raw - spec['rest']) / (spec['positive'] - spec['rest'])
+            value = min(1.0, max(0.0 if name in ('lt', 'rt') else -1.0, value))
+            deadzone = self.mapping.deadzone
+            axes[name] = math.copysign(max(0.0, abs(value) - deadzone) / (1.0 - deadzone), value)
+        return axes, buttons, unavailable
+
+    def reset_input(self):
+        """断连后清除按键和长按计时，保留测试参考系选择。"""
+        self.previous = {}
+        self.view_since = None
+        self.view_fired = False
+        self.moving = False
+        self.axes = {}
+        self.buttons = {}
+
+    def movement(self):
+        lx, ly = self.axes.get('lx', 0.0), self.axes.get('ly', 0.0)
+        if not self.config.get('left_stick_xy_free', False):
+            lx, ly = dominant_axis(lx, ly)
+        rx, ry = dominant_axis(self.axes.get('rx', 0.0), self.axes.get('ry', 0.0))
+        translation = (ly, lx, self.axes.get('rt', 0.0) - self.axes.get('lt', 0.0))
+        rotation = (ry, rx, self.axes.get('yaw', 0.0))
+        scale = self.config.get('precision_scale', 0.25) if self.buttons.get('lb') else 1.0
+        # 与遥操作一致：先限制向量模长，再应用精细模式比例。
+        vectors = []
+        for vector in (translation, rotation):
+            norm = max(1.0, math.sqrt(sum(value * value for value in vector)))
+            vectors.append(tuple(value / norm * scale for value in vector))
+        return tuple(vectors)
+
+    def hold_event(self, now):
+        if (self.view_since is not None and not self.view_fired
+                and now - self.view_since >= self.config.get('view_hold_s', 0.5)):
+            self.view_fired = True
+            return '动作预览：结束录制（View 长按达到阈值，action=finalize）'
+        return None
 
     def receive(self, msg, now):
-        # 断连或布局变化后重新建立基线，不把旧状态当作当前状态。
-        previous = self.previous
-        if self.received_at is not None and now - self.received_at > self.timeout:
-            previous = None
         events = []
-        if previous is None or len(previous) != len(msg.buttons):
-            previous = [0] * len(msg.buttons)
-            events.append(f'收到输入：轴数={len(msg.axes)}，按键数={len(msg.buttons)}')
-        for index, (before, after) in enumerate(zip(previous, msg.buttons)):
-            if bool(before) != bool(after):
-                events.append(f'按键[{index}] {self.button_label(index)} '
-                              f'{"按下" if after else "松开"}')
-        self.previous = list(msg.buttons)
-        self.latest = msg
+        layout = (len(msg.axes), len(msg.buttons))
+        reconnect = self.received_at is not None and now - self.received_at > self.timeout
+        if self.received_at is None or reconnect or layout != self.layout:
+            self.reset_input()
+            events.append('手柄输入已恢复' if reconnect else '手柄输入已连接')
+        self.axes, self.buttons, unavailable = self.decode(msg)
+        if tuple(unavailable) != self.unavailable:
+            events.extend(unavailable)
+            self.unavailable = tuple(unavailable)
+        for name, pressed in self.buttons.items():
+            if pressed == self.previous.get(name, False):
+                continue
+            action = FUNCTIONS.get(name, '自定义功能')
+            detail = ''
+            if name == 'x' and pressed:
+                self.frame = 'tcp' if self.frame == 'base' else 'base'
+                detail = f'，当前参考系={self.frame.upper()}'
+            elif name == 'a' and pressed:
+                reasons = []
+                if not self.gripper_enabled:
+                    reasons.append('配置已关闭夹爪')
+                if not self.buttons.get('rb'):
+                    reasons.append('RB 未使能')
+                detail = '，不可执行：' + '、'.join(reasons) if reasons else '，请求切换夹爪'
+            elif name == 'view':
+                self.view_since = now if pressed else None
+                self.view_fired = False
+                if pressed:
+                    detail = f'，等待持续按住 {self.config.get("view_hold_s", 0.5):g} 秒'
+            event_id = {'menu': 'start', 'y': 'save', 'b': 'discard'}.get(name)
+            if pressed and event_id:
+                detail += f'，action={event_id}'
+            events.append(f'动作预览：{action}（{name.upper()}）{"按下" if pressed else "松开"}{detail}')
+        moving = any(value != 0.0 for vector in self.movement() for value in vector)
+        if self.moving and not moving:
+            events.append('动作预览：运动输入归零')
+        self.moving = moving
+        self.previous = dict(self.buttons)
+        self.layout = layout
         self.received_at = now
-        self.count += 1
+        hold = self.hold_event(now)
+        if hold:
+            events.append(hold)
         return events
 
     def snapshot(self, now, timeout):
         if self.received_at is None:
             return '等待手柄输入：检查连接、设备编号和手柄驱动日志'
-        age = now - self.received_at
-        if age > timeout:
-            self.previous = None
-            return f'输入超时：{age:.2f} 秒未收到 Joy，等待重新连接'
-        msg = self.latest
-        raw_axes = ','.join(f'{i}:{value:+.3f}' for i, value in enumerate(msg.axes))
-        raw_buttons = ','.join(f'{i}:{value}' for i, value in enumerate(msg.buttons))
-        mapped = '未加载标定，仅显示原始输入'
-        if self.mapping is not None:
-            try:
-                axes, buttons = self.mapping.decode(msg.axes, msg.buttons)
-                mapped = '归一化轴[' + ','.join(
-                    f'{name.upper()}:{value:+.3f}' for name, value in axes.items()) + '] '
-                mapped += '功能键[' + ','.join(
-                    f'{name.upper()}:{int(value)}' for name, value in buttons.items()) + ']'
-            except ValueError as exc:
-                mapped = f'标定不匹配：{exc}；原始输入仍可测试'
-        return (f'输入正常 消息数={self.count} 数据龄={age:.3f}s '
-                f'原始轴[{raw_axes}] 原始按键[{raw_buttons}] {mapped}')
+        if now - self.received_at > timeout:
+            self.reset_input()
+            return '输入超时：运动预览已停止，等待重新连接'
+        if self.mapping is None:
+            return '无法预览动作：请检查指定标定文件'
+        status = ('运动已使能' if self.buttons.get('rb') else '运动未使能（RB 未按住）')
+        mode = '精细模式' if self.buttons.get('lb') else '普通模式'
+        movements = []
+        translation, rotation = self.movement()
+        for kind, vector in (('平移', translation), ('旋转', rotation)):
+            for axis, value in zip('XYZ', vector):
+                if value != 0.0:
+                    direction = f'{"+" if value > 0 else "-"}{axis}'
+                    prefix = '绕 ' if kind == '旋转' else ''
+                    movements.append(f'{prefix}{direction} {kind} 强度={abs(value):.3f}')
+        pressed = '、'.join(FUNCTIONS.get(name, name.upper())
+                           for name, value in self.buttons.items() if value)
+        result = (f'动作预览：{status}；{mode}；参考系={self.frame.upper()}；'
+                  + ('，'.join(movements) if movements else '运动输入归零')
+                  + f'；当前按住={pressed or "无"}')
+        hold = self.hold_event(now)
+        return result + ('；' + hold if hold else '')
 
 
 class JoyTestNode(Node):
@@ -127,7 +224,8 @@ def main(args=None):
     options = parse_args(args)
     config_path = Path(options.config).expanduser().resolve()
     with config_path.open(encoding='utf-8') as stream:
-        cfg = yaml.safe_load(stream)['xbot']
+        config = yaml.safe_load(stream)
+        cfg = config['xbot']
     device_id = options.device_id if options.device_id is not None else int(cfg.get('device_id', 0))
     timeout = float(cfg.get('joy_timeout_s', 0.25))
     if device_id < 0 or not math.isfinite(timeout) or timeout <= 0:
@@ -140,16 +238,18 @@ def main(args=None):
         with calibration.open(encoding='utf-8') as stream:
             mapping = JoyMapping(yaml.safe_load(stream), float(cfg.get('deadzone', 0.08)))
     except (OSError, KeyError, TypeError, ValueError, yaml.YAMLError) as exc:
-        print(f'标定加载失败：{exc}；继续测试全部原始输入。', flush=True)
+        print(f'标定加载失败：{exc}；无法识别对应动作，请检查指定标定文件。', flush=True)
 
     driver = None
     node = None
     rclpy.init(args=[])
     try:
-        node = JoyTestNode(JoyDiagnostics(mapping, timeout), options.rate, timeout)
+        diagnostics = JoyDiagnostics(
+            mapping, timeout, cfg, config.get('gripper', {}).get('enabled', True))
+        node = JoyTestNode(diagnostics, options.rate, timeout)
         node.get_logger().info(
             f'独立手柄测试：设备={device_id}，话题={TOPIC}，日志={options.rate:g}Hz；'
-            '功能名仅作提示，按键不会执行机器人或录制动作。Ctrl+C 退出。')
+            '只显示动作预览，不执行机器人或录制动作。Ctrl+C 退出。')
         if not options.no_start_joy:
             executable = Path(get_package_prefix('joy')) / 'lib/joy/joy_node'
             driver = subprocess.Popen([
