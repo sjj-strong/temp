@@ -124,7 +124,7 @@ def test_diagnostic_shows_comparable_poses_and_is_rate_limited():
     assert len(messages) == 1
     assert '当前=xyz=(0.1000,0.2000,0.3000)' in messages[0]
     assert '目标=xyz=(0.1200,0.2000,0.3000)' in messages[0]
-    assert '超前=20.0mm/0.000rad' in messages[0]
+    assert '位姿差=20.0mm/0.000rad' in messages[0]
     assert '目标已发布=1' in messages[0]
     node.log_diagnostic(10.1, actual, True, identity)
     assert len(messages) == 1

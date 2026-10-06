@@ -27,6 +27,8 @@ teleop:
 xbot:
   device_id: 0
   calibration_file: /ros2_ws/src/ur_teleop/config/xbot_joy.yaml
+  # 与控制器 spawner 的 --param-file 相同；切换仿真时改为 ur10e_xbot_sim_cartesian_impedance.yaml。
+  controller_config_file: /ros2_ws/src/cartesian_impedance_controller/config/ur10e_ft300_cartesian_impedance.yaml
   control_hz: 50.0
   diagnostic_hz: 5.0
   joy_timeout_s: 0.25

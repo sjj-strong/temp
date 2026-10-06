@@ -33,7 +33,7 @@ class XbotTeleopNode(Node):
             raise ValueError('节点只接受 control_source: xbot')
         self.x = self.cfg['xbot']
         self.diagnostic_hz = float(self.x.get('diagnostic_hz', 5.))
-        self.controller_frame = controller_base_frame(self.cfg['sim'])
+        self.controller_frame = controller_base_frame(self.x['controller_config_file'])
         self.action_mode = self.cfg.get('recorder', {}).get('action_mode', 'abs')
         if any(key in self.x for key in ('max_translation_delta_m', 'max_rotation_delta_rad',
                                          'max_target_position_error_m', 'max_target_orientation_error_rad')):

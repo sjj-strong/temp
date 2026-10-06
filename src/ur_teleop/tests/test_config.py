@@ -1,4 +1,5 @@
 import pytest
+from pathlib import Path
 
 from ur_teleop.config import (
     ConfigError,
@@ -9,6 +10,8 @@ from ur_teleop.config import (
 )
 
 LIMITS = "\n".join(f"    {j}: [-6.283, 6.283]" for j in UR_JOINT_NAMES)
+SIM_CONTROLLER = (Path(__file__).resolve().parents[2] / 'cartesian_impedance_controller/config'
+                  / 'ur10e_xbot_sim_cartesian_impedance.yaml')
 BASE = f"""\
 mode: teleop
 sim: true
@@ -54,7 +57,8 @@ def test_xbot_config_inherits_current_ur_home(tmp_path):
     parent = tmp_path / "ur_teleop.yaml"
     parent.write_text(BASE)
     child = tmp_path / "xbot.yaml"
-    child.write_text("base_config: ur_teleop.yaml\nteleop:\n  control_source: xbot\n")
+    child.write_text("base_config: ur_teleop.yaml\nteleop:\n  control_source: xbot\n"
+                     f"xbot:\n  controller_config_file: {SIM_CONTROLLER}\n")
     cfg = load_config(child)
     assert cfg["home"]["slave"] == [0.0, -1.57, 0.0, -1.57, 0.0, 0.0]
     assert cfg["teleop"]["control_source"] == "xbot"
@@ -69,8 +73,22 @@ home:
   slave: [0, 0, 0, 0, 0, 0]
 teleop:
   control_source: xbot
-"""))
+""" + f"xbot:\n  controller_config_file: {SIM_CONTROLLER}\n"))
     assert "master" not in cfg["home"]
+
+
+def test_xbot_controller_config_must_exist_and_describe_tool0(tmp_path):
+    config = tmp_path / 'xbot.yaml'
+    config.write_text('mode: teleop\nsim: true\nhome:\n  slave: [0, 0, 0, 0, 0, 0]\n'
+                      'teleop:\n  control_source: xbot\nxbot:\n'
+                      '  controller_config_file: missing.yaml\n')
+    with pytest.raises(ConfigError, match='不存在'):
+        load_config(config)
+    wrong = tmp_path / 'wrong.yaml'
+    wrong.write_text(SIM_CONTROLLER.read_text().replace('tip_frame: tool0', 'tip_frame: other'))
+    config.write_text(config.read_text().replace('missing.yaml', 'wrong.yaml'))
+    with pytest.raises(ConfigError, match='tool0'):
+        load_config(config)
 
 
 def test_config_rejects_inheritance_cycle(tmp_path):

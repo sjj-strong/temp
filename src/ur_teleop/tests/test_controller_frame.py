@@ -1,4 +1,5 @@
 """离线验证控制器基座转换，不连接或控制机械臂。"""
+from pathlib import Path
 import numpy as np
 import pytest
 
@@ -6,8 +7,9 @@ from ur_teleop.controller_frame import controller_base_frame, transform_pose
 
 
 def test_installed_controller_frames():
-    assert controller_base_frame(True) == 'base_link'
-    assert controller_base_frame(False) == 'base'
+    configs = Path(__file__).resolve().parents[2] / 'cartesian_impedance_controller/config'
+    assert controller_base_frame(configs / 'ur10e_xbot_sim_cartesian_impedance.yaml') == 'base_link'
+    assert controller_base_frame(configs / 'ur10e_ft300_cartesian_impedance.yaml') == 'base'
 
 
 def test_full_pose_conversion_and_roundtrip():

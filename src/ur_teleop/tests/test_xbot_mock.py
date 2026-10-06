@@ -29,7 +29,8 @@ def test_joy_switch_motion_and_fault(tmp_path):
     config.write_text(yaml.safe_dump(dict(
         base_config='/ros2_ws/src/ur_teleop/config/xbot_teleop.yaml', sim=True,
         recorder=dict(action_mode='rel'),
-        xbot=dict(calibration_file=str(calibration)))))
+        xbot=dict(calibration_file=str(calibration), controller_config_file=
+                  '/ros2_ws/src/cartesian_impedance_controller/config/ur10e_xbot_sim_cartesian_impedance.yaml'))))
     rclpy.init(args=['--ros-args', '-p', f'config_file:={config}'])
     node = XbotTeleopNode()
     probe = Node('xbot_mock_probe')

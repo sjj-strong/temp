@@ -52,6 +52,21 @@ def load_config(path: str | Path) -> dict[str, Any]:
     else:
         if data['teleop'].get('controller', 'cartesian_impedance') != 'cartesian_impedance':
             raise ConfigError('Xbot 的 teleop.controller 必须为 cartesian_impedance')
+        controller_file = data.get('xbot', {}).get('controller_config_file')
+        if not isinstance(controller_file, str) or not controller_file.strip():
+            raise ConfigError('xbot.controller_config_file 必须是非空文件路径')
+        controller_path = Path(controller_file).expanduser()
+        if not controller_path.is_absolute():
+            controller_path = p.parent / controller_path
+        controller_path = controller_path.resolve()
+        if not controller_path.is_file():
+            raise ConfigError(f'笛卡尔阻抗控制器参数文件不存在: {controller_path}')
+        from ur_teleop.controller_frame import controller_base_frame
+        try:
+            controller_base_frame(controller_path)
+        except (OSError, ValueError, yaml.YAMLError) as exc:
+            raise ConfigError(f'笛卡尔阻抗控制器参数文件无效: {exc}') from exc
+        data['xbot']['controller_config_file'] = str(controller_path)
         if not isinstance(data.get('cell', {}).get('ft300_enabled', True), bool):
             raise ConfigError('cell.ft300_enabled 必须为布尔值')
         if not isinstance(data.get('gripper', {}).get('enabled', True), bool):

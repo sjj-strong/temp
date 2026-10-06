@@ -45,9 +45,12 @@ def test_mock_cell_optional_gripper(tmp_path, gripper):
     pytest.importorskip('launch')
     from launch import LaunchContext
     path = Path(__file__).resolve().parents[1]
+    sim_controller = (path.parent / 'cartesian_impedance_controller/config'
+                      / 'ur10e_xbot_sim_cartesian_impedance.yaml')
     config = tmp_path / 'config.yaml'
     config.write_text(yaml.safe_dump(dict(
         base_config=str(path / 'config/xbot_teleop.yaml'), sim=True,
+        xbot=dict(controller_config_file=str(sim_controller)),
         gripper=dict(enabled=gripper))))
     context = LaunchContext()
     context.launch_configurations['config_file'] = str(config)
@@ -64,9 +67,12 @@ def test_home_enables_rviz_for_mock_and_real(tmp_path, sim):
     from launch import LaunchContext
     from launch_ros.actions import Node
     path = Path(__file__).resolve().parents[1]
+    sim_controller = (path.parent / 'cartesian_impedance_controller/config'
+                      / 'ur10e_xbot_sim_cartesian_impedance.yaml')
     config = tmp_path / 'config.yaml'
     config.write_text(yaml.safe_dump(dict(
-        base_config=str(path / 'config/xbot_teleop.yaml'), sim=sim)))
+        base_config=str(path / 'config/xbot_teleop.yaml'), sim=sim,
+        xbot=dict(controller_config_file=str(sim_controller)) if sim else {})))
     context = LaunchContext()
     context.launch_configurations['config_file'] = str(config)
     module = runpy.run_path(str(path / 'launch/xbot_cell.launch.py'))
@@ -96,13 +102,37 @@ def test_controller_and_recording_use_tool0():
     cfg = load_config(teleop_path / 'config/xbot_teleop.yaml')
     assert cfg['recorder']['ee_pose_parent_frame'] == 'base_link'
     assert cfg['recorder']['ee_pose_child_frame'] == 'tool0'
-    controller_config = (teleop_path.parent / 'cartesian_impedance_controller/config'
-                         / 'ur10e_xbot_sim_cartesian_impedance.yaml')
+    controller_config = Path(cfg['xbot']['controller_config_file'])
     data = yaml.safe_load(controller_config.read_text())
     params = next(value['ros__parameters'] for key, value in data.items()
                   if key.endswith('cartesian_impedance_controller'))
-    assert params['base_frame'] == 'base_link'
+    assert params['base_frame'] == 'base'
     assert params['tip_frame'] == 'tool0'
+
+
+def test_custom_controller_file_reaches_spawner_and_frame_reader(tmp_path):
+    pytest.importorskip('launch')
+    from launch import LaunchContext
+    from ur_teleop.config import load_config
+    from ur_teleop.controller_frame import controller_base_frame
+    path = Path(__file__).resolve().parents[1]
+    source = (path.parent / 'cartesian_impedance_controller/config'
+              / 'ur10e_ft300_cartesian_impedance.yaml')
+    custom = tmp_path / 'custom_controller.yaml'
+    custom.write_text(source.read_text().replace('base_frame: base\n', 'base_frame: base_link\n'))
+    config = tmp_path / 'config.yaml'
+    config.write_text(yaml.safe_dump(dict(base_config=str(path / 'config/xbot_teleop.yaml'),
+                                         sim=True, xbot=dict(controller_config_file=custom.name))))
+    cfg = load_config(config)
+    assert cfg['xbot']['controller_config_file'] == str(custom)
+    assert controller_base_frame(cfg['xbot']['controller_config_file']) == 'base_link'
+    context = LaunchContext()
+    context.launch_configurations['config_file'] = str(config)
+    actions = runpy.run_path(str(path / 'launch/xbot_cell.launch.py'))['_build_cell'](context)
+    arguments = [action._Node__arguments for action in actions
+                 if getattr(action, 'node_executable', None) == 'spawner']
+    impedance = next(args for args in arguments if args[0] == 'cartesian_impedance_controller')
+    assert impedance[impedance.index('--param-file') + 1] == str(custom)
 
 
 def test_feedback_queries_tool0():

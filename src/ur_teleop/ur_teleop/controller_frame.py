@@ -7,16 +7,22 @@ import yaml
 from ur_teleop.xbot_core import multiply, rotate
 
 
-def controller_base_frame(sim):
-    from ament_index_python.packages import get_package_share_directory
-    name = ('ur10e_xbot_sim_cartesian_impedance.yaml' if sim
-            else 'ur10e_ft300_cartesian_impedance.yaml')
-    path = Path(get_package_share_directory('cartesian_impedance_controller')) / 'config' / name
+def controller_base_frame(config_file):
+    """从实际传给控制器的 YAML 读取基座 link，避免另选一份参数文件。"""
+    path = Path(config_file)
     with path.open() as stream:
         data = yaml.safe_load(stream)
-    params = next(value['ros__parameters'] for key, value in data.items()
-                  if key.endswith('cartesian_impedance_controller'))
+    if not isinstance(data, dict):
+        raise ValueError(f'笛卡尔阻抗控制器参数文件格式无效: {path}')
+    matches = [value.get('ros__parameters') for key, value in data.items()
+               if key.endswith('cartesian_impedance_controller') and isinstance(value, dict)]
+    if len(matches) != 1 or not isinstance(matches[0], dict):
+        raise ValueError(f'参数文件缺少唯一的 cartesian_impedance_controller 配置: {path}')
+    params = matches[0]
     prefix = params.get('tf_prefix', '')
+    if (not isinstance(prefix, str) or not isinstance(params.get('base_frame'), str) or
+            not params['base_frame'] or not isinstance(params.get('tip_frame'), str)):
+        raise ValueError(f'控制器基座或末端 link 配置无效: {path}')
     if prefix + params['tip_frame'] != 'tool0':
         raise ValueError('Xbot 控制器末端必须为 tool0')
     return prefix + params['base_frame']

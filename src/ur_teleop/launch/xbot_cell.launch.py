@@ -16,11 +16,11 @@ from ur_teleop.config import load_config
 def _build_cell(context):
     cfg = load_config(LaunchConfiguration("config_file").perform(context))
     pkg_share = get_package_share_directory("ur_teleop")
-    cart_share = get_package_share_directory("cartesian_impedance_controller")
     if cfg["teleop"].get("control_source") != "xbot":
         raise RuntimeError("xbot_cell 只接受 Xbot 配置文件")
     use_gripper = cfg.get("gripper", {}).get("enabled", True)
     use_ft300 = cfg.get("cell", {}).get("ft300_enabled", True)
+    cart_config = cfg["xbot"]["controller_config_file"]
 
     if cfg["sim"]:
         model = os.path.join(
@@ -49,9 +49,6 @@ def _build_cell(context):
         for name in controllers:
             actions.append(Node(package="controller_manager", executable="spawner",
                                 arguments=[name, "-c", "/controller_manager"]))
-        cart_config = os.path.join(
-            cart_share, "config", "ur10e_xbot_sim_cartesian_impedance.yaml",
-        )
         if cfg.get("cell", {}).get("launch_rviz", False):
             actions.append(Node(package="rviz2", executable="rviz2",
                                 arguments=["-d", os.path.join(pkg_share, "config", "rviz",
@@ -85,9 +82,6 @@ def _build_cell(context):
                 arguments=["robotiq_force_torque_sensor_broadcaster", "-c", "/controller_manager",
                            "--param-file", os.path.join(pkg_share, "config", "xbot_ur_controllers.yaml")],
             ))
-        cart_config = os.path.join(
-            cart_share, "config", "ur10e_ft300_cartesian_impedance.yaml",
-        )
 
     actions.append(LogInfo(msg=f"笛卡尔阻抗控制器参数文件（--param-file）：{cart_config}"))
     actions.append(Node(

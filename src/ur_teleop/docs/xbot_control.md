@@ -2,10 +2,12 @@
 
 使用 `cartesian_impedance_controller` 控制 `tool0` 法兰位姿，复用 `ur10e_robotiq_ft_description` 的组合 URDF。夹爪末端 `gripper_tcp` 与 `tool0` 不重合。Xbot 不启动 Alicia 或 Ruckig。
 
-Xbot 不定义阻抗刚度、阻尼、wrench、力矩或速度限制。`xbot_cell.launch.py` 在仿真时加载
-`cartesian_impedance_controller/config/ur10e_xbot_sim_cartesian_impedance.yaml`，在真机时加载
-`cartesian_impedance_controller/config/ur10e_ft300_cartesian_impedance.yaml`；控制参数只在控制器包内维护。
-启动 `home.launch.py` 时，终端还会打印 `笛卡尔阻抗控制器参数文件（--param-file）：<完整路径>`；该路径与控制器 spawner 实际收到的 `--param-file` 相同。Home 阶段控制器虽为 inactive，参数文件已传入。
+Xbot 不在手柄配置中定义阻抗刚度、阻尼、wrench 或力矩；这些参数保存在控制器 YAML 中。`xbot.controller_config_file` 指定该文件，`xbot_cell.launch.py` 将同一完整路径传给 spawner 的 `--param-file`。手柄节点和录制器也从该文件读取控制器参考 link，避免目标与 action 使用另一套坐标系。启动 `home.launch.py` 时终端会打印所传路径；Home 阶段控制器虽为 inactive，参数文件已传入。
+
+```yaml
+xbot:
+  controller_config_file: /ros2_ws/src/cartesian_impedance_controller/config/ur10e_ft300_cartesian_impedance.yaml
+```
 
 ## 配置与校准
 
@@ -37,6 +39,7 @@ ros2 run ur_teleop xbot_calibrate
 ## 仿真启动
 
 在 `config/xbot_teleop.yaml` 中设置 `sim: true`。使用组合模型的 `xbot_effort_mock`，不连接 UR 真机；手柄仍使用真实设备。
+同时将 `xbot.controller_config_file` 指向 `cartesian_impedance_controller/config/ur10e_xbot_sim_cartesian_impedance.yaml`，其 `base_frame` 为 `base_link`。
 
 两个终端均加载上述 ROS 环境，并设置独立的仿真域，避免与真机的 `/robot_description`、`/controller_manager` 混用：
 
@@ -57,6 +60,7 @@ ros2 launch ur_teleop teleop.launch.py config_file:=/ros2_ws/src/ur_teleop/confi
 ## 真机启动
 
 在 `config/xbot_teleop.yaml` 中设置 `sim: false`，核对 `cell.robot_ip` 和 `home.slave`。只有启用对应设备时才需要核对 `cell.gripper_port` 或 `cell.ftdi_id`。
+`xbot.controller_config_file` 可指向 `cartesian_impedance_controller/config/ur10e_ft300_cartesian_impedance.yaml` 或同格式的自定义真机参数文件；默认文件的 `base_frame` 为 `base`。
 
 启动前确认：
 

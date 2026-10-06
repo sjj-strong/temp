@@ -37,7 +37,8 @@ class DataRecorderNode(Node):
         self._rec = cfg.get("recorder", {})
         if self._xbot:
             self._rec = dict(self._rec, action_space='cartesian_pose', record_action_joints=True)
-        self._reference_link = controller_base_frame(cfg['sim']) if self._xbot else None
+        self._reference_link = (controller_base_frame(cfg['xbot']['controller_config_file'])
+                                if self._xbot else None)
         self._tcp_link = self._rec.get('ee_pose_child_frame', 'tool0')
         self._fps = int(self._rec.get("fps", 50))
         self._min_frames = int(self._rec.get("min_frames_per_episode", 2))
