@@ -26,9 +26,11 @@ def generate_launch_description():
     笛卡尔阻抗参数文件 = os.path.join(
         笛卡尔阻抗包目录, "config", "ur10e_ft300_cartesian_impedance.yaml"
     )
+    默认控制器参数文件 = os.path.join(UR驱动包目录, "config", "ur_controllers.yaml")
 
     return LaunchDescription([
         DeclareLaunchArgument("ur_type", default_value="ur10e"),
+        DeclareLaunchArgument("controllers_file", default_value=默认控制器参数文件),
         DeclareLaunchArgument("robot_ip", description="UR 控制柜 IP 地址。"),
         DeclareLaunchArgument(
             "ft_sensor_ftdi_id",
@@ -55,6 +57,7 @@ def generate_launch_description():
             launch_arguments={
                 "ur_type": LaunchConfiguration("ur_type"),
                 "robot_ip": LaunchConfiguration("robot_ip"),
+                "controllers_file": LaunchConfiguration("controllers_file"),
                 "use_mock_hardware": "false",
                 "ft_sensor_use_fake_mode": LaunchConfiguration("ft_sensor_use_fake_mode"),
                 "ft_sensor_ftdi_id": LaunchConfiguration("ft_sensor_ftdi_id"),
