@@ -18,6 +18,78 @@ def parse_args(args=None):
     return parser.parse_args(args)
 
 
+def wait_neutral(sample, reference=None, clock=time.monotonic, timeout=30.):
+    """自动等待 Joy 回中并连续稳定一秒。"""
+    print('松开所有按键/扳机、摇杆回中；稳定一秒后自动继续。', flush=True)
+    deadline = clock() + timeout
+    stable_since = None
+    candidate = None
+    while clock() < deadline:
+        msg = sample()
+        if msg is None:
+            stable_since = None
+            continue
+        if reference is not None and (len(msg.axes) != len(reference.axes) or
+                                      len(msg.buttons) != len(reference.buttons)):
+            raise ValueError('校准期间 Joy 布局发生变化')
+        rest = reference if reference is not None else candidate
+        if rest is not None and (len(msg.axes) != len(rest.axes) or
+                                 len(msg.buttons) != len(rest.buttons)):
+            raise ValueError('校准期间 Joy 布局发生变化')
+        if any(msg.buttons) or (rest is not None and
+                                any(abs(a - b) > .1 for a, b in zip(msg.axes, rest.axes))):
+            stable_since = None
+            candidate = None if reference is None else reference
+            continue
+        if stable_since is None:
+            stable_since = clock()
+            candidate = msg
+        if clock() - stable_since >= 1.:
+            return msg
+    raise TimeoutError('Joy 未连续回中一秒；请松开输入并检查 joy_node')
+
+
+def wait_capture(sample, prompt, baseline, kind, clock=time.monotonic, timeout=30.):
+    """等待指定输入连续保持一秒后记录其编号和端点。"""
+    print(prompt + '，保持一秒', flush=True)
+    deadline = clock() + timeout
+    active = None
+    active_since = None
+    endpoint = None
+    while clock() < deadline:
+        msg = sample()
+        if msg is None:
+            active = active_since = endpoint = None
+            continue
+        if len(msg.axes) != len(baseline.axes) or len(msg.buttons) != len(baseline.buttons):
+            raise ValueError('校准期间 Joy 布局发生变化')
+        detected = None
+        value = None
+        if kind in ('button', 'either'):
+            pressed = [i for i, (a, b) in enumerate(zip(msg.buttons, baseline.buttons)) if a and not b]
+            if len(pressed) == 1:
+                detected = ('button', pressed[0])
+        if detected is None and kind in ('axis', 'either'):
+            changes = [abs(a - b) for a, b in zip(msg.axes, baseline.axes)]
+            if changes and max(changes) > .75:
+                index = changes.index(max(changes))
+                detected = ('axis', index)
+                value = float(msg.axes[index])
+        if detected != active:
+            active = detected
+            active_since = clock() if detected is not None else None
+            endpoint = value
+        elif detected is not None:
+            if value is not None and abs(value - baseline.axes[detected[1]]) > abs(endpoint - baseline.axes[detected[1]]):
+                endpoint = value
+            if clock() - active_since >= 1.:
+                if detected[0] == 'button':
+                    return {'kind': 'button', 'index': detected[1]}
+                return {'kind': 'axis', 'index': detected[1],
+                        'rest': float(baseline.axes[detected[1]]), 'positive': endpoint}
+    raise TimeoutError('未收到持续一秒的清晰输入；请检查 joy_node 后重试')
+
+
 def main():
     args = parse_args()
     output = Path(args.output).expanduser()
@@ -39,59 +111,20 @@ def main():
             return None
         return msg
 
-    def wait_capture(prompt, baseline, kind):
-        print(prompt, flush=True)
-        deadline = time.monotonic() + 30.
-        while time.monotonic() < deadline:
-            msg = sample()
-            if msg is None:
-                continue
-            if len(msg.axes) != len(baseline.axes) or len(msg.buttons) != len(baseline.buttons):
-                raise ValueError('校准期间 Joy 布局发生变化')
-            if kind in ('button', 'either'):
-                pressed = [i for i, (a, b) in enumerate(zip(msg.buttons, baseline.buttons)) if a and not b]
-                if len(pressed) == 1:
-                    return {'kind': 'button', 'index': pressed[0]}
-            if kind in ('axis', 'either'):
-                changes = [abs(a-b) for a, b in zip(msg.axes, baseline.axes)]
-                if changes and max(changes) > .75:
-                    index = changes.index(max(changes))
-                    # 首次跨阈值不是端点，继续采样以记录推到极限后的最大行程。
-                    endpoint = float(msg.axes[index])
-                    end = time.monotonic() + 1.
-                    while time.monotonic() < end:
-                        peak = sample()
-                        if peak is not None and len(peak.axes) == len(baseline.axes):
-                            value = float(peak.axes[index])
-                            if abs(value - baseline.axes[index]) > abs(endpoint - baseline.axes[index]):
-                                endpoint = value
-                    return {'kind': 'axis', 'index': index,
-                            'rest': float(baseline.axes[index]), 'positive': endpoint}
-        raise TimeoutError('未收到清晰输入；请检查 joy_node 后重试')
-
-    def neutral():
-        input('松开所有按键/扳机、摇杆回中，按 Enter 后保持一秒：')
-        deadline = time.monotonic() + 1.
-        msg = None
-        while time.monotonic() < deadline:
-            msg = sample()
-        if msg is None or any(msg.buttons):
-            raise ValueError('无新鲜 Joy 或仍有按键按下')
-        return msg
-
     try:
         print('请先单独运行 ros2 run joy joy_node --ros-args -p autorepeat_rate:=50.0')
-        base = neutral()
+        base = wait_neutral(sample)
         cfg = dict(version=1, axis_count=len(base.axes), button_count=len(base.buttons), buttons={}, axes={})
         for name in BUTTONS:
-            cfg['buttons'][name] = wait_capture(f'按 {name.upper()}', neutral(), 'button')['index']
+            cfg['buttons'][name] = wait_capture(sample, f'按 {name.upper()}',
+                                                wait_neutral(sample, base), 'button')['index']
         for name, hint in [('ly', '左摇杆向上（+X）'), ('lx', '左摇杆向左（+Y）'),
                            ('ry', '右摇杆向上（绕 +X）'), ('rx', '右摇杆向左（绕 +Y）'),
                            ('lt', 'LT 扳机压到底（-Z）'), ('rt', 'RT 扳机压到底（+Z）')]:
-            cfg['axes'][name] = wait_capture(hint + '并保持到捕获', neutral(), 'axis')
-        positive = wait_capture('十字键向左（绕 +Z）并保持', neutral(), 'either')
+            cfg['axes'][name] = wait_capture(sample, hint, wait_neutral(sample, base), 'axis')
+        positive = wait_capture(sample, '十字键向左（绕 +Z）', wait_neutral(sample, base), 'either')
         if positive['kind'] == 'button':
-            negative = wait_capture('十字键向右（绕 -Z）并保持', neutral(), 'button')
+            negative = wait_capture(sample, '十字键向右（绕 -Z）', wait_neutral(sample, base), 'button')
             cfg['axes']['yaw'] = dict(kind='buttons', positive=positive['index'], negative=negative['index'])
         else:
             cfg['axes']['yaw'] = positive
