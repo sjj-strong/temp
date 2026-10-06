@@ -65,6 +65,39 @@ def test_uses_current_actual_and_holds_when_centered():
     assert core.target[0] == pytest.approx(.12)
 
 
+def test_moving_y_keeps_uncommanded_z_and_orientation_target():
+    core, actual, axes, buttons = armed()
+    axes['lx'] = 1.
+    core.step(actual, axes, buttons, .02, True)
+    assert core.target[1] == pytest.approx(.02)
+    actual[:3] = [.03, .1, -.04]
+    actual[3:] = [0., 0., np.sqrt(.5), np.sqrt(.5)]
+    core.step(actual, axes, buttons, .02, True)
+    np.testing.assert_allclose(core.target[:3], [0., .12, 0.])
+    np.testing.assert_allclose(core.target[3:], [0., 0., 0., 1.])
+
+
+def test_moving_z_keeps_uncommanded_y_target():
+    core, actual, axes, buttons = armed()
+    axes['lx'] = 1.
+    core.step(actual, axes, buttons, .02, True)
+    axes['lx'] = 0.
+    axes['rt'] = 1.
+    core.step(actual, axes, buttons, .02, True)
+    actual[:3] = [.03, .08, .1]
+    core.step(actual, axes, buttons, .02, True)
+    np.testing.assert_allclose(core.target[:3], [0., .02, .12])
+
+
+def test_rotation_only_keeps_position_target():
+    core, actual, axes, buttons = armed()
+    axes['ry'] = 1.
+    actual[:3] = [.03, .08, -.04]
+    core.step(actual, axes, buttons, .02, True)
+    np.testing.assert_allclose(core.target[:3], [0., 0., 0.])
+    assert core.target[3] != pytest.approx(0.)
+
+
 def test_fault_requires_rb_release():
     core, actual, axes, buttons = armed()
     axes['ly'] = 1.

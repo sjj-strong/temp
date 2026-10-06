@@ -104,7 +104,9 @@ Home 阶段使用轨迹控制器，笛卡尔阻抗控制器保持 inactive。tel
 
 base 模式沿 `base_link` 轴运动，TCP 模式沿实测 `tool0` 局部轴运动；平移和旋转都遵循所选模式。X 键切换当帧不叠加增量。左、右摇杆默认分别保留幅值较大的轴；`left_stick_xy_free: true` 只取消左摇杆的主轴过滤。死区后的单轴满量程为 ±1，平移和旋转命令各自按向量模长归一化；LB 再将命令乘 `precision_scale`。
 
-有运动输入时，每周期以最新实测 TCP 位姿生成目标，`Δp = action_p × max_linear_speed_m_s / control_hz`，`Δr = action_r × max_angular_speed_rad_s / control_hz`。默认 50 Hz、1.0 m/s 和 5.0 rad/s 对应满量程单周期 20 mm 和 0.1 rad。实际计时只用于识别超过 0.1 秒的卡顿，不放大该周期增量。目标不从上一个目标累加；摇杆回中或松开 RB 时保持末次目标。
+有运动输入时，`Δp = action_p × max_linear_speed_m_s / control_hz`，`Δr = action_r × max_angular_speed_rad_s / control_hz`。默认 50 Hz、1.0 m/s 和 5.0 rad/s 对应满量程单周期 20 mm 和 0.1 rad。实际计时只用于识别超过 0.1 秒的卡顿，不放大该周期增量。
+
+目标按自由度更新：有平移输入的轴取“本周期实测 TCP 位置 + 该轴增量”，没有平移输入的轴保持上次发布的目标值；有旋转输入时，以本周期实测姿态加旋转增量，只有平移输入时则保持上次目标姿态。TCP 模式先把局部增量旋转到 `base_link`，再更新其在 `base_link` 中产生非零增量的轴。例如 base 模式只推 Y 时，目标 Y 随实测 Y 推进，而目标 Z 保持原值；实测 Z 偏移不会被下一条目标吸收。被操作轴仍不从上次目标累加。摇杆回中或松开 RB 时保持完整末次目标；反馈或控制器故障时的原有目标重置与重新按 RB 门控继续生效。
 
 手柄节点接管阻抗控制器后，首条 `/cartesian_impedance_controller/current_pose` 锁定本次运行的工作空间原点。目标在控制器参考坐标系按 `workspace_half_extent_m` 对 XYZ 裁剪，默认相对原点各 ±0.20 m；本次节点运行期间不重新锁定。此处只限制目标位置，不限制姿态；控制器内部仍有位姿误差、wrench 和关节力矩限幅。旧的每周期固定增量与目标超前参数已停用。
 

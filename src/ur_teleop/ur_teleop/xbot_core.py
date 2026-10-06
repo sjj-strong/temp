@@ -106,7 +106,7 @@ class ButtonEvents:
 
 
 class PoseIntegrator:
-    """按住 RB 时从每周期实测位姿生成目标；类名保留兼容。"""
+    """操作轴参考本周期实测位姿，未操作轴保持末次目标；类名保留兼容。"""
     def __init__(self, cfg):
         self.cfg = cfg
         self.frame = 'base'
@@ -155,18 +155,21 @@ class PoseIntegrator:
         action_r = w / max(1., np.linalg.norm(w)) * scale
         delta_p = action_p * self.cfg['max_linear_speed_m_s'] * dt
         delta_r = action_r * self.cfg['max_angular_speed_rad_s'] * dt
-        # 回中或松开 RB 时保持末次目标；有运动输入时使用本周期实测位姿。
+        # 回中或松开 RB 时保持末次目标。
         if not np.any(delta_p) and not np.any(delta_r):
             return action
         if self.frame == 'tcp':
             delta_p = rotate(np.asarray(actual[3:]), delta_p)
             delta_r = rotate(np.asarray(actual[3:]), delta_r)
-        # 所有增量已在 base 中。每个控制周期以最新实测 tool0 位姿为基准，
-        # 不沿用上一个目标；只有机器人实际跟随时，目标才随之推进。
-        candidate = np.array(actual, dtype=float)
-        candidate[:3] += delta_p
-        candidate[3:] = multiply(delta_quaternion(delta_r), candidate[3:])
-        candidate[3:] /= np.linalg.norm(candidate[3:])
+        # 增量已在 base_link 中。只有被操作的平移轴使用实测值加增量；
+        # 未操作轴和未操作的姿态保留末次目标，避免实测漂移被写回目标。
+        candidate = self.target.copy()
+        translation_active = np.abs(delta_p) > 1e-12
+        candidate[:3] = np.where(translation_active, np.asarray(actual[:3]) + delta_p,
+                                 candidate[:3])
+        if np.linalg.norm(delta_r) > 1e-12:
+            candidate[3:] = multiply(delta_quaternion(delta_r), np.asarray(actual[3:]))
+            candidate[3:] /= np.linalg.norm(candidate[3:])
         self.target = candidate
         # 返回 base 中的平移增量和旋转向量；录制 action 单独编码。
         return np.r_[delta_p, delta_r]
