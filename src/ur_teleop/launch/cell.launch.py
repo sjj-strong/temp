@@ -63,6 +63,8 @@ def generate_launch_description():
     ip_default = _yaml_default(config_file, "cell", "robot_ip", fallback="0.0.0.0")
     grip_default = _yaml_default(config_file, "cell", "gripper_port", fallback="/dev/ttyUSB1")
     ftdi_default = _yaml_default(config_file, "cell", "ftdi_id", fallback="")
+    gripper_enabled_default = _yaml_default(config_file, "gripper", "enabled", fallback="true")
+    ft300_enabled_default = _yaml_default(config_file, "cell", "ft300_enabled", fallback="true")
     rviz_default = _yaml_default(config_file, "cell", "launch_rviz", fallback="true")
     alicia_default = _yaml_default(config_file, "cell", "alicia_port", fallback="")
     launch_alicia_default = _yaml_default(config_file, "cell", "launch_alicia", fallback="true")
@@ -82,6 +84,16 @@ def generate_launch_description():
     )
     uses_sim_forward_position = PythonExpression(
         ["'", sim, "' == 'true' and '", controller, "' != 'joint_impedance'"]
+    )
+    uses_sim_gripper = PythonExpression(
+        ["'", sim, "' == 'true' and '", controller,
+         "' != 'joint_impedance' and '", LaunchConfiguration("enable_gripper"), "' == 'true'"]
+    )
+    uses_real_gripper = PythonExpression(
+        ["'", sim, "' == 'false' and '", LaunchConfiguration("enable_gripper"), "' == 'true'"]
+    )
+    uses_real_ft300 = PythonExpression(
+        ["'", sim, "' == 'false' and '", LaunchConfiguration("enable_ft300"), "' == 'true'"]
     )
     impedance_config = os.path.join(
         get_package_share_directory("joint_impedance_controller"),
@@ -104,6 +116,8 @@ def generate_launch_description():
         DeclareLaunchArgument("robot_ip", default_value=ip_default),
         DeclareLaunchArgument("gripper_port", default_value=grip_default),
         DeclareLaunchArgument("ftdi_id", default_value=ftdi_default),
+        DeclareLaunchArgument("enable_gripper", default_value=gripper_enabled_default),
+        DeclareLaunchArgument("enable_ft300", default_value=ft300_enabled_default),
         DeclareLaunchArgument("launch_rviz", default_value=rviz_default),
         DeclareLaunchArgument("alicia_port", default_value=alicia_default),
         DeclareLaunchArgument("launch_alicia", default_value=launch_alicia_default),
@@ -223,7 +237,7 @@ def generate_launch_description():
         Node(
             package="controller_manager",
             executable="spawner",
-            condition=IfCondition(uses_sim_forward_position),
+            condition=IfCondition(uses_sim_gripper),
             arguments=[
                 "robotiq_gripper_controller",
                 "-c", "/controller_manager",
@@ -234,7 +248,7 @@ def generate_launch_description():
                 os.path.join(get_package_share_directory("robotiq_description"),
                              "launch", "robotiq_control.launch.py")
             ),
-            condition=UnlessCondition(is_sim),
+            condition=IfCondition(uses_real_gripper),
             launch_arguments={
                 "com_port": LaunchConfiguration("gripper_port"),
                 "launch_rviz": "false",
@@ -245,7 +259,7 @@ def generate_launch_description():
                 os.path.join(get_package_share_directory("robotiq_ft_sensor_hardware"),
                              "launch", "ft_sensor_standalone.launch.py")
             ),
-            condition=UnlessCondition(is_sim),
+            condition=IfCondition(uses_real_ft300),
             launch_arguments={
                 "ftdi_id": LaunchConfiguration("ftdi_id"),
                 "frame_id": "robotiq_ft_frame_id",

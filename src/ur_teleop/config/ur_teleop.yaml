@@ -5,6 +5,7 @@ cell:
   robot_ip: 169.254.138.15
   gripper_port: /dev/ttyUSB0     # real 模式，include robotiq_control 用
   ftdi_id: "ttyUSB2"                    # real 模式，include rq_fts 驱动用（launch 参数即 ftdi_id）
+  ft300_enabled: false           # Alicia 真机：是否启动独立 FT300 串口驱动；false 不访问串口
   launch_rviz: true
   alicia_port: "/dev/ttyACM0"                 # 空=自动检测；可指定如 /dev/ttyACM0
   launch_alicia: true             # 主臂始终真实；纯 sim 无 Alicia 时设 false
@@ -49,7 +50,7 @@ ruckig:
   max_acceleration: [0.80, 0.80, 0.80, 0.80, 0.80, 0.80]        # rad/s^2
   max_jerk:         [4.0, 4.0, 4.0, 4.0, 4.0, 4.0]              # rad/s^3
 gripper:
-  enabled: true                  # 启用夹爪遥操作（sim + real）
+  enabled: true                  # Alicia：同时控制夹爪驱动启动与遥操作跟随；false 时两者都禁用
   # sim: controller 由 cell.launch 额外 spawn 到 UR controller_manager
   # real: controller 由 robotiq_control.launch 的独立 robotiq_controller_manager 提供
   # 两种模式下 action server 都是根级命名 /robotiq_gripper_controller/gripper_cmd

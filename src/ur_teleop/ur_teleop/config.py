@@ -42,6 +42,10 @@ def load_config(path: str | Path) -> dict[str, Any]:
     source = data["teleop"].get("control_source", "alicia")
     if source not in ("alicia", "xbot"):
         raise ConfigError("teleop.control_source must be 'alicia' or 'xbot'")
+    if not isinstance(data.get('cell', {}).get('ft300_enabled', True), bool):
+        raise ConfigError('cell.ft300_enabled 必须为布尔值')
+    if not isinstance(data.get('gripper', {}).get('enabled', True), bool):
+        raise ConfigError('gripper.enabled 必须为布尔值')
     if source == "alicia":
         controller = data["teleop"].get("controller", "forward_position")
         if controller not in _SUPPORTED_TELEOP_CONTROLLERS:
@@ -67,10 +71,6 @@ def load_config(path: str | Path) -> dict[str, Any]:
         except (OSError, ValueError, yaml.YAMLError) as exc:
             raise ConfigError(f'笛卡尔阻抗控制器参数文件无效: {exc}') from exc
         data['xbot']['controller_config_file'] = str(controller_path)
-        if not isinstance(data.get('cell', {}).get('ft300_enabled', True), bool):
-            raise ConfigError('cell.ft300_enabled 必须为布尔值')
-        if not isinstance(data.get('gripper', {}).get('enabled', True), bool):
-            raise ConfigError('gripper.enabled 必须为布尔值')
         rec = data.get('recorder', {})
         if rec.get('action_mode', 'abs') not in ('abs', 'rel'):
             raise ConfigError('recorder.action_mode 必须为 abs 或 rel')

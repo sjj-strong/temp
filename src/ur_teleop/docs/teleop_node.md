@@ -9,6 +9,8 @@ teleop_node 是遥操核心：单线程 executor、**定时器驱动**（`_tick`
 
 进程模型：阶段 1 的 cell 由 `home.launch.py` 启动并**保持运行**，teleop.launch 只连已运行的 cell（阶段 2 不重启 UR 栈，位姿不丢）。`mode=record` 时 teleop.launch 额外拉起 data_recorder，键盘归属权移交给 recorder（teleop_node 不再读 Enter）。`main()` 的启动横幅（teleop_node.py:388-391）：
 
+Alicia 模式中，`gripper.enabled` 同时控制阶段 1 的 Robotiq 夹爪驱动和阶段 2 的夹爪跟随；`cell.ft300_enabled` 控制阶段 1 的独立 FT300 串口驱动。两项均只在对应模式需要时启动：真机按开关启动，仿真不访问 FT300 串口；仿真的夹爪 spawner 仅在前向位置控制器模式且开关开启时启动。`home.launch.py` 可用 `enable_gripper:=true|false`、`enable_ft300:=true|false` 临时覆盖启动开关；若覆盖夹爪开关，阶段 2 的 `gripper.enabled` 仍以 YAML 为准，应保持两处一致。
+
 ```text
 ============================================================
 ur_teleop 就绪 — mode=teleop, sim=true

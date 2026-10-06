@@ -47,6 +47,7 @@ source /opt/lerobot_venv/bin/activate
 | `cell.robot_ip`                                                               | 真机 IP（real 模式），launch 参数`robot_ip:=` 优先                                                                                 |
 | `cell.gripper_port`                                                           | Robotiq 夹爪串口（real 模式，如`/dev/ttyUSB1`）                                                                                    |
 | `cell.ftdi_id`                                                                | rq_fts 驱动 FT300 的 ftdi_id（real 模式；launch 参数即`ftdi_id`）                                                                  |
+| `cell.ft300_enabled`                                                          | Alicia 真机是否启动独立 FT300 串口驱动；`false` 时不访问 FT300 串口，默认配置为 `false`                                           |
 | `cell.launch_rviz`                                                            | cell 是否拉起 rviz                                                                                                                   |
 | `home.master` / `home.slave`                                                | 主臂 / 从臂目标 home 位姿（弧度 6 维，用户按现场设置）                                                                               |
 | `home.master_gripper_value`                                                   | Alicia 夹爪 home 指令（0–1000 反向值）                                                                                              |
@@ -62,7 +63,7 @@ source /opt/lerobot_venv/bin/activate
 | `teleop.controller`                                                           | 遥操/数采使用的从臂控制器：`forward_position`（默认）或 `joint_impedance`                                                        |
 | `teleop.watchdog_timeout_s`                                                   | 主臂数据超时（默认 0.5 s）→ INACTIVE 暂停映射                                                                                       |
 | `teleop.restore_controller_on_exit`                                           | 退出时是否切回 trajectory controller（默认 true）                                                                                    |
-| `gripper.enabled`                                                             | 夹爪跟随开关：sim 默认`false`，real 设 `true`                                                                                    |
+| `gripper.enabled`                                                             | Alicia 夹爪驱动与遥操作跟随的共同开关；`false` 时不启动驱动，也不发送夹爪目标                                                      |
 | `gripper.action_server`                                                       | Robotiq 夹爪 action 名（`/robotiq_gripper_controller/gripper_cmd`）                                                                |
 | `gripper.close_threshold_m` / `open_threshold_m`                            | 夹爪 FSM 迟滞死区阈值（Alicia Gripper 米）                                                                                           |
 | `gripper.open_pos_rad` / `close_pos_rad` / `max_effort`                   | 夹爪开/合目标与最大力矩                                                                                                              |
