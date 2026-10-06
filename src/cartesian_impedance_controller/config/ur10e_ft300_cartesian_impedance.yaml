@@ -3,8 +3,7 @@
     # Jazzy spawner 从控制器自身参数块读取 type；普通节点名不会匹配
     # controller_manager 创建的控制器节点。
     type: cartesian_impedance_controller/CartesianImpedanceController
-    # Direct torque controller: do not activate trajectory, velocity, position,
-    # forward_effort, or force_mode motion controllers at the same time.
+    # 直接力矩控制时，不要同时激活轨迹、速度、位置、前向力矩或 force_mode 运动控制器。
     tf_prefix: ""
     # 使用 UR 原始 tool0，不使用安装在其后的 FT300、夹爪或 gripper_tcp。
     # 相对位移工具从控制器的 ~/current_pose 获取相同 KDL 链的当前 tool0 位姿。
@@ -19,40 +18,14 @@
       - wrist_2_joint
       - wrist_3_joint
 
-    # [x, y, z, rx, ry, rz]; unit: N/m and Nm/rad for stiffness,
-    # Ns/m and Nms/rad for damping.
+    # 顺序为 [x, y, z, rx, ry, rz]；刚度单位为 N/m、Nm/rad，阻尼单位为 Ns/m、Nms/rad。
     # 真机起步值：10 mm 平移误差最多形成约 5 N 弹簧力；姿态参数保持保守。
     stiffness: [500.0, 500.0, 500.0, 10.0, 10.0, 10.0]
     damping: [40.0, 40.0, 40.0, 2.0, 2.0, 2.0]
-    # Keep zero until PD behavior is verified on hardware.
-    integral_gain: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-    integral_limit: [0.05, 0.05, 0.05, 0.2, 0.2, 0.2]
-    # Repeated identical messages do not reset Ki. Reset only after a target jump.
-    integral_reset_position_threshold: 0.005
-    integral_reset_orientation_threshold: 0.05
+    # 每周期逐轴裁剪参与控制的位姿误差；前三轴为米，后三轴为弧度。
+    max_pose_error: [0.02, 0.02, 0.02, 0.10, 0.10, 0.10]
 
     max_wrench: [40.0, 40.0, 40.0, 4.0, 4.0, 4.0]
     max_torque: [60.0, 60.0, 60.0, 30.0, 30.0, 30.0]
-    max_torque_rate: [200.0, 200.0, 200.0, 100.0, 100.0, 100.0]
-    linear_reference_speed: 0.05
-    angular_reference_speed: 0.2
-    # 每个控制周期的一阶滤波系数。目标永久锁存，直到下一条目标覆盖它；
-    # 0 为不更新参考，1 为关闭滤波。随后仍由线/角速度限幅提供硬约束。
-    reference_filter_alpha: 0.005
-    # KDL evaluates C(q, qdot) with a zero gravity vector. UR direct_torque
-    # retains robot-internal gravity compensation, so gravity is never added here.
-    use_coriolis: true
-
-    # [x, y, z, rx, ry, rz]. Only xyz workspace bounds are evaluated;
-    # rotational entries are retained as finite placeholders.
-    workspace_min: [-1.2, -1.2, -0.1, -3.141592653589793, -3.141592653589793, -3.141592653589793]
-    workspace_max: [1.2, 1.2, 1.5, 3.141592653589793, 3.141592653589793, 3.141592653589793]
-    joint_position_min: [-6.283185307179586, -6.283185307179586, -6.283185307179586, -6.283185307179586, -6.283185307179586, -6.283185307179586]
-    joint_position_max: [6.283185307179586, 6.283185307179586, 6.283185307179586, 6.283185307179586, 6.283185307179586, 6.283185307179586]
-
-    # Set false to run without an external FT sensor. When enabled, the FT300
-    # is transformed into base_frame and used only for safety monitoring.
-    use_external_ft: true
-    ft_sensor_name: robotiq_ft_sensor
-    ft_frame: robotiq_ft_frame_id
-    max_measured_wrench: [80.0, 80.0, 80.0, 8.0, 8.0, 8.0]
+    # 每个控制周期的一阶滤波系数；目标持续锁存，直到下一条目标覆盖。
+    reference_filter_alpha: 0.1

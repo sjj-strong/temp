@@ -40,8 +40,6 @@ const char* const kSixAxisUrdf = R"(
   <joint name="wrist_1_joint" type="revolute"><parent link="link_3"/><child link="link_4"/><origin xyz="0 0 0.1"/><axis xyz="1 0 0"/><limit lower="-6.2" upper="6.2" effort="100" velocity="1"/></joint>
   <joint name="wrist_2_joint" type="revolute"><parent link="link_4"/><child link="link_5"/><origin xyz="0 0 0.1"/><axis xyz="0 1 0"/><limit lower="-6.2" upper="6.2" effort="100" velocity="1"/></joint>
   <joint name="wrist_3_joint" type="revolute"><parent link="link_5"/><child link="tool0"/><origin xyz="0 0 0.1"/><axis xyz="1 0 0"/><limit lower="-6.2" upper="6.2" effort="100" velocity="1"/></joint>
-  <link name="ft_frame"/>
-  <joint name="ft_fixed_joint" type="fixed"><parent link="tool0"/><child link="ft_frame"/></joint>
 </robot>)";
 
 const std::array<std::string, 6> kJointNames{ "shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint",
@@ -50,24 +48,14 @@ const std::array<std::string, 6> kJointNames{ "shoulder_pan_joint", "shoulder_li
 class RuntimeController
 {
 public:
-  explicit RuntimeController(const bool use_external_ft = false, const bool restrict_workspace_x = false)
+  explicit RuntimeController(const double torque_limit = 60.0)
   {
     controller = std::make_unique<cartesian_impedance_controller::CartesianImpedanceController>();
     EXPECT_EQ(controller->init("cartesian_impedance", kSixAxisUrdf, 500, "", rclcpp::NodeOptions()),
               controller_interface::return_type::OK);
-    EXPECT_TRUE(controller->get_node()->set_parameter(rclcpp::Parameter("use_coriolis", false)).successful);
-    if (use_external_ft) {
-      EXPECT_TRUE(controller->get_node()->set_parameter(rclcpp::Parameter("use_external_ft", true)).successful);
-      EXPECT_TRUE(controller->get_node()->set_parameter(rclcpp::Parameter("ft_frame", "ft_frame")).successful);
-    }
-    if (restrict_workspace_x) {
-      EXPECT_TRUE(controller->get_node()
-                      ->set_parameter(rclcpp::Parameter("workspace_min", std::vector<double>{ -0.1, -1.2, -0.1, -3.2, -3.2, -3.2 }))
-                      .successful);
-      EXPECT_TRUE(controller->get_node()
-                      ->set_parameter(rclcpp::Parameter("workspace_max", std::vector<double>{ 0.1, 1.2, 1.5, 3.2, 3.2, 3.2 }))
-                      .successful);
-    }
+    EXPECT_TRUE(controller->get_node()
+                    ->set_parameter(rclcpp::Parameter("max_torque", std::vector<double>(6, torque_limit)))
+                    .successful);
     EXPECT_EQ(controller->configure().id(), lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE);
 
     std::vector<hardware_interface::LoanedCommandInterface> loaned_commands;
@@ -81,14 +69,6 @@ public:
     for (const auto* interface_name : { "position", "velocity" }) {
       for (const auto& joint : kJointNames) {
         auto interface = std::make_shared<hardware_interface::StateInterface>(joint, interface_name, "double", "0.0");
-        loaned_states.emplace_back(interface);
-        state_interfaces.push_back(std::move(interface));
-      }
-    }
-    if (use_external_ft) {
-      for (const auto* interface_name : { "force.x", "force.y", "force.z", "torque.x", "torque.y", "torque.z" }) {
-        auto interface =
-            std::make_shared<hardware_interface::StateInterface>("robotiq_ft_sensor", interface_name, "double", "0.0");
         loaned_states.emplace_back(interface);
         state_interfaces.push_back(std::move(interface));
       }
@@ -156,6 +136,17 @@ TEST(CartesianImpedanceController, RejectsJointOrderDifferentFromKdlChain)
                                                                "wrist_1_joint", "wrist_2_joint", "wrist_3_joint" }))
                   .successful);
 
+  EXPECT_NE(controller.configure().id(), lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE);
+}
+
+TEST(CartesianImpedanceController, RejectsNegativePoseErrorLimit)
+{
+  cartesian_impedance_controller::CartesianImpedanceController controller;
+  ASSERT_EQ(controller.init("cartesian_impedance", kSixAxisUrdf, 500, "", rclcpp::NodeOptions()),
+            controller_interface::return_type::OK);
+  ASSERT_TRUE(controller.get_node()
+                  ->set_parameter(rclcpp::Parameter("max_pose_error", std::vector<double>{ -0.02, 0.02, 0.02, 0.1, 0.1, 0.1 }))
+                  .successful);
   EXPECT_NE(controller.configure().id(), lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE);
 }
 
@@ -231,30 +222,30 @@ TEST(CartesianImpedanceController, InvalidJointStateWritesZeroEffort)
   fixture.expect_zero_torque();
 }
 
-TEST(CartesianImpedanceController, WorkspaceViolationWritesZeroEffort)
+TEST(CartesianImpedanceController, ClipsFinalTorqueWithoutRateLimiter)
 {
-  RuntimeController fixture(false, true);
+  RuntimeController fixture(0.001);
+  ASSERT_TRUE(fixture.state_interfaces[6]->set_value(0.2));
+
+  EXPECT_EQ(fixture.controller->update(rclcpp::Time(1, 0, RCL_ROS_TIME), rclcpp::Duration::from_seconds(0.01)),
+            controller_interface::return_type::OK);
+  bool reached_limit = false;
   for (const auto& interface : fixture.command_interfaces) {
-    ASSERT_TRUE(interface->set_value(5.0));
+    const auto value = interface->get_optional<double>();
+    ASSERT_TRUE(value.has_value());
+    EXPECT_LE(std::abs(*value), 0.001 + 1e-12);
+    reached_limit |= std::abs(*value) >= 0.001 - 1e-12;
   }
+  EXPECT_TRUE(reached_limit);
+}
+
+TEST(CartesianImpedanceController, AllowsStateOutsideRemovedWorkspace)
+{
+  RuntimeController fixture;
   ASSERT_TRUE(fixture.state_interfaces[1]->set_value(std::acos(-1.0) / 2.0));
 
   EXPECT_EQ(fixture.controller->update(rclcpp::Time(1, 0, RCL_ROS_TIME), rclcpp::Duration::from_seconds(0.01)),
-            controller_interface::return_type::ERROR);
-  fixture.expect_zero_torque();
-}
-
-TEST(CartesianImpedanceController, ExternalWrenchLimitWritesZeroEffort)
-{
-  RuntimeController fixture(true);
-  for (const auto& interface : fixture.command_interfaces) {
-    ASSERT_TRUE(interface->set_value(5.0));
-  }
-  ASSERT_TRUE(fixture.state_interfaces[12]->set_value(81.0));
-
-  EXPECT_EQ(fixture.controller->update(rclcpp::Time(1, 0, RCL_ROS_TIME), rclcpp::Duration::from_seconds(0.01)),
-            controller_interface::return_type::ERROR);
-  fixture.expect_zero_torque();
+            controller_interface::return_type::OK);
 }
 
 int main(int argc, char* argv[])
