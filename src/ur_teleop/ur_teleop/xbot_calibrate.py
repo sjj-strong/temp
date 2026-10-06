@@ -50,8 +50,8 @@ def wait_neutral(sample, reference=None, clock=time.monotonic, timeout=30.):
 
 
 def wait_capture(sample, prompt, baseline, kind, clock=time.monotonic, timeout=30.):
-    """按键立即记录；轴输入稳定保持一秒后记录端点。"""
-    print(prompt + ('，轴输入保持一秒' if kind != 'button' else '，按下即可'), flush=True)
+    """按键和十字键立即记录；模拟轴稳定保持一秒后记录端点。"""
+    print(prompt + ('，保持一秒' if kind == 'axis' else '，按下即可'), flush=True)
     deadline = clock() + timeout
     active = None
     active_since = None
@@ -76,6 +76,10 @@ def wait_capture(sample, prompt, baseline, kind, clock=time.monotonic, timeout=3
                 index = changes.index(max(changes))
                 detected = ('axis', index)
                 value = float(msg.axes[index])
+                if kind == 'either':
+                    print(f'已记录 {prompt}：轴 {index}，端点 {value:.3f}', flush=True)
+                    return {'kind': 'axis', 'index': index,
+                            'rest': float(baseline.axes[index]), 'positive': value}
         if detected != active:
             active = detected
             active_since = clock() if detected is not None else None

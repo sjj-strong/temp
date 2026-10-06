@@ -74,3 +74,20 @@ def test_button_capture_accepts_short_press():
         'kind': 'button', 'index': 0,
     }
     assert now[0] == pytest.approx(.1)
+
+
+def test_dpad_axis_accepts_short_press():
+    """十字键在 Joy 中表现为方向轴时，短按也能被记录。"""
+    pytest.importorskip('rclpy')
+    from ur_teleop.xbot_calibrate import wait_capture
+    now = [0.]
+    baseline = SimpleNamespace(axes=[0., 0.], buttons=[0])
+
+    def sample():
+        now[0] += .1
+        return SimpleNamespace(axes=[0., 1.], buttons=[0])
+
+    assert wait_capture(sample, '十字键向左', baseline, 'either', clock=lambda: now[0]) == {
+        'kind': 'axis', 'index': 1, 'rest': 0., 'positive': 1.,
+    }
+    assert now[0] == pytest.approx(.1)
