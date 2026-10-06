@@ -33,3 +33,20 @@ def transform_pose(pose, transform):
     rotation = transform[3:] / t_norm
     return np.r_[rotate(rotation, pose[:3]) + transform[:3],
                  multiply(rotation, pose[3:] / p_norm)]
+
+
+def inverse_transform_pose(pose, transform):
+    """将目标坐标系中的位姿逆变换回原坐标系。"""
+    transform = np.asarray(transform, dtype=float)
+    q = transform[3:] / np.linalg.norm(transform[3:])
+    inverse_q = np.r_[-q[:3], q[3]]
+    inverse = np.r_[-rotate(inverse_q, transform[:3]), inverse_q]
+    return transform_pose(pose, inverse)
+
+
+def clip_workspace_target(pose, origin, half_extent):
+    """在参考坐标系中按初始位姿的 XYZ 矩形范围裁剪目标。"""
+    result = np.asarray(pose, dtype=float).copy()
+    result[:3] = np.clip(result[:3], np.asarray(origin) - np.asarray(half_extent),
+                         np.asarray(origin) + np.asarray(half_extent))
+    return result

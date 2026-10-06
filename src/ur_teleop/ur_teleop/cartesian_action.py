@@ -14,9 +14,9 @@ def action_names(mode):
     raise ValueError('recorder.action_mode 必须为 abs 或 rel')
 
 
-def action_label(mode):
+def action_label(mode, reference_link='base_link', tcp_link='tool0'):
     action_names(mode)
-    return f'cartesian_pose:{mode}:base_link:tool0'
+    return f'cartesian_pose:{mode}:{reference_link}:{tcp_link}'
 
 
 def encode_action(target, actual, gripper, mode):

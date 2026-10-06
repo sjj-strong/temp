@@ -61,6 +61,15 @@ def load_config(path: str | Path) -> dict[str, Any]:
             raise ConfigError('recorder.action_mode 必须为 abs 或 rel')
         if rec.get('action_space', 'cartesian_pose') != 'cartesian_pose':
             raise ConfigError('Xbot 的 recorder.action_space 必须为 cartesian_pose，不再记录速度')
+        for key in ('record_action_gripper', 'record_joint_position', 'record_joint_velocity',
+                    'record_joint_effort', 'record_tcp_pose', 'record_ur_gripper', 'record_wrench'):
+            if key in rec and not isinstance(rec[key], bool):
+                raise ConfigError(f'recorder.{key} 必须为布尔值')
+        if rec.get('record_tcp_pose', True) and rec.get('ee_pose_source', 'tf') == 'none':
+            raise ConfigError('保存 TCP 位姿时 ee_pose_source 不能为 none')
+        for name, camera in rec.get('cameras', {}).items():
+            if not isinstance(camera, dict) or not isinstance(camera.get('enabled', True), bool):
+                raise ConfigError(f'recorder.cameras.{name}.enabled 必须为布尔值')
 
     ruckig = data.get("ruckig", {})
     if not isinstance(ruckig, dict):

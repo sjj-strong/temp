@@ -11,6 +11,7 @@ def test_abs_matches_published_target():
     actual = [.1, .2, .3, 0, 0, 0, 1]
     target = [.11, .22, .33, 0, 0, np.sin(.2), np.cos(.2)]
     np.testing.assert_allclose(encode_action(target, actual, 1., 'abs'), target + [1.])
+    assert action_label('abs', 'base') == 'cartesian_pose:abs:base:tool0'
 
 
 def test_rel_reconstructs_target_in_base():

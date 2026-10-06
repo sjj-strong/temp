@@ -71,12 +71,20 @@ def _build_cell(context):
                 "gripper_com_port": str(cell_cfg["gripper_port"]),
                 "launch_gripper": str(use_gripper).lower(),
                 "launch_rviz": str(bool(cell_cfg.get("launch_rviz", False))).lower(),
+                "controllers_file": os.path.join(pkg_share, "config", "xbot_ur_controllers.yaml"),
                 # 先由轨迹控制器回 Home；此处禁止组合 bringup 自动激活阻抗。
                 "use_cartesian_impedance": "false",
                 "initial_joint_controller": "scaled_joint_trajectory_controller",
                 "activate_joint_controller": "true",
             }.items(),
         )]
+        if use_ft300:
+            # FT300 已由组合 URDF 的 SensorInterface 打开；只加载 broadcaster。
+            actions.append(Node(
+                package="controller_manager", executable="spawner",
+                arguments=["robotiq_force_torque_sensor_broadcaster", "-c", "/controller_manager",
+                           "--param-file", os.path.join(pkg_share, "config", "xbot_ur_controllers.yaml")],
+            ))
         cart_config = os.path.join(
             cart_share, "config", "ur10e_ft300_cartesian_impedance.yaml",
         )

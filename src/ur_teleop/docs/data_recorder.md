@@ -1,99 +1,65 @@
 # 数据采集与帧格式
 
-`teleop.launch.py mode:=record` 启动独立的 `data_recorder` 进程，按 `recorder.fps` 录制。相机需[单独启动](launch.md#相机)。
+`ros2 launch ur_teleop teleop.launch.py config_file:=/ros2_ws/src/ur_teleop/config/xbot_teleop.yaml mode:=record` 启动手柄、遥操作和录制器。组合单元须先按[手柄启动说明](xbot_control.md)启动并完成 Home；相机按其驱动说明单独启动。录制数据写入 `recorder.root`，不会自动上传。
 
-## 录制操作
+## 操作
 
-| 操作 | Alicia 键盘 | Xbot 手柄 |
+| 操作 | Xbot 手柄 | Alicia 键盘 |
 | --- | --- | --- |
-| 开始 episode | Enter | Menu |
-| 保存并结束 episode | S | Y |
-| 丢弃并结束 episode | D | B |
-| 保存当前有效 episode 并 finalize | Q | View 长按 2 秒 |
+| 开始 episode | Menu | Enter |
+| 保存 | Y | S |
+| 丢弃 | B | D |
+| 保存并结束录制 | View 长按 | Q |
 
-Alicia 首次开始时发送一次 `/teleop/enable`。Xbot 不读取键盘、不发送此使能，可先按 RB 预摆位，再按 Menu 录制；View 长按还会锁定运动，需重启节点才能继续。
+不足 `min_frames_per_episode` 帧时自动丢弃；保存或丢弃后可开始下一段。
 
-帧数不足 `recorder.min_frames_per_episode`（默认 2）时，保存操作自动丢弃。保存或丢弃后，可再次开始下一段。未开始过 episode 时退出不会创建数据集。
+## Xbot action
 
-## 数据格式
+`recorder.action_mode: abs` 保存手柄节点最终发布给阻抗控制器的绝对目标 `x,y,z,qx,qy,qz,qw`。`rel` 保存该目标相对**同一控制周期实测 TCP** 的 `dx,dy,dz,drx,dry,drz`；姿态增量是参考坐标系中的最短旋转向量，满足 `q_target = dq × q_actual`。工作空间裁剪发生在编码之前，因此 action 与最终下发目标一致。摇杆回中时仍保存保持目标；此时相对 action 可能非零。
 
-`FrameBuilder.features()` 定义特征，`build()` 组装每帧。默认 observation 为 14 维，action 维度取决于控制来源与保存格式：
+两种模式均逐帧保存字符串 `action.reference_link`：真机通常为 `base`，仿真为 `base_link`。`record_action_gripper: true` 时再附加 `cmd_gripper`；无夹爪时建议设为 `false`。修改模式、坐标系或字段配置后请重启遥操作和录制器，新建数据集。
 
-| 字段 | 内容 |
-| --- | --- |
-| `observation.state` | 6 个 UR 关节角（rad）+ TCP 的 xyz 和 xyzw 四元数 + 夹爪状态 |
-| Alicia `action` | 6 个关节目标 `cmd_<关节名>` + `cmd_gripper` |
-| Xbot `abs` action（8 维） | `x, y, z, qx, qy, qz, qw, cmd_gripper` |
-| Xbot `rel` action（7 维） | `dx, dy, dz, drx, dry, drz, cmd_gripper` |
-| `observation.images.<image_key>` | RGB 图像，形状为 height × width × 3 |
-| `task` | `recorder.task` |
+## 可选 observation
 
-Xbot 每周期由手柄生成位姿增量，叠加到本周期实测 TCP 位姿得到绝对目标，不累加上一周期目标。base 增量直接应用，TCP 增量先按实测姿态转换到 base；旋转使用四元数合成。按住 RB 且摇杆回中时，目标等于当前实测位姿；松开 RB 或故障时仍锁定保持位姿，切换参考系当帧保留原目标。
+Xbot 的下列开关相互独立。启用的数值字段按表格顺序拼接为 `observation.state`，特征 `names` 给出各元素名称；全部关闭时不创建该键。
 
-在 `config/xbot_teleop.yaml` 中选择保存格式：
+| 开关 | 内容 | 维度 |
+| --- | --- | ---: |
+| `record_joint_position` | `/joint_states.position`，按 UR 六关节顺序 | 6 |
+| `record_joint_velocity` | `/joint_states.velocity` | 6 |
+| `record_joint_effort` | `/joint_states.effort`，UR 上可能是电机电流，不能视为实测关节力矩 | 6 |
+| `record_tcp_pose` | 配置的 TCP link 相对控制器参考 link 的 xyz+xyzw | 7 |
+| `record_ur_gripper` | 夹爪实测开合状态，阈值由 `state_threshold_rad` 指定 | 1 |
+| `record_wrench` | 原始 `force.xyz, torque.xyz` | 6 |
 
-```yaml
-teleop:
-  control_source: xbot
-  controller: cartesian_impedance
-recorder:
-  action_space: cartesian_pose
-  action_mode: abs  # abs 或 rel；只影响保存格式，不改变控制方式
-```
+启用 TCP 时，还保存 `observation.tcp_reference_link` 和 `observation.tcp_link`。`ee_pose_child_frame` 指定 TCP link；Xbot 的父 link 自动采用控制器参考 link。`ee_pose_source` 可选 `tf` 或 `topic`，关闭 TCP 观测时也可设 `none`。
 
-`abs` 保存实际下发的 `tool0` 目标位置（米）和 xyzw 四元数。`rel` 保存该目标相对同周期实测位姿的差：平移为米，姿态为最短旋转向量（弧度），满足 `q_target = dq_base × q_actual`。两种格式均在 `base_link` 下表示，不保存速度，也不使用录制线程稍后查询的 TF 计算增量。
+启用力数据时，`cell.ft300_enabled: true` 订阅 `/robotiq_force_torque_sensor_broadcaster/wrench`；设为 `false` 则订阅 UR 内置传感器 `/force_torque_sensor_broadcaster/ft_data`。数值保持消息原始坐标，不做变换；`observation.wrench_reference_link` 保存该消息的 `header.frame_id`。FT300 在组合 URDF 的 ros2_control 硬件接口中运行，组合启动仅额外加载 broadcaster，不启动争用串口的独立驱动。仿真录制如无力话题，应将 `record_wrench` 设为 `false`。
 
-保持期间 `abs` 仍为保持目标；`rel` 是保持目标与当时实测位姿的差，可能不为零。没有有效反馈时不发布新的 action。Xbot 始终保存完整位姿和夹爪字段，Alicia 仍保存七维关节 action。
-
-修改 `action_mode` 后须同时重启遥操作和录制器，使用新数据集。旧速度 action 与新 abs/rel 格式不能混用，旧 `cartesian_velocity` 配置会报错。
-
-夹爪 observation 由实测关节角与 `state_threshold_rad`（默认 0.4）比较得到，0 开、1 闭；action 末维是夹爪目标信号。Xbot 使用已接受的目标，初值取实测开合状态。支持夹爪控制器单独发布的 `JointState`。
-
-## 数据有效性
-
-- 两种模式开始前均要求所有配置相机收到图像。关节或动作缺失时不组帧。
-- Alicia 的 EE 位姿缺失时填 NaN；相机仅检查缓存是否存在，不检查帧龄。
-- Xbot 开始前要求新鲜的就绪心跳、动作、UR/夹爪状态、TCP 位姿及所有相机，`recorder.data_timeout_s` 默认 0.5 秒；录制中失效的周期跳过。
-- Xbot 恢复后继续当前 episode，数据集时间按帧率排列，不保留故障期间的墙钟间隔。需要连续时间数据时，应丢弃断连影响的 episode。
-- `add_frame` 失败时记录错误并跳过该帧。
-
-## 配置与存储
-
-| 配置项 | 用途 |
-| --- | --- |
-| `repo_id` / `root` / `robot_type` | 数据集标识、存储目录、机器人类型 |
-| `fps` / `min_frames_per_episode` | 录制频率、最少有效帧数 |
-| `ee_pose_source` | `tf`、`topic` 或 `none` |
-| `ee_pose_parent_frame` / `ee_pose_child_frame` | TF 查询框架；Xbot 为 base_link / tool0 |
-| `cameras` | 各相机的 topic、image_key、height、width |
-| `use_videos` | true 为视频特征，false 为图像特征 |
-| `record_ur_joints` / `record_ur_ee_pose` / `record_ur_gripper` | observation 字段开关 |
-| `record_action_joints` / `record_action_gripper` | Alicia action 字段开关 |
-| `action_space` / `action_mode` | Xbot 固定 cartesian_pose；保存格式为 abs（默认）或 rel |
-| `image_writer_processes` / `image_writer_threads` | 图像写入并发参数 |
-
-以上均位于 `recorder` 下。Xbot 默认使用 `repo_id: my_user/ur10e_xbot`、`root: /ros2_ws/dataset/xbot`，与 Alicia 数据集分开。已有数据集不覆盖、不追加，另建带时间戳的标识和目录。
-
-Xbot 的 abs/rel 动作始终以 `base_link` 表达；真机控制目标会在发布前转换为控制器的 `base` 表达，录制保留转换前同一目标，不改变数据集坐标定义。
-
-相机发布与预览配置独立放在 `config/camera.yaml`，不决定数据集内容。在所用的 `ur_teleop.yaml` 或 `xbot_teleop.yaml` 中配置 `recorder.cameras`；默认 `{}` 不保存图像。以下示例仅保存前视图，话题类型必须为 `sensor_msgs/Image`，尺寸须与发布端一致：
+每台相机由 `recorder.cameras.<名称>.enabled` 单独控制；省略 `enabled` 视为启用。启用后用 `topic`、`image_key`、`height`、`width` 定义 `observation.images.<image_key>`。`use_videos` 决定视频或逐帧图像特征。例如：
 
 ```yaml
 recorder:
   cameras:
     front:
+      enabled: true
       topic: /camera/usb_front/color/image_raw
-      image_key: observation.images.front
+      image_key: front
       height: 480
       width: 640
 ```
 
-LeRobot 不可导入时，入口会尝试使用 `/opt/lerobot_venv/bin/python` 重启；仍不可用则报错。实际视频编码和落盘需在采集环境验收。
+录制开始和写帧时只要求**启用**的字段有新鲜数据；任一启用字段缺失、非有限或超过 `data_timeout_s` 时跳过整帧，不写缺键或 NaN。手柄就绪心跳与位姿 action 始终是必要条件。Alicia 的旧 `observation.state` 和关节 action 格式保持原有配置。
 
-## 接口
+## 话题与验证
 
-订阅 `/joint_states`、`/teleop/commands`、配置的图像话题，以及 TF 或 TCP 位姿话题。Xbot 的 `/teleop/commands` 使用布局标签 `cartesian_pose:<abs或rel>:base_link:tool0`；录制器校验标签和维度，拒绝不一致的数据。
+Xbot 手柄节点通过 `/teleop/commands` 发布 action 数组，布局标签携带模式、参考 link 和 TCP link；录制器校验标签与原始数组维度。`/teleop/record_event` 传递开始、保存、丢弃和结束事件；`/teleop/xbot_ready` 提供就绪心跳。
 
-Xbot 另订阅 `/teleop/xbot_ready`（Bool）和 `/teleop/record_event`（String：start/save/discard/finalize）。事件回调只入队，数据集操作在录制主线程执行；超过两秒的非 finalize 事件忽略。结束时发布 `/teleop/record_finished`（Bool）。
+```bash
+ros2 topic echo --once /teleop/commands
+ros2 topic echo --once /force_torque_sensor_broadcaster/ft_data
+# 启用 FT300 时改查：
+ros2 topic echo --once /robotiq_force_torque_sensor_broadcaster/wrench
+```
 
-测试见 `tests/test_frame_builder.py`、`tests/test_xbot_recorder.py`；原有 LeRobot 集成测试位于 `tests/test_integration.py`。
+单元测试位于 `tests/test_xbot_core.py`、`tests/test_xbot_recorder.py` 和 `tests/test_frame_builder.py`。

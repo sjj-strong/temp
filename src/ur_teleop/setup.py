@@ -16,6 +16,7 @@ setup(
             "config/camera.yaml",
             "config/xbot_teleop.yaml",
             "config/xbot_mock_controllers.yaml",
+            "config/xbot_ur_controllers.yaml",
         ]),
         ("share/" + package_name + "/config/rviz", [
             "config/rviz/ur_teleop.rviz",

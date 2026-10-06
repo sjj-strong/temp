@@ -20,9 +20,8 @@ def fixture_node():
                         'scaled_joint_trajectory_controller': 'active'}
     node.joints = np.zeros(6)
     node.cfg = {'home': {'slave': [0.]*6}}
-    node.core = PoseIntegrator(dict(max_translation_delta_m=.0004, max_rotation_delta_rad=.002,
-                                   max_target_position_error_m=.02,
-                                   max_target_orientation_error_rad=.1, precision_scale=.25))
+    node.core = PoseIntegrator(dict(max_linear_speed_m_s=.02, max_angular_speed_rad_s=.1,
+                                   precision_scale=.25))
     calls = []
     def switch(*args):
         calls.append(args)

@@ -1,7 +1,7 @@
 # XBot 专用配置：不继承 ur_teleop.yaml。
 # 修改本文件即可完成 XBot 的 Home、真机连接、遥操作和采集配置。
 mode: record
-sim: true
+sim: false
 
 cell:
   ur_type: ur10e
@@ -14,7 +14,7 @@ cell:
 # home_node 仅使用 slave；值按 UR_JOINT_NAMES 顺序：
 # shoulder_pan、shoulder_lift、elbow、wrist_1、wrist_2、wrist_3（单位 rad）。
 home:
-  slave: [1.6531028747558594, -1.4480312851122399, 1.9757979551898401, -2.4209891758360804, -1.5772712866412562, -1.3048065344439905]
+  slave: [1.537065029144287, -1.3990939271501084, 1.9127243200885218, -2.0777298412718714, -1.5744393507586878, -4.770853106175558]
   at_home_tolerance_rad: 0.1
   move_timeout_s: 60.0
   move_duration_s: 8.0
@@ -31,15 +31,15 @@ xbot:
   diagnostic_hz: 5.0
   joy_timeout_s: 0.25
   tcp_timeout_s: 0.25
-  # 满摇杆每个控制周期相对实测 tool0 位姿的最大增量，不乘控制周期。
-  max_translation_delta_m: 0.0004
-  max_rotation_delta_rad: 0.002
-  # 目标相对实测 tool0 的最大超前量，不限制累计行程。
-  max_target_position_error_m: 0.02
-  max_target_orientation_error_rad: 0.10
+  # 满量程速度；每周期增量 = 速度 / control_hz。
+  max_linear_speed_m_s: 1.0
+  max_angular_speed_rad_s: 5.0
+  # 相对于接管阻抗控制器后首条 current_pose 的 XYZ 半范围。
+  workspace_half_extent_m: [0.20, 0.20, 0.20]
   precision_scale: 0.25
   deadzone: 0.08
-  view_hold_s: 2.0
+  left_stick_xy_free: false  # false：左摇杆主轴过滤；true：允许 XY 同时输出。
+  view_hold_s: 0.5
 
 gripper:
   enabled: false                 # 同时关闭夹爪控制栈与手柄 A 键命令。
@@ -56,13 +56,19 @@ recorder:
   fps: 20
   robot_type: ur10e_xbot_teleop
   action_space: cartesian_pose
-  action_mode: abs  # abs：目标位置+四元数+夹爪（8维）；rel：位置/旋转增量+夹爪（7维）
+  action_mode: abs  # abs：最终目标 xyz+xyzw；rel：最终目标相对同周期实测 TCP 的 xyz+旋转向量。
   record_action_joints: true
-  record_action_gripper: true
+  record_action_gripper: false    # 夹爪关闭时不保存动作末维；位姿动作始终保存。
+  record_joint_position: true
+  record_joint_velocity: true
+  record_joint_effort: true      # /joint_states.effort；UR 上可能表示电机电流，非实测关节力矩。
+  record_tcp_pose: true
+  record_ur_gripper: false
+  record_wrench: true            # FT300 启用时取外部传感器，否则取 UR 内置传感器。
   data_timeout_s: 0.5
   ee_pose_source: tf
-  ee_pose_parent_frame: base_link
-  ee_pose_child_frame: tool0
+  ee_pose_parent_frame: base_link # Xbot 实际按控制器参考 link 自动选择；此项保留兼容 Alicia。
+  ee_pose_child_frame: tool0     # observation 的 TCP link。
   use_videos: true
   cameras: {}                    # 仅定义数据集图像；发布与预览见 camera.yaml，示例见 docs/data_recorder.md。
   task: xbot_teleoperation

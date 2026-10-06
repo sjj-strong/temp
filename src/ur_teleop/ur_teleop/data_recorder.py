@@ -12,6 +12,7 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import JointState, Image as RosImage
 from std_msgs.msg import Bool, Float64MultiArray, String
+from geometry_msgs.msg import WrenchStamped
 
 try:
     from lerobot.datasets import LeRobotDataset
@@ -21,6 +22,7 @@ except ImportError:
 from ur_teleop.config import UR_GRIPPER_JOINT, UR_JOINT_NAMES, default_config_path, load_config
 from ur_teleop.frame_builder import FrameBuilder
 from ur_teleop.cartesian_action import action_label
+from ur_teleop.controller_frame import controller_base_frame
 from ur_teleop.keyboard import KeyboardReader
 
 
@@ -34,18 +36,25 @@ class DataRecorderNode(Node):
         self._xbot = cfg['teleop'].get('control_source', 'alicia') == 'xbot'
         self._rec = cfg.get("recorder", {})
         if self._xbot:
-            self._rec = dict(self._rec, action_space='cartesian_pose',
-                             record_action_joints=True, record_action_gripper=True)
+            self._rec = dict(self._rec, action_space='cartesian_pose', record_action_joints=True)
+        self._reference_link = controller_base_frame(cfg['sim']) if self._xbot else None
+        self._tcp_link = self._rec.get('ee_pose_child_frame', 'tool0')
         self._fps = int(self._rec.get("fps", 50))
         self._min_frames = int(self._rec.get("min_frames_per_episode", 2))
-        self._cameras = self._rec.get("cameras", {})
+        self._cameras = {name: camera for name, camera in self._rec.get('cameras', {}).items()
+                         if camera.get('enabled', True)}
         self._builder = FrameBuilder(self._rec, cfg.get("gripper", {}))
 
         self._lock = threading.Lock()
         self._ur_joints = None
+        self._joint_velocity = None
+        self._joint_effort = None
+        self._wrench = None
+        self._wrench_reference_link = None
         self._ur_gripper_rad = 0.0
         self._teleop_cmd = None
         self._ur_ee_pose = None
+        self._ee_at = -float('inf')
         self._camera_frames = {}
         self._enable_sent = False
         self._ee_warned = False
@@ -54,21 +63,34 @@ class DataRecorderNode(Node):
         self._ready = False
         self._ready_at = self._cmd_at = self._joint_at = -float('inf')
         self._gripper_at = -float('inf')
+        self._joint_velocity_at = self._joint_effort_at = self._wrench_at = -float('inf')
         self._camera_at = {}
         self._data_timeout = float(self._rec.get('data_timeout_s', .5))
 
         self._features, _, _ = self._builder.features()
-        self._action_size = self._features.get('action', {}).get('shape', (0,))[0]
-        self._action_label = action_label(self._rec.get('action_mode', 'abs')) if self._xbot else None
-        self._joint_sub = self.create_subscription(JointState, "/joint_states", self._joint_cb, 10)
+        self._action_size = (len(self._builder._cart_names) if self._xbot else
+                             self._features.get('action', {}).get('shape', (0,))[0])
+        self._action_label = (action_label(self._rec.get('action_mode', 'abs'), self._reference_link)
+                              if self._xbot else None)
+        flags = self._builder.observation_flags() if self._xbot else {}
+        need_joints = not self._xbot or any(flags[name] for name in (
+            'joint_position', 'joint_velocity', 'joint_effort', 'gripper'))
+        self._joint_sub = (self.create_subscription(JointState, "/joint_states", self._joint_cb, 10)
+                           if need_joints else None)
         self._cmd_sub = self.create_subscription(Float64MultiArray, "/teleop/commands", self._cmd_cb, 10)
         self._enable_pub = self.create_publisher(Bool, "/teleop/enable", 10)
         self._finished_pub = self.create_publisher(Bool, '/teleop/record_finished', 10)
         if self._xbot:
             self.create_subscription(String, '/teleop/record_event', self._event_cb, 10)
             self.create_subscription(Bool, '/teleop/xbot_ready', self._ready_cb, 1)
+            if self._builder.observation_flags()['wrench']:
+                topic = ('/robotiq_force_torque_sensor_broadcaster/wrench'
+                         if cfg.get('cell', {}).get('ft300_enabled', False)
+                         else '/force_torque_sensor_broadcaster/ft_data')
+                self.create_subscription(WrenchStamped, topic, self._wrench_cb, 10)
 
-        self._ee_source = self._rec.get("ee_pose_source", "tf")
+        self._ee_source = (self._rec.get("ee_pose_source", "tf")
+                           if not self._xbot or flags['tcp_pose'] else 'none')
         if self._ee_source == "tf":
             from tf2_ros.buffer import Buffer
             from tf2_ros.transform_listener import TransformListener
@@ -105,12 +127,16 @@ class DataRecorderNode(Node):
 
     def _xbot_data_ready(self):
         now = time.monotonic()
+        flags = self._builder.observation_flags()
         return (self._ready and now - self._ready_at < self._data_timeout and
                 self._teleop_cmd is not None and len(self._teleop_cmd) == self._action_size and
                 all(math.isfinite(v) for v in self._teleop_cmd) and
                 now - self._cmd_at < self._data_timeout and
-                now - self._joint_at < self._data_timeout and
-                (not self._rec.get('record_ur_gripper', True) or
+                (not flags['joint_position'] or now - self._joint_at < self._data_timeout) and
+                (not flags['joint_velocity'] or now - self._joint_velocity_at < self._data_timeout) and
+                (not flags['joint_effort'] or now - self._joint_effort_at < self._data_timeout) and
+                (not flags['wrench'] or now - self._wrench_at < self._data_timeout) and
+                (not flags['gripper'] or
                  now - self._gripper_at < self._data_timeout) and
                 all(now - self._camera_at.get(n, -float('inf')) < self._data_timeout
                     for n in self._cameras))
@@ -136,18 +162,30 @@ class DataRecorderNode(Node):
 
     def _joint_cb(self, msg: JointState):
         names = set(msg.name)
-        if len(msg.position) != len(msg.name):
-            return
-        if self._xbot and not all(math.isfinite(v) for v in msg.position):
-            return
         with self._lock:
             if all(n in names for n in UR_JOINT_NAMES):
-                self._ur_joints = [msg.position[msg.name.index(n)] for n in UR_JOINT_NAMES]
-                self._joint_at = time.monotonic()
+                indices = [msg.name.index(n) for n in UR_JOINT_NAMES]
+                for values, field, stamp in ((msg.position, '_ur_joints', '_joint_at'),
+                                             (msg.velocity, '_joint_velocity', '_joint_velocity_at'),
+                                             (msg.effort, '_joint_effort', '_joint_effort_at')):
+                    if len(values) == len(msg.name) and all(math.isfinite(values[i]) for i in indices):
+                        setattr(self, field, [values[i] for i in indices])
+                        setattr(self, stamp, time.monotonic())
             # 实机夹爪是独立 controller_manager，可能单独发布 JointState。
-            if UR_GRIPPER_JOINT in names:
+            if (UR_GRIPPER_JOINT in names and len(msg.position) == len(msg.name) and
+                    math.isfinite(msg.position[msg.name.index(UR_GRIPPER_JOINT)])):
                 self._ur_gripper_rad = msg.position[msg.name.index(UR_GRIPPER_JOINT)]
                 self._gripper_at = time.monotonic()
+
+    def _wrench_cb(self, msg: WrenchStamped):
+        force, torque = msg.wrench.force, msg.wrench.torque
+        values = [force.x, force.y, force.z, torque.x, torque.y, torque.z]
+        if not msg.header.frame_id or not all(math.isfinite(value) for value in values):
+            return
+        with self._lock:
+            self._wrench = values
+            self._wrench_reference_link = msg.header.frame_id
+            self._wrench_at = time.monotonic()
 
     def _cmd_cb(self, msg: Float64MultiArray):
         with self._lock:
@@ -162,9 +200,14 @@ class DataRecorderNode(Node):
 
     def _tcp_cb(self, msg):
         p = msg.pose
+        values = [p.position.x, p.position.y, p.position.z,
+                  p.orientation.x, p.orientation.y, p.orientation.z, p.orientation.w]
+        if self._xbot and (msg.header.frame_id != self._reference_link or
+                           not all(math.isfinite(value) for value in values)):
+            return
         with self._lock:
-            self._ur_ee_pose = [p.position.x, p.position.y, p.position.z,
-                                p.orientation.x, p.orientation.y, p.orientation.z, p.orientation.w]
+            self._ur_ee_pose = values
+            self._ee_at = time.monotonic()
 
     def _camera_cb(self, cam_name: str, msg: RosImage):
         try:
@@ -180,14 +223,16 @@ class DataRecorderNode(Node):
         """7 维 [x,y,z,qx,qy,qz,qw] 或 None（source=none 恒 None → NaN 段）。"""
         if self._ee_source == "topic":
             with self._lock:
+                if self._xbot and time.monotonic() - self._ee_at >= self._data_timeout:
+                    return None
                 return list(self._ur_ee_pose) if self._ur_ee_pose else None
         if self._ee_source == "none":
             return None
         try:
             import rclpy.time
             t = self._tf_buffer.lookup_transform(
-                self._rec.get("ee_pose_parent_frame", "base_link"),
-                self._rec.get("ee_pose_child_frame", "tool0"),
+                self._reference_link if self._xbot else self._rec.get("ee_pose_parent_frame", "base_link"),
+                self._tcp_link,
                 rclpy.time.Time(),
                 timeout=rclpy.duration.Duration(seconds=0. if self._xbot else 0.5))
             if self._xbot:
@@ -231,7 +276,8 @@ class DataRecorderNode(Node):
     def _start_episode(self):
         if self._recording:
             return
-        if self._xbot and (not self._xbot_data_ready() or self._get_ee_pose() is None):
+        need_tcp = self._xbot and self._builder.observation_flags()['tcp_pose']
+        if self._xbot and (not self._xbot_data_ready() or (need_tcp and self._get_ee_pose() is None)):
             self.get_logger().warn('遥操作/状态/相机未就绪，拒绝开始 episode；就绪后重新按 Menu')
             return
         missing = [name for name in self._cameras if name not in self._camera_frames]
@@ -276,16 +322,24 @@ class DataRecorderNode(Node):
             return
         with self._lock:
             ur = list(self._ur_joints) if self._ur_joints else None
+            velocity = list(self._joint_velocity) if self._joint_velocity else None
+            effort = list(self._joint_effort) if self._joint_effort else None
+            wrench = list(self._wrench) if self._wrench else None
+            wrench_link = self._wrench_reference_link
             cmd = list(self._teleop_cmd) if self._teleop_cmd else None
             gripper_rad = self._ur_gripper_rad
             cameras = dict(self._camera_frames)
-        ee = self._get_ee_pose()
-        if self._xbot and ee is None:
+        need_tcp = not self._xbot or self._builder.observation_flags()['tcp_pose']
+        ee = self._get_ee_pose() if need_tcp else None
+        if self._xbot and need_tcp and ee is None:
             return
         if ee is None and not self._ee_warned and self._ee_source != "none":
             self._ee_warned = True
             self.get_logger().warn("EE 位姿查询失败，该段以 NaN 记录（仅警告一次）")
-        frame = self._builder.build(ur, ee, gripper_rad, cmd)
+        frame = self._builder.build(ur, ee, gripper_rad, cmd,
+                                    joint_velocity=velocity, joint_effort=effort, wrench=wrench,
+                                    wrench_reference_link=wrench_link,
+                                    reference_link=self._reference_link, tcp_link=self._tcp_link)
         if frame is None:
             return
         for cam_name, cam_cfg in self._cameras.items():
