@@ -4,7 +4,7 @@ import os
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, LogInfo, OpaqueFunction
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import Command, FindExecutable, LaunchConfiguration
 from launch_ros.actions import Node
@@ -89,6 +89,7 @@ def _build_cell(context):
             cart_share, "config", "ur10e_ft300_cartesian_impedance.yaml",
         )
 
+    actions.append(LogInfo(msg=f"笛卡尔阻抗控制器参数文件（--param-file）：{cart_config}"))
     actions.append(Node(
         package="controller_manager", executable="spawner",
         arguments=["cartesian_impedance_controller", "-c", "/controller_manager",

@@ -6,7 +6,7 @@ import os
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, LogInfo
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PythonExpression
@@ -74,6 +74,10 @@ def generate_launch_description():
                 ]),
                 "launch_rviz": LaunchConfiguration("launch_rviz"),
             }.items(),
+        ),
+        LogInfo(
+            msg=f"笛卡尔阻抗控制器参数文件（--param-file）：{笛卡尔阻抗参数文件}",
+            condition=IfCondition(LaunchConfiguration("use_cartesian_impedance")),
         ),
         Node(
             package="controller_manager",

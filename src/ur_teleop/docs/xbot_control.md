@@ -5,6 +5,7 @@
 Xbot 不定义阻抗刚度、阻尼、wrench、力矩或速度限制。`xbot_cell.launch.py` 在仿真时加载
 `cartesian_impedance_controller/config/ur10e_xbot_sim_cartesian_impedance.yaml`，在真机时加载
 `cartesian_impedance_controller/config/ur10e_ft300_cartesian_impedance.yaml`；控制参数只在控制器包内维护。
+启动 `home.launch.py` 时，终端还会打印 `笛卡尔阻抗控制器参数文件（--param-file）：<完整路径>`；该路径与控制器 spawner 实际收到的 `--param-file` 相同。Home 阶段控制器虽为 inactive，参数文件已传入。
 
 ## 配置与校准
 
