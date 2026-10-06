@@ -14,6 +14,8 @@ Xbot 不定义阻抗刚度、阻尼、wrench、力矩或速度限制。`xbot_cel
 串口字段。Xbot 的仿真/真机选择以配置文件的 `sim` 为准，不使用 Home 的 `sim:=` 参数覆盖。
 `cell.launch_rviz: true` 默认让两种模式的 Home 启动同时打开 RViz；无图形界面时可在配置中设为 `false`。
 
+只连接 UR 与手柄测试时，在配置中设置 `sim: false`、`gripper.enabled: false`、`cell.ft300_enabled: false`；启动 teleop 时显式传 `mode:=teleop`。`gripper.enabled` 同时控制夹爪控制栈、仿真夹爪控制器及 A 键命令；`cell.ft300_enabled` 为 `false` 时 FT300 硬件使用虚拟模式，不打开其串口。需要接入设备时分别改为 `true` 并核对 `cell.gripper_port`、`cell.ftdi_id`。组合 URDF 的 FT300 与夹爪外形及 TF 仍保留，运动目标仍为 `tool0`；虚拟 FT300 的读数不可用作真实力反馈。控制器参数 `use_external_ft: false` 保持关闭。
+
 在两个终端分别加载 ROS 环境后运行：
 
 ```bash
@@ -53,7 +55,7 @@ ros2 launch ur_teleop teleop.launch.py config_file:=/ros2_ws/src/ur_teleop/confi
 
 ## 真机启动
 
-在 `config/xbot_teleop.yaml` 中设置 `sim: false`，核对 `cell.robot_ip`、`cell.gripper_port`、`cell.ftdi_id` 和 `home.slave`。
+在 `config/xbot_teleop.yaml` 中设置 `sim: false`，核对 `cell.robot_ip` 和 `home.slave`。只有启用对应设备时才需要核对 `cell.gripper_port` 或 `cell.ftdi_id`。
 
 启动前确认：
 
@@ -74,6 +76,8 @@ ros2 launch ur_teleop teleop.launch.py config_file:=/ros2_ws/src/ur_teleop/confi
 
 实机复用 `real_bringup.launch.py`，FT300 不另开串口驱动。日志应显示 UR 真机硬件 `ur_robot_driver/URPositionHardwareInterface` 成功连接并激活，而非 `JointImpedanceMockSystem`；不能仅凭 `HOME REACHED` 判断连接了真机。
 
+在当前双设备关闭配置下，FT300 驱动日志应显示 `use_fake_mode -> 1`，不会出现独立夹爪控制栈；`ros2 control list_controllers -c /controller_manager` 应显示 `cartesian_impedance_controller` 在 Home 阶段为 inactive。只有确认手柄反馈与机器人状态正常后才启动第二终端。
+
 ## Home 后接管（仿真与真机共用）
 
 Home 阶段使用轨迹控制器，笛卡尔阻抗控制器保持 inactive。teleop 启动后，在关节/TF 反馈有效且已到 Home 时自动切换阻抗，不需要按 RB，也不依赖手柄消息触发。切换失败或超时锁定遥操作，需检查后重启。
@@ -90,7 +94,7 @@ Home 阶段使用轨迹控制器，笛卡尔阻抗控制器保持 inactive。tel
 | 十字键左 / 右 | 绕 +Z / -Z 旋转             |
 | RB            | 按住允许更新目标，松开仍跟踪末次目标 |
 | LB            | 按住精细速度，默认 25%      |
-| A             | RB 有效时切换夹爪，忙时忽略 |
+| A             | 启用夹爪且 RB 有效时切换夹爪，忙时忽略 |
 | X             | 切换 base/TCP 参考系        |
 
 base 模式沿 `base_link` 的轴运动；TCP 模式沿实测 `tool0` 当前局部轴运动。平移和旋转均遵循所选参考系，切换当帧不叠加手柄增量；目标超前限制仍会生效。

@@ -19,6 +19,8 @@ def _build_cell(context):
     cart_share = get_package_share_directory("cartesian_impedance_controller")
     if cfg["teleop"].get("control_source") != "xbot":
         raise RuntimeError("xbot_cell 只接受 Xbot 配置文件")
+    use_gripper = cfg.get("gripper", {}).get("enabled", True)
+    use_ft300 = cfg.get("cell", {}).get("ft300_enabled", True)
 
     if cfg["sim"]:
         model = os.path.join(
@@ -41,8 +43,10 @@ def _build_cell(context):
                  parameters=[os.path.join(pkg_share, "config", "xbot_mock_controllers.yaml"),
                              description], output="screen"),
         ]
-        for name in ("joint_state_broadcaster", "scaled_joint_trajectory_controller",
-                     "robotiq_gripper_controller"):
+        controllers = ["joint_state_broadcaster", "scaled_joint_trajectory_controller"]
+        if use_gripper:
+            controllers.append("robotiq_gripper_controller")
+        for name in controllers:
             actions.append(Node(package="controller_manager", executable="spawner",
                                 arguments=[name, "-c", "/controller_manager"]))
         cart_config = os.path.join(
@@ -63,7 +67,9 @@ def _build_cell(context):
             launch_arguments={
                 "robot_ip": str(cell_cfg["robot_ip"]),
                 "ft_sensor_ftdi_id": str(cell_cfg["ftdi_id"]),
+                "ft_sensor_use_fake_mode": str(not use_ft300).lower(),
                 "gripper_com_port": str(cell_cfg["gripper_port"]),
+                "launch_gripper": str(use_gripper).lower(),
                 "launch_rviz": str(bool(cell_cfg.get("launch_rviz", False))).lower(),
                 # 先由轨迹控制器回 Home；此处禁止组合 bringup 自动激活阻抗。
                 "use_cartesian_impedance": "false",

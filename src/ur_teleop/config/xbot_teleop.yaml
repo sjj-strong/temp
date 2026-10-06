@@ -8,6 +8,7 @@ cell:
   robot_ip: 169.254.138.15
   gripper_port: /dev/ttyUSB0
   ftdi_id: ttyUSB2
+  ft300_enabled: false           # false：保留模型与虚拟接口，不访问 FT300 串口。
   launch_rviz: true              # 仿真和真机 Home 均打开 RViz。
 
 # home_node 仅使用 slave；值按 UR_JOINT_NAMES 顺序：
@@ -41,7 +42,7 @@ xbot:
   view_hold_s: 2.0
 
 gripper:
-  enabled: true
+  enabled: false                 # 同时关闭夹爪控制栈与手柄 A 键命令。
   action_server: /robotiq_gripper_controller/gripper_cmd
   close_threshold_m: 0.0125
   open_threshold_m: 0.005

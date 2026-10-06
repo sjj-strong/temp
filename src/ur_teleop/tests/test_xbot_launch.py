@@ -21,6 +21,42 @@ def test_real_home_does_not_activate_impedance(tmp_path):
     assert arguments['initial_joint_controller'] == 'scaled_joint_trajectory_controller'
 
 
+@pytest.mark.parametrize('gripper,ft300', [(False, False), (True, True)])
+def test_real_cell_optional_peripherals(tmp_path, gripper, ft300):
+    """检查启动参数与配置开关一致，不连接串口。"""
+    pytest.importorskip('launch')
+    from launch import LaunchContext
+    path = Path(__file__).resolve().parents[1]
+    config = tmp_path / 'config.yaml'
+    config.write_text(yaml.safe_dump(dict(
+        base_config=str(path / 'config/xbot_teleop.yaml'), sim=False,
+        cell=dict(ft300_enabled=ft300), gripper=dict(enabled=gripper))))
+    context = LaunchContext()
+    context.launch_configurations['config_file'] = str(config)
+    actions = runpy.run_path(str(path / 'launch/xbot_cell.launch.py'))['_build_cell'](context)
+    arguments = dict(actions[0].launch_arguments)
+    assert arguments['launch_gripper'] == str(gripper).lower()
+    assert arguments['ft_sensor_use_fake_mode'] == str(not ft300).lower()
+
+
+@pytest.mark.parametrize('gripper', [False, True])
+def test_mock_cell_optional_gripper(tmp_path, gripper):
+    """仿真关闭夹爪时不生成其控制器启动动作。"""
+    pytest.importorskip('launch')
+    from launch import LaunchContext
+    path = Path(__file__).resolve().parents[1]
+    config = tmp_path / 'config.yaml'
+    config.write_text(yaml.safe_dump(dict(
+        base_config=str(path / 'config/xbot_teleop.yaml'), sim=True,
+        gripper=dict(enabled=gripper))))
+    context = LaunchContext()
+    context.launch_configurations['config_file'] = str(config)
+    actions = runpy.run_path(str(path / 'launch/xbot_cell.launch.py'))['_build_cell'](context)
+    spawners = [str(action._Node__arguments[0]) for action in actions
+                if getattr(action, 'node_executable', None) == 'spawner']
+    assert ('robotiq_gripper_controller' in spawners) == gripper
+
+
 @pytest.mark.parametrize('sim', [True, False])
 def test_home_enables_rviz_for_mock_and_real(tmp_path, sim):
     """只检查启动动作，不连接真机或打开图形窗口。"""

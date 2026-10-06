@@ -3,6 +3,8 @@
 `real_bringup.launch.py` 复用官方 `ur_robot_driver/ur_control.launch.py` 启动 UR10e，并额外启动 Robotiq 2F-85 的独立控制器。
 FT300 不启动独立节点，而是由组合 URDF 内的 `RobotiqFTSensorHardware` 加载到 UR 的 `/controller_manager`；因此不能同时启动 `ft_sensor_standalone.launch.py`。
 
+只测试 UR 时，可传入 `launch_gripper:=false ft_sensor_use_fake_mode:=true`。前者不启动独立夹爪控制栈，后者让组合模型保留 FT300 接口及 TF，但不连接传感器串口；虚拟读数不能用于实际力保护。`ft_sensor_use_fake_mode` 默认 `false`，正常连接 FT300 时应使用实机模式。
+
 ## 启动前检查
 
 1. 容器可访问 FT300 设备 `/dev/ttyUSB2`，且当前用户拥有读写权限。

@@ -52,6 +52,10 @@ def load_config(path: str | Path) -> dict[str, Any]:
     else:
         if data['teleop'].get('controller', 'cartesian_impedance') != 'cartesian_impedance':
             raise ConfigError('Xbot 的 teleop.controller 必须为 cartesian_impedance')
+        if not isinstance(data.get('cell', {}).get('ft300_enabled', True), bool):
+            raise ConfigError('cell.ft300_enabled 必须为布尔值')
+        if not isinstance(data.get('gripper', {}).get('enabled', True), bool):
+            raise ConfigError('gripper.enabled 必须为布尔值')
         rec = data.get('recorder', {})
         if rec.get('action_mode', 'abs') not in ('abs', 'rel'):
             raise ConfigError('recorder.action_mode 必须为 abs 或 rel')
