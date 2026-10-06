@@ -57,3 +57,20 @@ def test_axis_capture_requires_continuous_hold():
     result = wait_capture(sample, '测试轴', baseline, 'axis', clock=lambda: now[0])
     assert result == {'kind': 'axis', 'index': 0, 'rest': 0., 'positive': 1.}
     assert now[0] >= 1.6
+
+
+def test_button_capture_accepts_short_press():
+    """A 等按键无需保持一秒，首次 Joy 按下即被记录。"""
+    pytest.importorskip('rclpy')
+    from ur_teleop.xbot_calibrate import wait_capture
+    now = [0.]
+    baseline = SimpleNamespace(axes=[0.], buttons=[0, 0])
+
+    def sample():
+        now[0] += .1
+        return SimpleNamespace(axes=[0.], buttons=[1, 0])
+
+    assert wait_capture(sample, '按 A', baseline, 'button', clock=lambda: now[0]) == {
+        'kind': 'button', 'index': 0,
+    }
+    assert now[0] == pytest.approx(.1)

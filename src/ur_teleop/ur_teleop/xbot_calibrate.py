@@ -50,8 +50,8 @@ def wait_neutral(sample, reference=None, clock=time.monotonic, timeout=30.):
 
 
 def wait_capture(sample, prompt, baseline, kind, clock=time.monotonic, timeout=30.):
-    """等待指定输入连续保持一秒后记录其编号和端点。"""
-    print(prompt + '，保持一秒', flush=True)
+    """按键立即记录；轴输入稳定保持一秒后记录端点。"""
+    print(prompt + ('，轴输入保持一秒' if kind != 'button' else '，按下即可'), flush=True)
     deadline = clock() + timeout
     active = None
     active_since = None
@@ -68,7 +68,8 @@ def wait_capture(sample, prompt, baseline, kind, clock=time.monotonic, timeout=3
         if kind in ('button', 'either'):
             pressed = [i for i, (a, b) in enumerate(zip(msg.buttons, baseline.buttons)) if a and not b]
             if len(pressed) == 1:
-                detected = ('button', pressed[0])
+                print(f'已记录 {prompt}：按键 {pressed[0]}', flush=True)
+                return {'kind': 'button', 'index': pressed[0]}
         if detected is None and kind in ('axis', 'either'):
             changes = [abs(a - b) for a, b in zip(msg.axes, baseline.axes)]
             if changes and max(changes) > .75:
@@ -83,11 +84,10 @@ def wait_capture(sample, prompt, baseline, kind, clock=time.monotonic, timeout=3
             if value is not None and abs(value - baseline.axes[detected[1]]) > abs(endpoint - baseline.axes[detected[1]]):
                 endpoint = value
             if clock() - active_since >= 1.:
-                if detected[0] == 'button':
-                    return {'kind': 'button', 'index': detected[1]}
+                print(f'已记录 {prompt}：轴 {detected[1]}，端点 {endpoint:.3f}', flush=True)
                 return {'kind': 'axis', 'index': detected[1],
                         'rest': float(baseline.axes[detected[1]]), 'positive': endpoint}
-    raise TimeoutError('未收到持续一秒的清晰输入；请检查 joy_node 后重试')
+    raise TimeoutError('未收到清晰输入；请检查 joy_node 后重试')
 
 
 def main():
