@@ -1,0 +1,31 @@
+/**/cartesian_impedance_controller:
+  ros__parameters:
+    # Jazzy spawner 从控制器自身参数块读取 type；普通节点名不会匹配
+    # controller_manager 创建的控制器节点。
+    type: cartesian_impedance_controller/CartesianImpedanceController
+    # 直接力矩控制时，不要同时激活轨迹、速度、位置、前向力矩或 force_mode 运动控制器。
+    tf_prefix: ""
+    # 使用 UR 原始 tool0，不使用安装在其后的 FT300、夹爪或 gripper_tcp。
+    # 相对位移工具从控制器的 ~/current_pose 获取相同 KDL 链的当前 tool0 位姿。
+    base_frame: base
+    tip_frame: tool0
+    target_topic: ~/target_pose
+    joints:
+      - shoulder_pan_joint
+      - shoulder_lift_joint
+      - elbow_joint
+      - wrist_1_joint
+      - wrist_2_joint
+      - wrist_3_joint
+
+    # 顺序为 [x, y, z, rx, ry, rz]；刚度单位为 N/m、Nm/rad，阻尼单位为 Ns/m、Nms/rad。
+    # 中刚度配置：D_i ≈ 2√K_i 仅作为等效质量归一化时的调参起点。
+    stiffness: [300.0, 300.0, 300.0, 20.0, 20.0, 20.0]
+    damping: [34.641, 34.641, 34.641, 8.944, 8.944, 8.944]
+    # 每周期逐轴裁剪参与控制的位姿误差；前三轴为米，后三轴为弧度。
+    max_pose_error: [0.20, 0.20, 0.20, 0.5, 0.5, 0.5]
+
+    max_wrench: [40.0, 40.0, 40.0, 4.0, 4.0, 4.0]
+    max_torque: [60.0, 60.0, 60.0, 30.0, 30.0, 30.0]
+    # 每个控制周期的一阶滤波系数；目标持续锁存，直到下一条目标覆盖。
+    reference_filter_alpha: 1.0
