@@ -4,6 +4,7 @@
 
 | 文档 | 内容 |
 | --- | --- |
+| [读取从臂初始位置](capture_slave_home.md) | 启动或复用 UR 控制器，将当前关节角保存到两个配置的 home.slave |
 | [Camera setup](camera_inspector.md) | PySide6 + PyQtGraph live preview, camera controls and YAML fields |
 | [启动与相机](launch.md) | 两阶段启动、配置选择、相机发布 |
 | [Xbot 手柄](xbot_control.md) | 校准、按键、base/TCP 切换、安全限制与测试 |
