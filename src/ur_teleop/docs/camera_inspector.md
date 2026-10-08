@@ -35,7 +35,7 @@ After rebuilding the package and sourcing the workspace, `ros2 run ur_teleop cam
 - `config/camera.yaml` 的每个顶层键为自定义相机名。调参工具为 USB 和 RealSense 都使用 Name 字段生成对应的配置项，直接复制到该文件。
 - USB 使用 `type: usb`，`device` 优先填写 `/dev/v4l/by-path`；RealSense 使用 `type: realsense` 和加引号的 `serial_no`。各设备独立配置，不固定 D435i 或 D455 的组合。
 - `enabled` 控制是否发布，`visualize` 控制是否加入预览；默认图像话题为 `/camera/<名称>/color/image_raw`，无需额外配置全局话题列表。
-- 宽高和帧率填写实际采集参数；USB 的 FourCC 放在 `fourcc`。USB 曝光可通过 `auto_exposure` 和 `exposure_time_absolute` 配置，调参界面的其他控件设置仅在当前会话生效。
+- 导出的 `resize` 默认关闭，`resize_width/resize_height` 默认 320×240；需要改变保存尺寸时在相机配置中开启缩放。宽高和帧率填写实际采集参数；USB 的 FourCC 放在 `fourcc`。USB 曝光可通过 `auto_exposure` 和 `exposure_time_absolute` 配置，调参界面的其他控件设置仅在当前会话生效。
 
 One USB camera may have multiple video nodes; metadata nodes are excluded from the camera selector. RealSense nodes are grouped by serial number. Two USB cameras can share the same serial number; use their physical USB paths to distinguish them. If stable path links are missing, the displayed `/dev/videoN` fallback may change after reconnecting.
 

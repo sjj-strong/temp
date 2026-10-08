@@ -236,7 +236,7 @@ def test_existing_dataset_uses_hyphenated_timestamp(monkeypatch, root):
 
 
 @pytest.mark.parametrize('resize', [True, False, None])
-def test_camera_saved_size(monkeypatch, resize):
+def test_camera_saved_size(monkeypatch, tmp_path, resize):
     """真实缩放后的缓存图像与数据集尺寸一致；关闭或省略时保留原图。"""
     pytest.importorskip('rclpy')
     import sys
@@ -245,9 +245,15 @@ def test_camera_saved_size(monkeypatch, resize):
     image = np.full((480, 640, 3), 123, dtype=np.uint8)
     monkeypatch.setitem(sys.modules, 'cv_bridge', SimpleNamespace(
         CvBridge=lambda: SimpleNamespace(imgmsg_to_cv2=lambda *a, **kw: image)))
-    camera = dict(width=320, height=240) if resize else dict(width=640, height=480)
+    import yaml
+    from ur_teleop.recorder_config import recording_cameras
+    source = dict(width=640, height=480, resize_width=320, resize_height=240)
     if resize is not None:
-        camera['resize'] = resize
+        source['resize'] = resize
+    path = tmp_path / 'camera.yaml'
+    path.write_text(yaml.safe_dump({'front': source}))
+    cameras = recording_cameras(dict(cameras={'front': {}}), path)
+    camera = cameras['front']
     node = object.__new__(DataRecorderNode)
     node._cameras = {'front': camera}
     node._lock = threading.Lock()

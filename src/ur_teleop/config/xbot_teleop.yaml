@@ -82,11 +82,8 @@ recorder:
   ee_pose_parent_frame: base_link # Xbot 实际按控制器参考 link 自动选择；此项保留兼容 Alicia。
   ee_pose_child_frame: tool0     # observation 的 TCP link。
   use_videos: true
-  cameras: {}                    # 保存相机配置；取消下面示例的注释时删掉 {}。
-  #   front:
-  #     topic: /camera/usb_front/color/image_raw
-  #     resize: true               # false 或省略：保留原图，宽高填写原图尺寸。
-  #     width: 320                 # resize 开启时的保存宽度。
-  #     height: 240                # resize 开启时的保存高度。
+  cameras: {}                    # 选择 camera.yaml 中的相机；使用下面示例时删掉 {}。
+  #   usb_front:
+  #     enabled: true             # 尺寸、缩放和话题统一在 camera.yaml 设置。
   task: xbot_teleoperation
   min_frames_per_episode: 2

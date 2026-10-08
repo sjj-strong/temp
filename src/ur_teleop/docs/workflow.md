@@ -40,7 +40,7 @@ ros2 launch ur_teleop camera.launch.py \
   config_file:=/ros2_ws/src/ur_teleop/config/camera.yaml
 ```
 
-在所选遥操作配置的 `recorder.cameras` 中启用需要保存的图像，并填写与发布器一致的 topic、宽和高。相机的发布/预览由 `camera.yaml` 管理，录制选项由 `recorder.cameras` 管理。USB 可通过各相机的 `auto_exposure` 和 `exposure_time_absolute` 设置曝光，其他调参值需在采集前重新确认。细节见[相机调试](camera_inspector.md)、[相机发布](launch.md#相机)与[数据字段](data_recorder.md)。
+在所选遥操作配置的 `recorder.cameras` 中启用需要保存的图像，名称与 `camera.yaml` 的顶层相机名一致即可。采集尺寸、话题和保存缩放统一在 `camera.yaml` 设置；开启 `resize` 后用 `resize_width/resize_height` 指定保存尺寸。USB 可通过各相机的 `auto_exposure` 和 `exposure_time_absolute` 设置曝光，其他调参值需在采集前重新确认。细节见[相机调试](camera_inspector.md)、[相机发布](launch.md#相机)与[数据字段](data_recorder.md)。
 
 ## 3. 生成本次 mock 配置
 

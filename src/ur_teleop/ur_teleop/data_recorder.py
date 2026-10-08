@@ -22,7 +22,7 @@ except ImportError:
 from ur_teleop.session_logging import debug_log, log_event, EpisodeProgress
 from ur_teleop.config import UR_JOINT_NAMES, default_config_path, load_config
 from ur_teleop.frame_builder import FrameBuilder
-from ur_teleop.recorder_config import dataset_create_options
+from ur_teleop.recorder_config import dataset_create_options, recording_cameras
 from ur_teleop.cartesian_action import action_label
 from ur_teleop.controller_frame import controller_base_frame
 from ur_teleop.keyboard import KeyboardReader
@@ -50,8 +50,12 @@ class DataRecorderNode(Node):
         self._min_frames = int(self._rec.get("min_frames_per_episode", 2))
         self._num_episodes = self._rec.get("num_episodes", 0)
         self._finish_requested = False
-        self._cameras = {name: camera for name, camera in self._rec.get('cameras', {}).items()
-                         if camera.get('enabled', True)}
+        camera_file = Path(self._rec.get('camera_config_file',
+                                        Path(default_config_path()).parent / 'camera.yaml'))
+        if not camera_file.is_absolute():
+            camera_file = Path(self.get_parameter('config_file').value).parent / camera_file
+        self._cameras = recording_cameras(self._rec, camera_file)
+        self._rec = dict(self._rec, cameras=self._cameras)
         self._builder = FrameBuilder(self._rec, cfg.get("gripper", {}))
 
         self._lock = threading.Lock()

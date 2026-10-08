@@ -43,21 +43,34 @@ Xbot 的下列开关相互独立。启用的数值字段按表格顺序拼接为
 
 启用力数据时，`cell.ft300_enabled: true` 订阅 `/robotiq_force_torque_sensor_broadcaster/wrench`；设为 `false` 则订阅 UR 内置传感器 `/force_torque_sensor_broadcaster/ft_data`。数值保持消息原始坐标，不做变换；`observation.wrench_reference_link` 保存该消息的 `header.frame_id`。FT300 在组合 URDF 的 ros2_control 硬件接口中运行，组合启动仅额外加载 broadcaster，不启动争用串口的独立驱动。仿真录制如无力话题，应将 `record_wrench` 设为 `false`。
 
-每台相机由 `recorder.cameras.<名称>.enabled` 单独控制；省略 `enabled` 视为启用。启用后用 `topic`、`image_key`、`height`、`width` 定义 `observation.images.<image_key>`。`use_videos` 决定视频或逐帧图像特征。例如：
+每台相机的采集与保存尺寸统一在 `camera.yaml` 中设置：
+
+```yaml
+usb_front:
+  type: usb
+  enabled: true
+  device: /dev/video0
+  width: 640                   # 采集宽度
+  height: 480                  # 采集高度
+  fps: 30
+  resize: true                 # 是否缩放保存图像
+  resize_width: 320            # 保存宽度
+  resize_height: 240           # 保存高度
+```
+
+`resize: true` 在录制器接收图像后缩放到 `resize_width × resize_height`，图像、视频与数据集尺寸描述同步改变。`resize: false` 或省略则保存原图，采用采集的 `width/height`；目标尺寸默认 320×240，必须为正整数。修改后重启录制器，并使用新数据集避免旧尺寸冲突。图像发布和预览仍使用采集尺寸。
+
+遥操作配置只选择相机，名称必须与 `camera.yaml` 顶层键一致，不再重复填写话题和尺寸：
 
 ```yaml
 recorder:
   cameras:
-    front:
+    usb_front:
       enabled: true
-      topic: /camera/usb_front/color/image_raw
-      image_key: front
-      resize: true
-      height: 240
-      width: 320
+      image_key: front         # 可选；省略时使用 usb_front
 ```
 
-相机保存尺寸在遥操作配置的 `recorder.cameras` 中设置（Alicia：`alicia_teleop.yaml`，Xbot：`xbot_teleop.yaml`）。`resize: true` 在录制器接收图像后用 OpenCV 缩放到 `width × height`，图像和视频保存使用同一尺寸。`resize: false` 或省略则保留收到的原图，此时 `width`、`height` 应填写原图尺寸。缩放开启时宽高必须为正整数，省略宽高默认 640 × 480。改变保存尺寸后使用新数据集，避免与已有数据集的特征尺寸冲突。
+默认读取安装目录中的 `config/camera.yaml`。相机发布入口使用自定义文件时，在遥操作配置中设置 `recorder.camera_config_file: /绝对路径/camera.yaml`，让录制器读取同一文件；相对路径以遥操作配置文件所在目录为基准。`use_videos` 决定视频或逐帧图像特征，`recorder.cameras.<名称>.enabled` 只控制是否录制该相机（省略视为启用）。旧的录制配置中的 `topic`、`resize`、`width`、`height` 应迁移到相机文件；以相机文件为准。
 
 录制开始和写帧时只要求**启用**的字段有新鲜数据；任一启用字段缺失、非有限或超过 `data_timeout_s` 时跳过整帧，不写缺键或 NaN。手柄就绪心跳与位姿 action 始终是必要条件。Alicia 的 observation 不再附加夹爪实测状态；关节 action 可通过同一个开关附加夹爪指令。
 

@@ -2,7 +2,7 @@
 from types import SimpleNamespace
 
 import pytest
-from ur_teleop.recorder_config import CREATE_DEFAULTS, dataset_create_options, validate_recorder
+from ur_teleop.recorder_config import CREATE_DEFAULTS, dataset_create_options, validate_recorder, recording_cameras
 
 
 @pytest.mark.parametrize('field,value', [
@@ -87,8 +87,38 @@ def test_unlimited_and_save_failure_do_not_finish(monkeypatch):
     assert node._episode_count == 101 and not node._finish_requested
 
 
-@pytest.mark.parametrize('camera', [dict(resize='false'), dict(resize=True, width=0),
-                                    dict(resize=True, height=-1), dict(resize=True, width=1.5)])
-def test_invalid_camera_resize(camera):
-    with pytest.raises(ValueError, match='recorder.cameras.front'):
-        validate_recorder(dict(cameras={'front': camera}))
+@pytest.mark.parametrize('camera', [dict(resize='false'), dict(resize=True, resize_width=0),
+                                    dict(resize=True, resize_height=-1),
+                                    dict(resize=True, resize_width=1.5)])
+def test_invalid_camera_resize(tmp_path, camera):
+    import yaml
+    path = tmp_path / 'camera.yaml'
+    path.write_text(yaml.safe_dump({'front': camera}))
+    with pytest.raises(ValueError, match='相机 front'):
+        recording_cameras(dict(cameras={'front': {}}), path)
+
+
+def test_recording_camera_settings_have_one_source(tmp_path):
+    """相机文件控制尺寸和话题，各相机缩放独立，录制配置不重复定义。"""
+    import yaml
+    path = tmp_path / 'camera.yaml'
+    path.write_text(yaml.safe_dump(dict(
+        front=dict(resize=True, resize_width=200, resize_height=100, topic='/custom/image'),
+        wrist=dict(resize=False, width=1280, height=720))))
+    cameras = recording_cameras(dict(cameras=dict(
+        front=dict(image_key='front', width=999, resize=False), wrist={}, off=dict(enabled=False))), path)
+    assert (cameras['front']['width'], cameras['front']['height']) == (200, 100)
+    assert cameras['front']['resize'] is True
+    assert cameras['front']['topic'] == '/custom/image'
+    assert (cameras['wrist']['width'], cameras['wrist']['height']) == (1280, 720)
+    assert 'off' not in cameras
+    assert recording_cameras({}, tmp_path / 'missing.yaml') == {}
+
+
+@pytest.mark.parametrize('config', [{}, {'front': dict(enabled=False)}])
+def test_recording_unknown_or_disabled_camera(tmp_path, config):
+    import yaml
+    path = tmp_path / 'camera.yaml'
+    path.write_text(yaml.safe_dump(config))
+    with pytest.raises(ValueError, match='不存在或未启用'):
+        recording_cameras(dict(cameras={'front': {}}), path)

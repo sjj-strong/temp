@@ -2,7 +2,8 @@
 # enabled 控制发布，visualize 控制是否加入预览。
 # 默认彩色话题为 /camera/<相机名称>/color/image_raw，可用 topic 覆盖。
 # USB 用 device 绑定物理端口；RealSense 用加引号的 serial_no 绑定设备。
-# 保存图像的选择与缩放仍由遥操作配置的 recorder.cameras 管理。
+# resize 仅控制保存图像的缩放，resize_width/resize_height 是保存尺寸。
+# 遥操作配置的 recorder.cameras 只选择录制的相机名称。
 usb_front:
   type: usb
   enabled: true
@@ -11,6 +12,9 @@ usb_front:
   width: 640
   height: 480
   fps: 30
+  resize: false
+  resize_width: 320
+  resize_height: 240
   fourcc: MJPG
   publish_compressed: true
   compressed_quality: 90
@@ -22,6 +26,9 @@ usb_left:
   width: 640
   height: 480
   fps: 30
+  resize: false
+  resize_width: 320
+  resize_height: 240
   fourcc: MJPG
   publish_compressed: true
   compressed_quality: 90
@@ -33,6 +40,9 @@ usb_right:
   width: 640
   height: 480
   fps: 30
+  resize: false
+  resize_width: 320
+  resize_height: 240
   fourcc: MJPG
   publish_compressed: true
   compressed_quality: 90
@@ -46,6 +56,9 @@ d435i:
   width: 640
   height: 480
   fps: 30
+  resize: false
+  resize_width: 320
+  resize_height: 240
 d455:
   type: realsense
   enabled: false
@@ -56,3 +69,6 @@ d455:
   width: 640
   height: 480
   fps: 30
+  resize: false
+  resize_width: 320
+  resize_height: 240

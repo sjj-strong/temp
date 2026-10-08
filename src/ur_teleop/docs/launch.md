@@ -98,4 +98,4 @@ ros2 launch ur_teleop camera.launch.py \
 - 宽高和帧率必须为正整数，默认 640×480、30 FPS。USB 可配置 `fourcc`、`publish_compressed`、`compressed_quality`、`auto_exposure`、`exposure_time_absolute` 和 `frame_id`；RealSense 用 `enable_color`、`enable_depth` 控制图像流。
 - 原有按类别开关及序列号的命令行参数已移除；入口仅使用 `config_file`，每台相机的参数在文件内修改。已有旧配置须按上例迁移。
 - 预览话题自动从选中的相机生成，无需单独维护话题列表；拼接结果为 `/camera_mosaic/image_raw`。预览使用彩色图像，RealSense 需要开启 `enable_color`。
-- `alicia_teleop.yaml` / `xbot_teleop.yaml` 的 `recorder.cameras` 选择保存的图像及缩放尺寸，录制话题应与发布话题一致，见[录制配置](data_recorder.md)。
+- 每台相机的 `resize` 控制保存时是否缩放，`resize_width`、`resize_height` 设置保存尺寸；`width`、`height` 是采集尺寸。`alicia_teleop.yaml` / `xbot_teleop.yaml` 的 `recorder.cameras` 只按名称选择录制相机，尺寸和话题自动从同一相机文件读取，见[录制配置](data_recorder.md)。

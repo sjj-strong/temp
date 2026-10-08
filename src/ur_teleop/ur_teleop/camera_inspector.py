@@ -103,7 +103,8 @@ def snippet(device, width, height, fps, fourcc, name):
                       publish_compressed=True, compressed_quality=90)
     else:
         camera.update(serial_no=device['serial'], enable_color=True, enable_depth=False)
-    camera.update(width=width, height=height, fps=fps)
+    camera.update(width=width, height=height, fps=fps,
+                  resize=False, resize_width=320, resize_height=240)
     return yaml.safe_dump({name: camera}, allow_unicode=True, sort_keys=False)
 
 
