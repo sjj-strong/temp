@@ -14,7 +14,7 @@ def camera_actions(tmp_path, config):
     from launch_ros.actions import Node
     from launch_ros.utilities import evaluate_parameters
     path = tmp_path / 'camera.yaml'
-    path.write_text(yaml.safe_dump(config))
+    path.write_text(yaml.safe_dump(config, sort_keys=False))
     context = LaunchContext()
     context.launch_configurations['config_file'] = str(path)
     module = runpy.run_path(str(ROOT / 'launch/camera.launch.py'))
@@ -30,9 +30,9 @@ def test_default_camera_config(tmp_path):
     assert list(config) == ['usb_front', 'usb_left', 'usb_right', 'd435i', 'd455']
     _, params = camera_actions(tmp_path, config)
     assert [p['camera_name'] for p in params if 'camera_name' in p] == [
-        'usb_front', 'usb_left', 'usb_right']
-    assert list(params[-1]['topics']) == [f'/camera/usb_{name}/color/image_raw'
-                                    for name in ('front', 'left', 'right')]
+        'usb_front', 'usb_left', 'd455']
+    assert list(params[-1]['topics']) == [f'/camera/{name}/color/image_raw'
+                                    for name in ('usb_front', 'usb_left', 'd455')]
     for name in ('alicia_teleop.yaml', 'xbot_teleop.yaml'):
         teleop = yaml.safe_load((ROOT / 'config' / name).read_text())
         assert 'cameras' not in teleop

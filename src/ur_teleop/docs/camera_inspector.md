@@ -31,3 +31,23 @@ python3 /ros2_ws/src/ur_teleop/ur_teleop/camera_inspector.py --list
 导出的 width/height/fps 来自活动采集模式；未启动时使用界面输入。resize 默认 false，resize_width/resize_height 默认 320×240，修改它们只改变录制保存尺寸，不能改变此工具预览或驱动采集尺寸。完整启动参数见[相机发布](launch.md#相机)，录制选择见[数据采集](data_recorder.md)。
 
 USB 的 metadata 节点不是独立相机，工具按节点 index 过滤；RealSense 按序列号分组，并优先采用 SDK 序列号。两台 USB 可以有相同序列号，用物理端口区分；缺少稳定路径时 /dev/videoN 可能随插拔改变。
+
+## 正式发布无法打开相机
+
+调参工具可预览而发布节点提示 `Cannot open OpenCV camera` 时，先列出当前设备：
+
+```bash
+python3 /ros2_ws/src/ur_teleop/ur_teleop/camera_inspector.py --list
+```
+
+将每台 USB 的 `path` 填入 `camera.yaml` 对应的 `device`，RealSense 的 SDK `serial` 填入加引号的 `serial_no`。USB 更换物理端口后 by-path 会改变；相同 USB 序列号不能区分两台相机。不存在的相机设 `enabled: false`。名称不代表检测到的物理方向，需预览后确认 front/left 对应关系。
+
+关闭调参工具以释放设备，再重新启动[相机发布](launch.md#相机)。`camera ready` 仅表示 ROS 节点初始化，不代表设备打开成功；用图像话题确认实际出图：
+
+```bash
+ros2 topic hz /camera/usb_front/color/image_raw
+ros2 topic hz /camera/usb_left/color/image_raw
+ros2 topic hz /camera/d455/color/image_raw
+```
+
+话题名称随配置相机名改变。路径正确仍无法打开时，检查容器设备映射、访问权限和是否被其他进程占用。Ctrl-C 后出现 `rcl_shutdown already called` 是 `data_collection` 的退出处理报错，与相机打开失败无关。
