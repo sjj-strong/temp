@@ -1,0 +1,4 @@
+-r requirements-client.txt
+fastapi>=0.115,<1
+uvicorn>=0.30,<1
+# LeRobot 使用 /opt/lerobot_venv 中与训练一致的版本，不自动升级。

@@ -1,0 +1,7 @@
+httpx>=0.27,<1
+numpy>=1.26,<3
+Pillow>=10,<13
+pydantic>=2.7,<3
+PyYAML>=6,<7
+scipy>=1.11,<2
+# ROS 模式使用系统安装的 rclpy、sensor_msgs、geometry_msgs、control_msgs。
