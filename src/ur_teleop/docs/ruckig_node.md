@@ -37,13 +37,13 @@
 
 ## 配置
 
-`control_hz` 通过 launch 参数 `ruckig_control_hz`（或 ROS 参数 `control_hz`）设置，默认 **500.0**（`teleop.launch` 从 `ur_teleop.yaml` 的 `ruckig.control_hz` 读取，缺省 500）。
+`control_hz` 通过 launch 参数 `ruckig_control_hz`（或 ROS 参数 `control_hz`）设置，默认 **500.0**（`teleop.launch` 从 `alicia_teleop.yaml` 的 `ruckig.control_hz` 读取，缺省 500）。
 
-max_velocity / max_acceleration / max_jerk：若 `ur_teleop.yaml` 含 `ruckig:` 段则从其读取，否则回退代码内 `_DEFAULT_*`（`[0.30]×6 / [0.80]×6 / [4.0]×6`，第一阶段真机测试保守参数）。列表长度 ≠ 6 时同样回退默认。需要调参时在 `ur_teleop.yaml` 加回 `ruckig:` 段即可。
+max_velocity / max_acceleration / max_jerk：若 `alicia_teleop.yaml` 含 `ruckig:` 段则从其读取，否则回退代码内 `_DEFAULT_*`（`[0.30]×6 / [0.80]×6 / [4.0]×6`，第一阶段真机测试保守参数）。列表长度 ≠ 6 时同样回退默认。需要调参时在 `alicia_teleop.yaml` 加回 `ruckig:` 段即可。
 
 `teleop.controller` 决定输出接口：默认 `forward_position` 保持历史行为；设为 `joint_impedance` 时发布 `sensor_msgs/msg/JointState`，其中 `name` 固定为 UR 六关节标准顺序，`position` 为 Ruckig 输出。阻抗控制器的 `velocity` 可省略，控制器会使用其受限内部参考速度。
 
-`ur_teleop.yaml` 中 `ruckig.enabled` 默认为 `true`，并且**仅对**
+`alicia_teleop.yaml` 中 `ruckig.enabled` 默认为 `true`，并且**仅对**
 `teleop.controller: joint_impedance` 生效。设为 `false` 后，`teleop_node` 不使用 Ruckig
 路径，而是将映射后的关节目标直接发送至关节阻抗控制器；这不会绕过关节限位、参考速度限制、
 低通、力矩限幅或力矩变化率保护。`forward_position` 始终沿用 Ruckig 平滑链路，不受此开关影响。
@@ -62,7 +62,7 @@ max_velocity / max_acceleration / max_jerk：若 `ur_teleop.yaml` 含 `ruckig:` 
 
 # 独立手动测试（无 teleop，自己往 /ruckig/target_joint_positions 灌目标）：
 ros2 run ur_teleop ruckig_node --ros-args \
-  -p config_file:=/ros2_ws/install/ur_teleop/share/ur_teleop/config/ur_teleop.yaml \
+  -p config_file:=/ros2_ws/install/ur_teleop/share/ur_teleop/config/alicia_teleop.yaml \
   -p control_hz:=500.0
 ros2 topic pub -r 1 /ruckig/target_joint_positions std_msgs/msg/Float64MultiArray \
   "{data: [0.5, -1.5, 0.2, -1.2, 0.3, 0.0]}"

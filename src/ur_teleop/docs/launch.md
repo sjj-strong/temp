@@ -42,7 +42,7 @@ ros2 launch ur_teleop teleop.launch.py mode:=teleop
 | `use_ruckig`、`ruckig_control_hz` | Alicia teleop | 平滑开关及频率 |
 | `force_home` | Alicia teleop | 跳过 Home 位置验证；Xbot 不支持 |
 
-Alicia Home 的参数默认值来自安装目录的 `ur_teleop.yaml`；自定义 `config_file` 不会替换这些默认值，必要时显式传入对应参数。teleop 阶段按所选配置读取默认值。Xbot Home 直接读取所选配置，不使用上述 Alicia 专属参数覆盖。
+Alicia Home 的参数默认值来自安装目录的 `alicia_teleop.yaml`；自定义 `config_file` 不会替换这些默认值，必要时显式传入对应参数。teleop 阶段按所选配置读取默认值。Xbot Home 直接读取所选配置，不使用上述 Alicia 专属参数覆盖。
 
 ## Alicia 控制器选择
 
@@ -71,6 +71,6 @@ ros2 launch ur_teleop camera.launch.py \
 
 - RealSense 使用 `data_collection/launch/dual_realsense.launch.py`，设置位于 `cameras.realsense`。
 - USB/OpenCV 使用 `data_collection/launch/opencv_cameras.launch.py`，设备与图像参数由 `cameras.opencv.config_file` 指定，默认 `opencv_cameras.yaml`；相对路径以 `camera.yaml` 所在目录为基准。
-- `ur_teleop.yaml` / `xbot_teleop.yaml` 的 `recorder.cameras` 只选择数据集保存的图像，见[录制配置](data_recorder.md)。
+- `alicia_teleop.yaml` / `xbot_teleop.yaml` 的 `recorder.cameras` 只选择数据集保存的图像，见[录制配置](data_recorder.md)。
 - `cameras.visualization.topics` 定义预览话题，拼接结果为 `/camera_mosaic/image_raw`，由 rqt 显示。
 - 命令行 `launch_realsense`、`launch_opencv_cameras`、`launch_image_viewers` 等参数可覆盖相机配置。

@@ -57,7 +57,7 @@ class RuckigNode(Node):
         self.dt = 1.0 / self.control_hz
 
         # ------------------------------------------------------------
-        # 运动参数从 ur_teleop.yaml 的 ruckig 段读取（可选段，launch
+        # 运动参数从 alicia_teleop.yaml 的 ruckig 段读取（可选段，launch
         # 参数优先、yaml 兜底、缺省用下方保守默认）；后续再根据
         # UR10e 和遥操需要调整
         # ------------------------------------------------------------

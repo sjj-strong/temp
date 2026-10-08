@@ -9,7 +9,7 @@ setup(
     data_files=[
         ("share/" + package_name, ["package.xml"]),
         ("share/" + package_name + "/config", [
-            "config/ur_teleop.yaml",
+            "config/alicia_teleop.yaml",
             "config/ur_controllers_sim.yaml",
             "config/ur_controllers_impedance_sim.yaml",
             "config/opencv_cameras.yaml",

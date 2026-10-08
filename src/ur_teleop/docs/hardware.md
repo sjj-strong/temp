@@ -44,7 +44,7 @@ ping -c 3 169.254.138.15
 
 ## Alicia
 
-连接 Alicia USB 串口，在 `ur_teleop.yaml` 中核对 `cell.alicia_port`、`cell.launch_alicia`、`home.master` 和关节映射。UR mock 不会把 Alicia 变成模拟设备；Alicia 分支默认仍需真实主臂。
+连接 Alicia USB 串口，在 `alicia_teleop.yaml` 中核对 `cell.alicia_port`、`cell.launch_alicia`、`home.master` 和关节映射。UR mock 不会把 Alicia 变成模拟设备；Alicia 分支默认仍需真实主臂。
 
 ```bash
 ls -l /dev/serial/by-id/

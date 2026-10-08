@@ -3,7 +3,9 @@
 脚本启动或复用 UR 控制器，等待 `joint_state_broadcaster` 激活，再从 `/joint_states` 读取完整六关节角，更新以下两个源码配置的 `home.slave`：
 
 - `/ros2_ws/src/ur_teleop/config/xbot_teleop.yaml`
-- `/ros2_ws/src/ur_teleop/config/ur_teleop.yaml`
+- `/ros2_ws/src/ur_teleop/config/alicia_teleop.yaml`
+
+两份配置按输入设备命名：Alicia 使用 `alicia_teleop.yaml`，Xbot 使用 `xbot_teleop.yaml`。原 `ur_teleop.yaml` 已重命名；自定义启动命令需要同步修改路径。
 
 ## 使用
 
@@ -20,6 +22,8 @@
 /ros2_ws/src/ur_teleop/scripts/capture_slave_home.sh --robot-ip 169.254.138.15 --ur-type ur10e
 # 控制器已启动时，只连接现有控制器：
 /ros2_ws/src/ur_teleop/scripts/capture_slave_home.sh --no-start
+# 指定其他配置文件：
+/ros2_ws/src/ur_teleop/scripts/capture_slave_home.sh --alicia-config /路径/alicia_teleop.yaml --xbot-config /路径/xbot_teleop.yaml
 # 修改等待时长：
 /ros2_ws/src/ur_teleop/scripts/capture_slave_home.sh --timeout 90
 ```

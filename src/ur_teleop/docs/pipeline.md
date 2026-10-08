@@ -15,7 +15,7 @@ UR10e 从臂 + Alicia-D 主臂遥操作：主臂关节 → 会话 offset 映射 
 - **ROS2 nodes + topic 通讯、无多线程拆解**：所有节点单线程 executor；定时器回调内不做阻塞操作（修复 spec 问题 7）；控制器切换是状态机轮询的异步 Future 链，无嵌套 spin（修复问题 10）；键盘用 select 非阻塞读。
 - **进程隔离**：teleop_node 与 data_recorder 是独立进程——recorder 崩溃不影响遥操，已保存 episodes 保留。
 - **会话内 offset**：offset 不写盘，CAPTURE_OFFSET 时自动捕获（修复问题 2/4）。
-- **单一配置入口**：`ur_teleop.yaml` 合并旧五个 yaml；launch 参数优先、yaml 兜底（修复问题 1/13/14）。
+- **单一配置入口**：`alicia_teleop.yaml` 合并旧五个 yaml；launch 参数优先、yaml 兜底（修复问题 1/13/14）。
 
 ## 节点拓扑与生命周期
 

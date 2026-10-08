@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_camera_config_separated_from_teleop():
     camera = yaml.safe_load((ROOT / 'config/camera.yaml').read_text())
     assert camera['cameras']['opencv']['enabled'] is True
-    for name in ('ur_teleop.yaml', 'xbot_teleop.yaml'):
+    for name in ('alicia_teleop.yaml', 'xbot_teleop.yaml'):
         config = yaml.safe_load((ROOT / 'config' / name).read_text())
         assert 'cameras' not in config
         assert config['recorder']['cameras'] == {}

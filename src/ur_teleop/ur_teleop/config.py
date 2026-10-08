@@ -28,7 +28,7 @@ class ConfigError(ValueError):
 
 
 def load_config(path: str | Path) -> dict[str, Any]:
-    """Load and validate ur_teleop.yaml. Raises ConfigError on any problem."""
+    """加载并校验遥操作配置，错误时抛出 ConfigError。"""
     data = _read_config(Path(path), set())
     p = Path(path)
 
@@ -154,11 +154,11 @@ def _merge_config(base: dict, override: dict) -> dict:
 
 
 def default_config_path() -> str:
-    """Package share path to ur_teleop.yaml; '' if the package is not installed."""
+    """返回安装目录中的 Alicia 默认配置路径；未安装时返回空串。"""
     try:
         from ament_index_python.packages import get_package_share_directory
         return os.path.join(get_package_share_directory("ur_teleop"),
-                            "config", "ur_teleop.yaml")
+                            "config", "alicia_teleop.yaml")
     except Exception:
         return ""
 

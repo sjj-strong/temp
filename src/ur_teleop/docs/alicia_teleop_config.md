@@ -1,6 +1,6 @@
-# 配置加载与校验（config.py）
+# Alicia 配置参数与加载校验
 
-> 路径：`ur_teleop/config.py` —— 纯逻辑（无 rclpy 依赖），负责 `ur_teleop.yaml` 的加载/校验、路径解析与夹爪单位换算。
+> 路径：`ur_teleop/config.py` —— 纯逻辑（无 rclpy 依赖），负责 `alicia_teleop.yaml` 的加载/校验、路径解析与夹爪单位换算。
 
 ## 概述
 
@@ -35,7 +35,7 @@ UR_GRIPPER_JOINT = "robotiq_85_left_knuckle_joint"   # UR 侧夹爪关节名
 
 ### `default_config_path() -> str`（config.py:61）
 
-经 `ament_index_python` 返回 `get_package_share_directory("ur_teleop")/config/ur_teleop.yaml`；包未安装（例如源码直跑）时返回空串。teleop_node 用它作为 `config_file` 参数默认值。
+经 `ament_index_python` 返回 `get_package_share_directory("ur_teleop")/config/alicia_teleop.yaml`；包未安装（例如源码直跑）时返回空串。teleop_node 用它作为 `config_file` 参数默认值。
 
 ### 夹爪单位换算（Alicia 位置 ↔ 指令值）
 
@@ -49,7 +49,7 @@ gripper_value_to_position(value: float, gripper_type: str = "50mm") -> float
 - 方向约定：**位置 0 = 张开**，对应指令值 1000；位置 = 全行程 = 闭合，对应指令值 0。注意与 Robotiq 侧单位（弧度，0=开）是两套体系，换算只在本包与 alicia_d_driver 之间生效。
 - 输入输出均做 `[0, 1000]` clamp。
 
-## 配置键参考（config/ur_teleop.yaml）
+## 配置键参考（config/alicia_teleop.yaml）
 
 按 yaml 分组列出；"默认值"为消费方 `.get()` 兜底值（与 yaml 内联值一致），"必填"仅指 `load_config` 强校验的键。
 

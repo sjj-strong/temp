@@ -1,7 +1,7 @@
 """UR cell: sim (mock + rviz) or real (hardware + gripper + FT300).
 
 Persistent — started by home.launch and shared with teleop.launch (spec §4.1).
-Launch args win over ur_teleop.yaml defaults.
+Launch args win over alicia_teleop.yaml defaults.
 """
 
 import os
@@ -59,7 +59,7 @@ def _description_launchfile():
 
 def generate_launch_description():
     pkg_share = get_package_share_directory("ur_teleop")
-    config_file = os.path.join(pkg_share, "config", "ur_teleop.yaml")
+    config_file = os.path.join(pkg_share, "config", "alicia_teleop.yaml")
 
     sim_default = _yaml_default(config_file, "sim", fallback="true")
     ip_default = _yaml_default(config_file, "cell", "robot_ip", fallback="0.0.0.0")

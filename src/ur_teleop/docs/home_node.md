@@ -26,7 +26,7 @@ home.launch.py（阶段 1）
 teleop.launch.py（阶段 2）            ← 连接已运行的 cell，不再重启 UR 栈
 ```
 
-cell 由阶段 1 启动并**保持运行**（home.launch.py 的 `IncludeLaunchDescription` + home 节点先等 cell 就绪的时序），两阶段共享同一个 controller_manager，避免 UR 栈重启丢失位姿。home.launch.py 声明 `config_file` / `sim` / `robot_ip` / `gripper_port` / `ftdi_id` / `launch_rviz` / `description_launchfile` 七个参数并透传给 cell；除 `description_launchfile` 默认取组合模型 rsp（`_description_launchfile()`，见 launch.md「rviz 模型」）外，其余全部 **launch 参数优先、yaml 兜底**（`_yaml_default` 从 `ur_teleop.yaml` 逐级取值，取不到用 fallback）。
+cell 由阶段 1 启动并**保持运行**（home.launch.py 的 `IncludeLaunchDescription` + home 节点先等 cell 就绪的时序），两阶段共享同一个 controller_manager，避免 UR 栈重启丢失位姿。home.launch.py 声明 `config_file` / `sim` / `robot_ip` / `gripper_port` / `ftdi_id` / `launch_rviz` / `description_launchfile` 七个参数并透传给 cell；除 `description_launchfile` 默认取组合模型 rsp（`_description_launchfile()`，见 launch.md「rviz 模型」）外，其余全部 **launch 参数优先、yaml 兜底**（`_yaml_default` 从 `alicia_teleop.yaml` 逐级取值，取不到用 fallback）。
 
 cell.launch.py 侧再补 `ur_type`（默认 `ur10e`）：sim 分支走 `ur_robot_driver` 的 `ur_control.launch.py`（`use_mock_hardware=true`）+ rviz（`launch_rviz` 控制）；real 分支真机 + robotiq_control（`gripper_port`）+ rq_fts 驱动（`ftdi_id`）。sim 判定用 `PythonExpression` 比较字符串 `"true"`，规避 `"false"` 字符串真值陷阱。home 节点自身的唯一参数是 `config_file`。
 
@@ -110,7 +110,7 @@ msg.position = home.master + [master_gripper_value]     # 0-1000，1000 = 开
 
 三个接口均默认 QoS（depth 10）：`/joint_commands` 与 `/joint_states` 是可靠传输，`/joint_commands` 单帧丢失无所谓——验证循环每 50 ms 重发即是容错手段。
 
-## 配置键（home.*，ur_teleop.yaml）
+## 配置键（home.*，alicia_teleop.yaml）
 
 | 键                             | 默认值 | 含义                                |
 | ------------------------------ | ------ | ----------------------------------- |
@@ -126,7 +126,7 @@ msg.position = home.master + [master_gripper_value]     # 0-1000，1000 = 开
 
 ```bash
 ros2 launch ur_teleop home.launch.py           # 含 cell + home 节点
-ros2 run ur_teleop home_node --ros-args -p config_file:=/path/to/ur_teleop.yaml
+ros2 run ur_teleop home_node --ros-args -p config_file:=/path/to/alicia_teleop.yaml
 ```
 
 ## 错误处理

@@ -1,6 +1,6 @@
 # Xbot 配置参数说明
 
-本页逐项说明 [`config/xbot_teleop.yaml`](../config/xbot_teleop.yaml) 的参数作用。表中数值取自当前工作区文件，供配置时参考；实际运行以传给 `config_file` 的文件和启动参数为准。该文件是 Xbot 的独立配置，不继承 `ur_teleop.yaml`。修改后需重启相应的 Home、遥操作或录制进程；标定文件的按键和轴编号见 `config/xbot_joy.yaml`。
+本页逐项说明 [`config/xbot_teleop.yaml`](../config/xbot_teleop.yaml) 的参数作用。表中数值取自当前工作区文件，供配置时参考；实际运行以传给 `config_file` 的文件和启动参数为准。该文件是 Xbot 的独立配置，不继承 `alicia_teleop.yaml`。修改后需重启相应的 Home、遥操作或录制进程；标定文件的按键和轴编号见 `config/xbot_joy.yaml`。
 
 ## 运行模式与设备
 

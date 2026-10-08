@@ -33,7 +33,7 @@ teleop:
 
 
 def _write(tmp_path, text: str):
-    p = tmp_path / "ur_teleop.yaml"
+    p = tmp_path / "alicia_teleop.yaml"
     p.write_text(text)
     return str(p)
 
@@ -54,10 +54,10 @@ def test_joint_impedance_controller_config_is_accepted(tmp_path):
 
 
 def test_xbot_config_inherits_current_ur_home(tmp_path):
-    parent = tmp_path / "ur_teleop.yaml"
+    parent = tmp_path / "alicia_teleop.yaml"
     parent.write_text(BASE)
     child = tmp_path / "xbot.yaml"
-    child.write_text("base_config: ur_teleop.yaml\nteleop:\n  control_source: xbot\n"
+    child.write_text("base_config: alicia_teleop.yaml\nteleop:\n  control_source: xbot\n"
                      f"xbot:\n  controller_config_file: {SIM_CONTROLLER}\n")
     cfg = load_config(child)
     assert cfg["home"]["slave"] == [0.0, -1.57, 0.0, -1.57, 0.0, 0.0]

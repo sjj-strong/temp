@@ -78,7 +78,7 @@ return max(lo, min(hi, value))        # 上下界双向 clamp
 
 ### clamp 与 safety.limits
 
-- 限位表来自 `safety.limits`（ur_teleop.yaml）：每关节 `[lo, hi]` 弧度。默认表（rad）：
+- 限位表来自 `safety.limits`（alicia_teleop.yaml）：每关节 `[lo, hi]` 弧度。默认表（rad）：
 
 | 关节 | 下限 | 上限 |
 |---|---|---|

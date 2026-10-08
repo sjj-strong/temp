@@ -1,6 +1,6 @@
 # Record 配置参数
 
-Alicia 使用 `config/ur_teleop.yaml`，Xbot 使用 `config/xbot_teleop.yaml`；两者的 `recorder` 都由采集器读取。以下创建参数已按当前实际安装的 `LeRobotDataset.create` 接口核对，源码位于 [lerobot_dataset.py](../../lerobot/src/lerobot/datasets/lerobot_dataset.py)。升级 LeRobot 后应重新核对接口。
+Alicia 使用 `config/alicia_teleop.yaml`，Xbot 使用 `config/xbot_teleop.yaml`；两者的 `recorder` 都由采集器读取。以下创建参数已按当前实际安装的 `LeRobotDataset.create` 接口核对，源码位于 [lerobot_dataset.py](../../lerobot/src/lerobot/datasets/lerobot_dataset.py)。升级 LeRobot 后应重新核对接口。
 
 ## 采集数量与采集循环
 

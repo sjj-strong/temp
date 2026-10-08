@@ -39,7 +39,7 @@ SELF = Path(__file__).resolve().parent
 REPO = SELF.parent
 FAKE_MASTER = SELF / "fake_master.py"
 
-# 与 CFG_BODY home.slave 一致（= mock UR10e 初始位姿 = config/ur_teleop.yaml）
+# 与 CFG_BODY home.slave 一致（= mock UR10e 初始位姿 = config/alicia_teleop.yaml）
 SLAVE_HOME = [0.0, -1.57, 0.0, -1.57, 0.0, 0.0]
 
 CFG_BODY = """\
@@ -49,7 +49,7 @@ cell:
   launch_rviz: false
 home:
   master: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-  # mock UR10e 初始位姿即 UR home pose（与 config/ur_teleop.yaml 的 home.slave 一致）
+  # mock UR10e 初始位姿即 UR home pose（与 config/alicia_teleop.yaml 的 home.slave 一致）
   slave: [0.0, -1.57, 0.0, -1.57, 0.0, 0.0]
   master_gripper_value: 1000
   at_home_tolerance_rad: 0.05
@@ -291,7 +291,7 @@ def _enable_and_wait(timeout=60.0):
 
 
 def _launch_stack(tmp_path, master_off_home=False):
-    cfg_path = tmp_path / "ur_teleop.yaml"
+    cfg_path = tmp_path / "alicia_teleop.yaml"
     cfg_path.write_text(CFG_BODY)
     procs = [
         _start("ros2", "launch", "ur_teleop", "cell.launch.py",
@@ -355,7 +355,7 @@ def test_record_one_episode(tmp_path):
         pytest.skip("lerobot 未安装（需要 source /opt/lerobot_venv/bin/activate）")
 
     root = tmp_path / "data"
-    cfg_path = tmp_path / "ur_teleop.yaml"
+    cfg_path = tmp_path / "alicia_teleop.yaml"
     cfg_path.write_text(CFG_BODY.replace("mode: teleop", "mode: record")
                                 .replace('root: ""', f"root: {root}"))
     _sweep(tmp_path)                           # 必须先于 spawn：pkill 按 tmp_path 匹配 stack cmdline
@@ -518,7 +518,7 @@ def test_forward_position_ignores_ruckig_enabled_flag(fsm_node):
 @pytest.fixture
 def fsm_node(tmp_path, monkeypatch):
     """teleop_node in-process：settle_time_s=0.1 加速；不 spin，直接驱动。"""
-    cfg_path = tmp_path / "ur_teleop.yaml"
+    cfg_path = tmp_path / "alicia_teleop.yaml"
     cfg_path.write_text(
         CFG_BODY.replace("settle_time_s: 2.0", "settle_time_s: 0.1")
         + "\nruckig:\n  enabled: false\n"
@@ -533,7 +533,7 @@ def fsm_node(tmp_path, monkeypatch):
 
 @pytest.fixture
 def home_node(tmp_path, monkeypatch):
-    cfg_path = tmp_path / "ur_teleop.yaml"
+    cfg_path = tmp_path / "alicia_teleop.yaml"
     cfg_path.write_text(CFG_BODY)
     monkeypatch.setattr("ur_teleop.home_node.default_config_path", lambda: str(cfg_path))
     rclpy.init()
@@ -670,7 +670,7 @@ def test_switching_inflight_future_does_not_block(fsm_node):
 
 def test_teleop_alone_exits_1_without_cell(tmp_path):
     """A7（子进程）: 无 cell 时 ~30 s 超时 → exit 1 + 超时错误日志。"""
-    cfg_path = tmp_path / "ur_teleop.yaml"
+    cfg_path = tmp_path / "alicia_teleop.yaml"
     cfg_path.write_text(CFG_BODY)
     proc = _start("ros2", "run", "ur_teleop", "teleop_node",
                   "--ros-args", "-p", f"config_file:={cfg_path}")
@@ -711,7 +711,7 @@ def test_verify_home_tolerance_boundary(fsm_node):
 
 def test_verify_home_force_home_skips_check(tmp_path, monkeypatch):
     """A8: force_home:=true 参数 → tolerance 置 inf，远离 home 也通过。"""
-    cfg_path = tmp_path / "ur_teleop.yaml"
+    cfg_path = tmp_path / "alicia_teleop.yaml"
     cfg_path.write_text(CFG_BODY)
     monkeypatch.setattr("ur_teleop.teleop_node.default_config_path", lambda: str(cfg_path))
     rclpy.init(args=["--ros-args", "-p", "force_home:=true"])
@@ -898,7 +898,7 @@ def test_estop_freezes_then_resumes(tmp_path):
 
 def test_gripper_probe_disables_fsm_without_action_server(tmp_path, monkeypatch):
     """A14: gripper.enabled=true 且无 action server → 首次 _gripper_tick 探测后禁用，不抛异常。"""
-    cfg_path = tmp_path / "ur_teleop.yaml"
+    cfg_path = tmp_path / "alicia_teleop.yaml"
     cfg_path.write_text(CFG_BODY.replace("enabled: false", "enabled: true"))
     monkeypatch.setattr("ur_teleop.teleop_node.default_config_path", lambda: str(cfg_path))
     rclpy.init()
@@ -995,7 +995,7 @@ def test_record_save_episode(tmp_path):
         pytest.skip("lerobot 未安装（需要 source /opt/lerobot_venv/bin/activate）")
 
     root = tmp_path / "data"
-    cfg_path = tmp_path / "ur_teleop.yaml"
+    cfg_path = tmp_path / "alicia_teleop.yaml"
     cfg_path.write_text(CFG_BODY.replace("mode: teleop", "mode: record")
                                 .replace('root: ""', f"root: {root}"))
     _sweep(tmp_path)                           # 必须先于 spawn：pkill 按 tmp_path 匹配 stack cmdline
@@ -1051,7 +1051,7 @@ def test_home_node_subprocess_smoke(tmp_path):
     该方法）。本测试跑 home_node 完整 main()：等 cell 就绪 → 发 UR home
     轨迹 → 发布 alicia home → 验证到位 → 打印 HOME REACHED → exit 0。"""
     _sweep(tmp_path)
-    cfg_path = tmp_path / "ur_teleop.yaml"
+    cfg_path = tmp_path / "alicia_teleop.yaml"
     cfg_path.write_text(CFG_BODY)              # home.slave = mock UR 初始位姿 → 轨迹即达
     procs = [
         _start("ros2", "launch", "ur_teleop", "cell.launch.py",

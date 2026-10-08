@@ -54,7 +54,7 @@ import yaml
 base = Path('/ros2_ws/src/ur_teleop/config')
 common = dict(sim=True, debug=False, cell=dict(ft300_enabled=False),
               gripper=dict(enabled=False))
-alicia = dict(common, base_config=str(base / 'ur_teleop.yaml'),
+alicia = dict(common, base_config=str(base / 'alicia_teleop.yaml'),
               teleop=dict(controller='joint_impedance'),
               recorder=dict(root='/ros2_ws/dataset/mock/alicia',
                             repo_id='my_user/ur10e_alicia_mock'))
@@ -69,7 +69,7 @@ for name, config in [('alicia', alicia), ('xbot', xbot)]:
 PY
 ```
 
-配置合并规则见[配置加载](config.md)。需要采集图像时，先在对应源码配置中设置 `recorder.cameras`；临时配置会继承它。
+配置合并规则见[配置加载](alicia_teleop_config.md)。需要采集图像时，先在对应源码配置中设置 `recorder.cameras`；临时配置会继承它。
 
 ## 4. 先运行 Home 和 teleop 测试
 

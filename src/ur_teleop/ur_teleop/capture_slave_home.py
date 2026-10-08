@@ -177,7 +177,7 @@ def capture(args):
 def main():
     parser = argparse.ArgumentParser(description='启动或复用 UR 控制器，读取当前关节角并更新 home.slave')
     parser.add_argument('--xbot-config', type=Path, default=CONFIG_DIR / 'xbot_teleop.yaml')
-    parser.add_argument('--ur-config', type=Path, default=CONFIG_DIR / 'ur_teleop.yaml')
+    parser.add_argument('--alicia-config', type=Path, default=CONFIG_DIR / 'alicia_teleop.yaml')
     parser.add_argument('--robot-ip', help='默认读取两个配置的 cell.robot_ip')
     parser.add_argument('--ur-type', help='默认读取两个配置的 cell.ur_type')
     parser.add_argument('--topic', default='/joint_states')
@@ -187,7 +187,7 @@ def main():
     try:
         if not math.isfinite(args.timeout) or args.timeout <= 0:
             raise ValueError('timeout 必须为有限正数')
-        paths = [args.xbot_config.resolve(), args.ur_config.resolve()]
+        paths = [args.xbot_config.resolve(), args.alicia_config.resolve()]
         if len(set(paths)) != 2:
             raise ValueError('必须指定两个不同的配置文件')
         configs = [yaml.safe_load(path.read_text(encoding='utf-8')) for path in paths]

@@ -56,7 +56,7 @@ def _nodes(context):
 
 def generate_launch_description():
     pkg_share = get_package_share_directory("ur_teleop")
-    config_file = os.path.join(pkg_share, "config", "ur_teleop.yaml")
+    config_file = os.path.join(pkg_share, "config", "alicia_teleop.yaml")
     return LaunchDescription([
         DeclareLaunchArgument("config_file", default_value=config_file),
         DeclareLaunchArgument("mode", default_value=""),
