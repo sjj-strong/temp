@@ -31,7 +31,7 @@ recorder:
 | --- | --- | --- |
 | `repo_id` | 字符串 | 数据集标识，例如 `my_user/ur10e_xbot`；不自动上传 |
 | `root` | 路径或空 | 本地目录；空时使用 `$HF_LEROBOT_HOME/{repo_id}`；目录重名自动添加连字符时间后缀 |
-| `robot_type` | 字符串或 `null` | 数据集元数据中的机器人类型 |
+| `robot_type` | 字符串或 `null`，本包缺省 `ur10e_alicia_teleop` | 数据集元数据中的机器人类型；Xbot YAML 显式配置自己的名称 |
 | `use_videos` | bool，`true` | 相机图像存 MP4；false 存图像；没有启用相机时不产生视频 |
 | `tolerance_s` | 有限非负数，`0.0001` | LeRobot 时间戳间隔校验容差，单位秒；不是本包数据超时阈值 |
 | `image_writer_processes` | 非负整数，`0` | 异步图像写入进程数；0 使用线程 |
@@ -63,19 +63,19 @@ recorder:
 | `record_wrench` | Xbot | 是否保存六维原始力/力矩与参考坐标系 |
 | `ee_pose_parent_frame` | Alicia | 末端位姿的父 link；Xbot 自动使用控制器参数里的参考 link |
 | `ee_pose_child_frame` | 两种输入源 | observation 的 TCP link，默认 `tool0` |
-| `cameras` | 两种输入源 | 需要保存的相机映射；空映射不保存图像 |
+| `cameras` | 两种输入源 | 按 camera.yaml 顶层名称选择保存相机；每项仅需 enabled 和可选 image_key |
+| `camera_config_file` | 两种输入源 | 缺省安装目录 config/camera.yaml；自定义相机文件路径，相对路径按实际遥操作配置目录解析 |
 
-每个 `cameras.<名称>` 支持 `enabled`、`topic`、`image_key`、`height`、`width`，例如：
+每个 `cameras.<名称>` 只需 `enabled` 和可选 `image_key`，例如：
 
 ```yaml
 recorder:
   cameras:
-    front:
+    usb_front:
       enabled: true
-      topic: /camera/usb_front/color/image_raw
       image_key: front
-      height: 480
-      width: 640
 ```
+
+话题、采集宽高以及 `resize`、`resize_width`、`resize_height` 统一放在 `camera.yaml` 对应相机下；recorder 中的旧重复设置会被相机文件覆盖。所选相机不存在、被停用或保存尺寸非法时，在录制器构造阶段报错。相机发布使用自定义文件时，`recorder.camera_config_file` 必须指向同一文件。
 
 相机发布端口、曝光和预览由独立相机配置/调参工具管理，不属于 LeRobot 创建参数。完整字段格式与按键见[数据采集](data_recorder.md)，相机准备见[相机调试](camera_inspector.md)。`debug` 是配置顶层开关，不在 `recorder` 内；其作用见[采集日志](data_recorder.md#采集日志与进度)。

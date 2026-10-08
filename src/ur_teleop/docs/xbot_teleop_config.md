@@ -1,6 +1,6 @@
 # Xbot 配置参数说明
 
-本页逐项说明 [`config/xbot_teleop.yaml`](../config/xbot_teleop.yaml) 的参数作用。表中数值取自当前工作区文件，供配置时参考；实际运行以传给 `config_file` 的文件和启动参数为准。该文件是 Xbot 的独立配置，不继承 `alicia_teleop.yaml`。修改后需重启相应的 Home、遥操作或录制进程；标定文件的按键和轴编号见 `config/xbot_joy.yaml`。
+本页逐项说明 [`config/xbot_teleop.yaml`](../config/xbot_teleop.yaml) 的参数作用。表中数值为配置示例，不是统一的代码默认值；设备、速度、任务和目录应以实际文件为准；实际运行以传给 `config_file` 的文件和启动参数为准。该文件是 Xbot 的独立配置，不继承 `alicia_teleop.yaml`。修改后需重启相应的 Home、遥操作或录制进程；标定文件的按键和轴编号见 `config/xbot_joy.yaml`。
 
 ## 运行模式与设备
 
@@ -44,7 +44,7 @@
 | `xbot.precision_scale`                  | `0.25`                                        | 按住 LB 时平移和旋转增量乘以此系数；`0.25` 表示正常值的四分之一。                                                                      |
 | `xbot.deadzone`                         | `0.08`                                        | Joy 轴归一化后的死区；小于阈值的输入视为零，其余输入重新缩放。                                                                           |
 | `xbot.left_stick_xy_free`               | `false`                                       | `false` 时左摇杆 X/Y 只保留幅值较大的主轴；`true` 允许同时输出 XY。右摇杆始终做主轴过滤。                                            |
-| `xbot.view_hold_s`                      | `2.0`                                         | View 键持续按住达到此秒数时触发录制结束事件，同时锁定本次遥操作。                                                                        |
+| `xbot.view_hold_s`                      | `0.5`                                         | View 键持续按住达到此秒数时触发录制结束事件，同时锁定本次遥操作。                                                                        |
 
 手柄映射由标定文件决定。当前控制逻辑中，RB 按住允许运动，LB 降低增量，A 请求切换夹爪，X 切换 base/TCP 参考系；运动输入和录制按键见[手柄操作](xbot_control.md#按键与参考系)。摇杆回中或松开 RB 时继续发布末次目标；Joy、TF 或关节反馈失效时按故障保护处理。
 
@@ -77,7 +77,7 @@
 | `recorder.ee_pose_parent_frame` | `base_link` | Alicia 的 TF 父 link；Xbot 自动使用控制器参考 link，真机 `base`、仿真 `base_link`。 |
 | `recorder.ee_pose_child_frame` | `tool0` | observation 的 TCP 子 link；保存时同时记录该 link。 |
 | `recorder.use_videos`             | `true`                  | 非空相机配置下，`true` 将图像字段保存为视频特征，`false` 保存为图像特征；当前 `cameras: {}` 时没有图像字段。                                               |
-| `recorder.cameras` | `{}` | 每台相机独立配置 `enabled`、`topic`、`image_key`、`height`、`width`；未启用的相机不进入数据集。 |
+| `recorder.cameras` | `{}` | 按 camera.yaml 顶层名称选择相机，仅配置 enabled 和可选 image_key；话题及保存尺寸从相机文件读取。 |
 | `recorder.task`                   | `xbot_teleoperation`    | 写入每帧的任务标签。                                                                                                                                             |
 | `recorder.min_frames_per_episode` | `2`                     | 保存 episode 所需的最少有效帧数；不足时自动丢弃。                                                                                                                |
 
@@ -86,3 +86,5 @@
 `recorder.record_tcp_pose` 控制是否保存 TCP 位姿；`record_wrench` 控制是否保存力／力矩。夹爪只保存指令，不保存实测开合 observation，也不依赖夹爪反馈进行录制。
 
 完整的 `recorder.num_episodes`、视频编码和数据集创建参数见[Record 配置参数](recorder_config.md)。
+
+`recorder.camera_config_file` 可指定自定义相机文件，默认安装目录 config/camera.yaml；相对路径以本次实际配置目录解析。`view_hold_s` 代码缺省为 2 秒，当前 YAML 显式为 0.5 秒。表中的观测开关分别生效，位置缺省 true、速度/effort 缺省 false、TCP 缺省 true、wrench 缺省 false。

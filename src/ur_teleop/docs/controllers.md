@@ -13,7 +13,7 @@
 
 Alicia 默认源码配置选择 `joint_impedance`。其 Home 命令应显式带 `controller:=joint_impedance`，确保 cell 与遥操作节点选择相同控制器。关节阻抗参数与接口见[关节阻抗文档](../../joint_impedance_controller/docs/README.md)。若改用前向位置，应同时修改 YAML 和 Home 命令的 `controller` 参数。
 
-Xbot 的 `xbot.controller_config_file` 是阻抗参数唯一入口：Home spawner、手柄节点和录制器都使用同一文件。仿真应指向 `ur10e_xbot_sim_cartesian_impedance.yaml`，参考 link 为 `base_link`；真机应使用匹配实际硬件的配置，通常为 `base`。当前源码选择 `ur10e_cartesian_impedance_high.yaml`，不要把它直接用作 mock 参数。
+Xbot 的 `xbot.controller_config_file` 是阻抗参数入口：手柄节点和录制器从原文件读取参考 link；Home 对 damping:null 计算 2√K 并写临时文件供 spawner 使用，显式阻尼时保持原文件。仿真应指向 `ur10e_xbot_sim_cartesian_impedance.yaml`，参考 link 为 `base_link`；真机应使用匹配实际硬件的配置，通常为 `base`。当前源码选择 `ur10e_cartesian_impedance_high.yaml`，不要把它直接用作 mock 参数。
 
 刚度、阻尼、误差/wrench/力矩限幅见[参数与安全](../../cartesian_impedance_controller/docs/04_参数与安全.md)；已有配置档位见[刚度阻尼三档配置](../../cartesian_impedance_controller/docs/07_刚度阻尼三档配置.md)。控制器参考 link 会决定目标转换与数据集 action 的坐标系。
 

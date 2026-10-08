@@ -1,46 +1,35 @@
-# Camera setup before dataset collection
+# 相机检查与调参
 
-A minimal desktop interface using PySide6 and PyQtGraph. Select a camera, preview its image and adjust its native controls. All interface text is in English.
+独立桌面工具使用 PySide6 和 PyQtGraph，界面文字为英文。选择 USB 或 RealSense，预览图像并调整原生控制项；不启动机器人控制。
 
-## Run
-
-Install dependencies in the Python environment used to run the tool:
+## 安装与运行
 
 ```bash
 python3 -m pip install -r /ros2_ws/src/ur_teleop/requirements-camera.txt
 sudo apt install v4l-utils libxcb-cursor0
 python3 /ros2_ws/src/ur_teleop/ur_teleop/camera_inspector.py
-```
-
-The tool uses PySide6 widgets and a PyQtGraph ImageItem. Capture runs in a background thread; a Qt timer updates the preview. Display levels remain fixed at 0-255 so camera exposure changes remain visible.
-
-To print device information without opening a window:
-
-```bash
+# 仅列出设备，不打开窗口：
 python3 /ros2_ws/src/ur_teleop/ur_teleop/camera_inspector.py --list
 ```
 
-After rebuilding the package and sourcing the workspace, `ros2 run ur_teleop camera_inspector` is also available. The desktop requires a working display connection and access to the camera devices.
+构建本包并 source 工作区后，也可运行 `ros2 run ur_teleop camera_inspector`。桌面需显示连接和设备访问权限；RealSense 预览需要可用的 pyrealsense2 SDK。存在源码或 USB 描述不代表当前容器能访问采集节点。
 
-## Use
+## 操作
 
-1. Select a camera. Its model, device path, physical port and serial number appear above the preview.
-2. Set Width, Height, FPS and USB Format. Click Start / Restart. Supported Formats shows the device's available profiles.
-3. Select a Camera Control. Change its numeric value and press Enter, or select a menu entry. The setting applies immediately and the status displays device readback. Disable automatic exposure or white balance before changing the corresponding manual values.
-4. 点击 YAML Parameters，将生成的配置复制到 `camera.yaml`；USB 与 RealSense 均可通过 Name 自定义唯一相机名称。
-5. Click Stop or close the window before starting dataset collection.
+1. 选择相机，核对型号、设备节点、物理端口和序列号。
+2. 设置 Width、Height、FPS 和 USB Format，点击 Start / Restart；Supported Formats 显示设备支持的采集模式。
+3. 选择 Camera Control，修改值并按 Enter或选菜单项，检查设备回读。修改手动曝光/白平衡前关闭相应自动项。
+4. 对 USB 和 RealSense 都可用 Name 自定义相机名。点击 YAML Parameters，将生成项复制到 `config/camera.yaml` 顶层，相机名应唯一。
+5. 关闭预览或点击 Stop 释放设备，再启动正式相机发布。
 
-## Configuration fields
+采集在后台线程进行，Qt 定时器刷新预览，显示范围固定 0–255。该工具的实时控制项默认仅作用于当前会话；USB 正式发布可读取 auto_exposure 和 exposure_time_absolute，其他控制项不要假定会随 YAML 自动恢复。
 
-- `config/camera.yaml` 的每个顶层键为自定义相机名。调参工具为 USB 和 RealSense 都使用 Name 字段生成对应的配置项，直接复制到该文件。
-- USB 使用 `type: usb`，`device` 优先填写 `/dev/v4l/by-path`；RealSense 使用 `type: realsense` 和加引号的 `serial_no`。各设备独立配置，不固定 D435i 或 D455 的组合。
-- `enabled` 控制是否发布，`visualize` 控制是否加入预览；默认图像话题为 `/camera/<名称>/color/image_raw`，无需额外配置全局话题列表。
-- 导出的 `resize` 默认关闭，`resize_width/resize_height` 默认 320×240；需要改变保存尺寸时在相机配置中开启缩放。宽高和帧率填写实际采集参数；USB 的 FourCC 放在 `fourcc`。USB 曝光可通过 `auto_exposure` 和 `exposure_time_absolute` 配置，调参界面的其他控件设置仅在当前会话生效。
+## 配置对应
 
-One USB camera may have multiple video nodes; metadata nodes are excluded from the camera selector. RealSense nodes are grouped by serial number. Two USB cameras can share the same serial number; use their physical USB paths to distinguish them. If stable path links are missing, the displayed `/dev/videoN` fallback may change after reconnecting.
+顶层键即相机名，无 cameras 包装层；type 为 usb/realsense，enabled 控制发布，visualize 控制正式拼图预览。USB device 优先用稳定的 /dev/v4l/by-path，RealSense serial_no 必须为字符串。默认话题为 `/camera/<名称>/color/image_raw`，可在配置中用 topic 覆盖。
 
-## Verification
+导出的 width/height/fps 来自活动采集模式；未启动时使用界面输入。resize 默认 false，resize_width/resize_height 默认 320×240，修改它们只改变录制保存尺寸，不能改变此工具预览或驱动采集尺寸。完整启动参数见[相机发布](launch.md#相机)，录制选择见[数据采集](data_recorder.md)。
 
-Logic tests cover native control parsing and configuration mapping. Qt tests use simulated frames and controls to verify RGB rendering, immediate control application, device switching and stream cleanup without connecting to cameras or robots. 本次逐相机配置修改的 27 项逻辑、界面及启动测试通过，测试使用模拟设备，不访问真实相机或机器人。 Live 640x480 previews were verified on both USB cameras and the RealSense D455. Brightness changes were accepted and read back on all three devices, then restored to their original values. The RealSense SDK serial is 311322303190; when USB descriptors differ, the SDK identifier takes priority for stream configuration.
+USB 的 metadata 节点不是独立相机，工具按节点 index 过滤；RealSense 按序列号分组，并优先采用 SDK 序列号。两台 USB 可以有相同序列号，用物理端口区分；缺少稳定路径时 /dev/videoN 可能随插拔改变。
 
-References: [PyQtGraph ImageItem](https://pyqtgraph.readthedocs.io/en/latest/api_reference/graphicsItems/imageitem.html), [Qt QTimer](https://doc.qt.io/qtforpython-6/PySide6/QtCore/QTimer.html).
+逻辑与界面测试位于 `tests/test_camera_inspector.py`、`test_camera_inspector_gui.py`，启动配置测试位于 `test_camera_launch.py`，使用模拟设备，不证明真实相机型号、曝光或编码已验收。

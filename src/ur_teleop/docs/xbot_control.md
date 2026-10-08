@@ -2,7 +2,7 @@
 
 使用 `cartesian_impedance_controller` 控制 `tool0` 法兰位姿，复用 `ur10e_robotiq_ft_description` 的组合 URDF。夹爪末端 `gripper_tcp` 与 `tool0` 不重合。Xbot 不启动 Alicia 或 Ruckig。相关控制器参数文档见[控制器说明](controllers.md)，从设备准备到采集的命令见[完整流程](workflow.md)。
 
-Xbot 不在手柄配置中定义阻抗刚度、阻尼、wrench 或力矩；这些参数保存在控制器 YAML 中。`xbot.controller_config_file` 指定该文件，`xbot_cell.launch.py` 将同一完整路径传给 spawner 的 `--param-file`。手柄节点和录制器也从该文件读取控制器参考 link，避免目标与 action 使用另一套坐标系。顶层 `debug: true` 时，启动 `home.launch.py` 会打印所传路径；Home 阶段控制器虽为 inactive，参数文件已传入。
+Xbot 不在手柄配置中定义阻抗刚度、阻尼、wrench 或力矩；这些参数保存在控制器 YAML 中。`xbot.controller_config_file` 指定该文件，`xbot_cell.launch.py` 先处理阻尼，再传给 spawner 的 `--param-file`：显式阻尼保持原文件；`damping: null` 按 `D_i=2√K_i` 写入临时参数文件。手柄节点和录制器也从该文件读取控制器参考 link，避免目标与 action 使用另一套坐标系。顶层 `debug: true` 时，启动 `home.launch.py` 会打印所传路径；Home 阶段控制器虽为 inactive，参数文件已传入。
 
 ```yaml
 xbot:
@@ -29,10 +29,10 @@ source /ros2_ws/install/setup.bash
 ros2 run joy joy_node --ros-args -p autorepeat_rate:=50.0 -p deadzone:=0.0
 
 # 终端 2：按提示校准，不发送机器人指令
-ros2 run ur_teleop xbot_calibrate
+ros2 run ur_teleop xbot_calibrate --output /tmp/xbot_joy_new.yaml
 ```
 
-标定过程不需要按 Enter：每步先松开所有按键和扳机、摇杆回中并稳定一秒；看到下一条提示后，按键与十字键按下即记录，模拟轴输入推到极限并保持一秒。每项记录后会打印识别出的 Joy 编号；若 30 秒内没有收到清晰输入，脚本会超时提示重试。结果默认写入 `/ros2_ws/src/ur_teleop/config/xbot_joy.yaml`，遥操作从同一路径读取；已有文件不覆盖，另存时用 `--output` 并更新 `xbot.calibration_file`。映射使用 ROS Joy 编号，不能直接复制 pygame 轴号。
+标定过程不需要按 Enter：每步先松开所有按键和扳机、摇杆回中并稳定一秒；看到下一条提示后，按键与十字键按下即记录，模拟轴输入推到极限并保持一秒。每项记录后会打印识别出的 Joy 编号；若 30 秒内没有收到清晰输入，脚本会超时提示重试。默认输出路径为 `/ros2_ws/src/ur_teleop/config/xbot_joy.yaml`，该文件通常已存在，工具拒绝覆盖。上例写入 `/tmp/xbot_joy_new.yaml`；完成后把 xbot.calibration_file 指向新文件，或将它保存到自己的持久路径再更新配置。映射使用 ROS Joy 编号，不能直接复制 pygame 轴号。
 
 校准完成后停止手动启动的 `joy_node`，正式启动会自动运行它。
 
@@ -51,9 +51,11 @@ ros2 launch ur_teleop home.launch.py config_file:=/ros2_ws/src/ur_teleop/config/
 ros2 launch ur_teleop teleop.launch.py config_file:=/ros2_ws/src/ur_teleop/config/xbot_teleop.yaml mode:=teleop
 ```
 
-日志中应加载 `joint_impedance_controller/JointImpedanceMockSystem`；夹爪为 `mock_components/GenericSystem`。此模式的 `HOME REACHED` 仅表示模拟机械臂到位。
+日志中应加载 `joint_impedance_controller/JointImpedanceMockSystem`；夹爪为 `mock_components/GenericSystem`。此模式的 `HOME REACHED` 仅表示模拟机械臂到位。若 record_wrench 开启而 mock 没有所选力话题，录制不能就绪，应在 mock 配置关闭它。
 
-## 真机启动
+## 真机启动分支
+
+此节解释代码连接分支，不是本工作区允许运行的真机测试步骤。完整 Home 和笛卡尔遥操作会控制多关节；本工作区真实机械臂测试仅允许 wrist_3_joint，六轴验证使用上述 mock。
 
 在 `config/xbot_teleop.yaml` 中设置 `sim: false`，核对 `cell.robot_ip` 和 `home.slave`。只有启用对应设备时才需要核对 `cell.gripper_port` 或 `cell.ftdi_id`。
 `xbot.controller_config_file` 可指向 `cartesian_impedance_controller/config/ur10e_ft300_cartesian_impedance.yaml` 或同格式的自定义真机参数文件；默认文件的 `base_frame` 为 `base`。
@@ -63,7 +65,7 @@ ros2 launch ur_teleop teleop.launch.py config_file:=/ros2_ws/src/ur_teleop/confi
 - 停止仿真及重复的机器人控制栈，两个终端使用相同的真机 `ROS_DOMAIN_ID`，不得沿用仍有 mock 节点的域。
 - 无其他 RTDE 控制客户端占用机器人；出现 `speed_slider_mask ... controlled by another RTDE client` 时先排除占用，不继续遥操作。
 - 使用该机器人对应的运动学标定，TCP 为 `tool0`；出现 calibration mismatch 时先处理标定，不继续笛卡尔遥操作。
-- 确认 Home 运动路径无障碍，物理急停可用并有人工监护。**Home 启动会自动发送运动目标，不只是启动驱动。**
+- 确认 Home 运动路径无障碍，物理急停可用并有人工监护。**Home 在真机回车确认与 cell 就绪之后会发送六轴轨迹目标，不只是启动驱动。**
 
 两个终端均加载上述 ROS 环境后运行：
 
@@ -100,11 +102,11 @@ Home 阶段使用轨迹控制器，笛卡尔阻抗控制器保持 inactive。tel
 
 base 模式沿 `base_link` 轴运动，TCP 模式沿实测 `tool0` 局部轴运动；平移和旋转都遵循所选模式。X 键切换当帧不叠加增量。左、右摇杆默认分别保留幅值较大的轴；`left_stick_xy_free: true` 只取消左摇杆的主轴过滤。死区后的单轴满量程为 ±1，平移和旋转命令各自按向量模长归一化；LB 再将命令乘 `precision_scale`。
 
-有运动输入时，`Δp = action_p × max_linear_speed_m_s / control_hz`，`Δr = action_r × max_angular_speed_rad_s / control_hz`。默认 50 Hz、1.0 m/s 和 5.0 rad/s 对应满量程单周期 20 mm 和 0.1 rad。实际计时只用于识别超过 0.1 秒的卡顿，不放大该周期增量。
+有运动输入时，`Δp = action_p × max_linear_speed_m_s / control_hz`，`Δr = action_r × max_angular_speed_rad_s / control_hz`。以 50 Hz、1.0 m/s 和 5.0 rad/s 为例，对应满量程单周期 20 mm 和 0.1 rad。实际计时只用于识别超过 0.1 秒的卡顿，不放大该周期增量。
 
 目标按自由度更新：有平移输入的轴取“本周期实测 TCP 位置 + 该轴增量”，没有平移输入的轴保持上次发布的目标值；有旋转输入时，以本周期实测姿态加旋转增量，只有平移输入时则保持上次目标姿态。TCP 模式先把局部增量旋转到 `base_link`，再更新其在 `base_link` 中产生非零增量的轴。例如 base 模式只推 Y 时，目标 Y 随实测 Y 推进，而目标 Z 保持原值；实测 Z 偏移不会被下一条目标吸收。被操作轴仍不从上次目标累加。摇杆回中或松开 RB 时保持完整末次目标；反馈或控制器故障时的原有目标重置与重新按 RB 门控继续生效。
 
-手柄节点接管阻抗控制器后，首条 `/cartesian_impedance_controller/current_pose` 锁定本次运行的工作空间原点。目标在控制器参考坐标系按 `workspace_half_extent_m` 对 XYZ 裁剪，默认相对原点各 ±0.20 m；本次节点运行期间不重新锁定。此处只限制目标位置，不限制姿态；控制器内部仍有位姿误差、wrench 和关节力矩限幅。旧的每周期固定增量与目标超前参数已停用。
+手柄节点收到的首条 `/cartesian_impedance_controller/current_pose` 锁定本次运行的工作空间原点。目标在控制器参考坐标系按 `workspace_half_extent_m` 对 XYZ 裁剪，默认相对原点各 ±0.20 m；本次节点运行期间不重新锁定。此处只限制目标位置，不限制姿态；控制器内部仍有位姿误差、wrench 和关节力矩限幅。旧的每周期固定增量与目标超前参数已停用。
 
 内部实测位姿来自 `base_link → tool0`；发布前完整转换到控制器要求的参考 link，真机为 `base`，仿真为 `base_link`。工作空间裁剪在转换后执行，绝对和相对录制动作也在此参考 link 中编码。缺少有效 TF 或工作空间原点时不允许手柄更新目标。
 
@@ -115,17 +117,18 @@ base 模式沿 `base_link` 轴运动，TCP 模式沿实测 `tool0` 局部轴运�
 - RB 只控制手柄输入是否更新目标；Joy、TF、关节反馈或控制器状态失效时退出使能，恢复后需松开再按 RB。
 - 工作空间按启动时原点裁剪最终目标。移除手柄侧目标超前限制后，控制器仍按 `max_pose_error`、`max_wrench` 和 `max_torque` 限幅。
 - `/list_controllers` 异步查询控制器状态；明确失活、切换失败或长期无法确认时锁定遥操作，检查后重启。
-- `/teleop/e_stop` 为软件停止请求。真机操作仍需物理急停和现场监护。
+- `/teleop/e_stop` 为软件停止请求：重置输入使能并尝试取消夹爪，但已有有效目标仍可能持续发布，不等同于停用控制器或硬件急停。
+- Xbot 节点 Ctrl-C 退出只销毁节点，不自动切回轨迹控制器；Alicia 的 restore_controller_on_exit 不适用于 Xbot。
 
 ## 终端诊断
 
-仅顶层 `debug: true` 时，`xbot.diagnostic_hz` 默认以 5 Hz 输出一行“遥操作诊断”，包括使能/故障原因、RB/LB、归一化平移与旋转输入、目标是否已发布、控制器状态、Joy/TF/关节/控制器查询数据龄，以及当前和目标的完整 `xyz+xyzw` 位姿与两者的位姿差。两组位姿都用 `base_link` 表示，便于直接比较；真机发送给阻抗控制器时会转换到 `base`。`目标已发布=1` 只表示 Xbot 已调用发布接口，需在 `debug: true` 下结合控制器终端的“已接收目标 pose”确认接收。改变日志频率不会改变 50 Hz 控制频率。
+仅顶层 `debug: true` 时，`xbot.diagnostic_hz` 默认以 5 Hz 输出一行“遥操作诊断”，包括使能/故障原因、RB/LB、归一化平移与旋转输入、目标是否已发布、控制器状态、Joy/TF/关节/控制器查询数据龄，以及当前和目标的完整 `xyz+xyzw` 位姿与两者的位姿差。两组位姿都用 `base_link` 表示，便于直接比较；真机发送给阻抗控制器时会转换到 `base`。`目标已发布=1` 只表示 Xbot 已调用发布接口，可在 `debug: true` 下结合控制器终端接收日志确认接收；它仍不表示机器人已执行到位。首次接口日志不受 debug 开关影响。改变诊断频率不会改变 xbot.control_hz 配置的控制频率。
 
 启动瞬间偶发的“控制器基座 TF 无效”若随后消失，且诊断显示 `目标已发布=1`，表示 TF 已就绪；持续出现时检查 `base` 与 `base_link` 的变换。日志中的目标是 Xbot 根据实测位姿计算并保持的目标，不是阻抗控制器滤波后的内部参考。
 
 ## 测试
 
-以下是自动化 mock 集成测试，不是普通调试步骤。测试代码明确要求 `sim: true`、`ROS_DOMAIN_ID=225`，否则跳过；仅执行这些测试时，两个终端才需设置以下环境：
+以下是自动化 mock 集成测试，不是普通调试步骤。测试的运行门控为 UR_XBOT_MOCK_TEST=1 和 ROS_DOMAIN_ID=225；测试自建配置使用 sim=true。测试仍应只连接按上文启动的 mock，环境变量本身不会验证该域的现有硬件；仅执行这些测试时，两个终端才需设置以下环境：
 
 ```bash
 export ROS_DOMAIN_ID=225
@@ -135,8 +138,9 @@ export ROS_HOME=/tmp/ur_xbot_validation
 终端 1 按上文启动 Home；到位后，终端 2 执行：
 
 ```bash
-UR_XBOT_MOCK_TEST=1 PYTHONPATH=/ros2_ws/src/ur_teleop:$PYTHONPATH \
-  /usr/bin/python3 -m pytest /ros2_ws/src/ur_teleop/tests -q
+UR_XBOT_MOCK_TEST=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 \
+  PYTHONPATH=/ros2_ws/src/ur_teleop:$PYTHONPATH \
+  /usr/bin/python3 -m pytest /ros2_ws/src/ur_teleop/tests/test_xbot_mock.py -q
 ```
 
 测试会切换控制器和夹爪，重复执行前恢复轨迹 active、阻抗 inactive、夹爪打开，或重新启动 mock Home。

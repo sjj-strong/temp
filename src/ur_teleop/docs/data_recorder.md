@@ -25,7 +25,7 @@
 
 `recorder.action_mode: abs` 保存手柄节点最终发布给阻抗控制器的绝对目标 `x,y,z,qx,qy,qz,qw`。`rel` 保存该目标相对**同一控制周期实测 TCP** 的 `dx,dy,dz,drx,dry,drz`；姿态增量是参考坐标系中的最短旋转向量，满足 `q_target = dq × q_actual`。工作空间裁剪发生在编码之前，因此 action 与最终下发目标一致。摇杆回中时仍保存保持目标；此时相对 action 可能非零。
 
-两种模式均逐帧保存字符串 `action.reference_link`：真机通常为 `base`，仿真为 `base_link`。`record_action_gripper: true` 时再附加 `cmd_gripper`（打开 `0`、闭合 `1`）；无夹爪时建议设为 `false`。修改模式、坐标系或字段配置后请重启遥操作和录制器，新建数据集。
+Xbot 两种 action 模式均逐帧保存字符串 `action.reference_link`：真机通常为 `base`，仿真为 `base_link`。`record_action_gripper: true` 时再附加 `cmd_gripper`（打开 `0`、闭合 `1`）；无夹爪时建议设为 `false`。修改模式、坐标系或字段配置后请重启遥操作和录制器，新建数据集。
 
 ## 可选 observation
 
@@ -72,7 +72,7 @@ recorder:
 
 默认读取安装目录中的 `config/camera.yaml`。相机发布入口使用自定义文件时，在遥操作配置中设置 `recorder.camera_config_file: /绝对路径/camera.yaml`，让录制器读取同一文件；相对路径以遥操作配置文件所在目录为基准。`use_videos` 决定视频或逐帧图像特征，`recorder.cameras.<名称>.enabled` 只控制是否录制该相机（省略视为启用）。旧的录制配置中的 `topic`、`resize`、`width`、`height` 应迁移到相机文件；以相机文件为准。
 
-录制开始和写帧时只要求**启用**的字段有新鲜数据；任一启用字段缺失、非有限或超过 `data_timeout_s` 时跳过整帧，不写缺键或 NaN。手柄就绪心跳与位姿 action 始终是必要条件。Alicia 的 observation 不再附加夹爪实测状态；关节 action 可通过同一个开关附加夹爪指令。
+Xbot 开始和写帧时检查就绪心跳、action 和启用字段的数据新鲜度；缺失、非有限或超过 `data_timeout_s` 时拒绝开始或跳过整帧。开启 TCP 时还要求有效 TF。Alicia 没有同等的数据龄门控，也未订阅 `/teleop/status`；它使用最新缓存，必要 UR/action 缺失时 FrameBuilder 返回 None，TCP 查询失败时会填 NaN 并只警告一次。两种模式开始录制前都要求所选相机至少收到一帧；Alicia 写帧时未实施相机数据龄检查。Alicia 的 observation 不再附加夹爪实测状态；关节 action 可通过同一个开关附加夹爪指令。
 
 ## 话题与验证
 
@@ -91,7 +91,7 @@ ros2 topic echo --once /robotiq_force_torque_sensor_broadcaster/wrench
 
 Alicia 与 Xbot 仅使用 `recorder.record_action_gripper` 控制夹爪录制：`true` 在 action 末尾保存二值 `cmd_gripper`（打开 `0`、闭合 `1`），`false` 不保存。不再录制夹爪实测 observation；已移除 `record_ur_gripper` 和 `state_threshold_rad`。录制无需等待夹爪反馈。该开关不控制夹爪执行，执行仍由 `gripper.enabled` 控制。已有数据集的 observation 维度会变化，请使用新数据集。
 
-录制器仅在保存关节位置、速度或 effort 时订阅关节反馈；夹爪指令录制不参与该订阅判断。
+Xbot 录制器仅在保存关节位置、速度或 effort 时订阅关节反馈；Alicia 当前始终订阅关节反馈。夹爪指令录制不参与该订阅判断。
 
 ## 采集日志与进度
 
@@ -101,7 +101,7 @@ Alicia 与 Xbot 仅使用 `recorder.record_action_gripper` 控制夹爪录制：
 debug: false
 ```
 
-`mode: record` 下，正常日志只保留按键/手柄操作、控制配置频率和采集进度。事件正文使用 JSON，ROS 自身保留日志等级、时间和节点名。例如：
+`mode: record` 下，正常日志包含按键/手柄操作、控制配置频率、采集进度、首次 control_interface、错误和警告。事件正文使用 JSON，ROS 自身保留日志等级、时间和节点名。例如：
 
 ```text
 {"event": "control_frequency", "command_hz": 50.0}

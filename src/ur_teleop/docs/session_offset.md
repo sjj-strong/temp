@@ -1,6 +1,6 @@
 # 会话级偏移（offset.py）
 
-> 路径：`ur_teleop/ur_teleop/offset.py` —— 纯逻辑（无 rclpy，全文件 23 行），保存本次会话双臂 home 的实际位置，作为 JointMapper 的映射基准。
+> 路径：`ur_teleop/ur_teleop/offset.py` —— 纯逻辑（无 rclpy），保存本次会话双臂 home 的实际位置，作为 JointMapper 的映射基准。
 
 ## 概述
 
@@ -33,7 +33,7 @@ class SessionOffset:
 
 ## 关键逻辑
 
-"捕获 → 应用"链在 teleop_node 中（teleop_node.py:219-232，`_capture_offset`）：
+"捕获 → 应用"链在 teleop_node 中（teleop_node.py，`_capture_offset`）：
 
 ```python
 self._offset.capture(list(self._master_q), list(self._slave_q))
@@ -48,7 +48,7 @@ self._mapper = JointMapper(
 
 ### 下游长度校验兜底
 
-SessionOffset 不检查长度；若上游给了 5 项或 7 项，`JointMapper.__init__` 的 `master_home/slave_home must have 6 values` 校验（joint_mapper.py:25-26）会直接抛 `ValueError`——偏移模块保持最简，形状契约由消费方强制执行。
+SessionOffset 不检查长度；若上游给了 5 项或 7 项，`JointMapper.__init__` 的 `master_home/slave_home must have 6 values` 校验（joint_mapper.py）会直接抛 `ValueError`——偏移模块保持最简，形状契约由消费方强制执行。
 
 ## 数据流 / 消费方
 

@@ -24,6 +24,8 @@
 /ros2_ws/src/ur_teleop/scripts/capture_slave_home.sh --no-start
 # 指定其他配置文件：
 /ros2_ws/src/ur_teleop/scripts/capture_slave_home.sh --alicia-config /路径/alicia_teleop.yaml --xbot-config /路径/xbot_teleop.yaml
+# 自定义状态话题：
+/ros2_ws/src/ur_teleop/scripts/capture_slave_home.sh --no-start --topic /joint_states
 # 修改等待时长：
 /ros2_ws/src/ur_teleop/scripts/capture_slave_home.sh --timeout 90
 ```

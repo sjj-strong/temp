@@ -25,7 +25,7 @@ Xbot 首次使用先标定并运行[独立手柄测试](xbot_joy_test.md)。Alic
 
 ## 2. 相机调试与发布
 
-先装好[相机调试依赖](camera_inspector.md#run)，打开独立预览：
+先装好[相机调试依赖](camera_inspector.md#安装与运行)，打开独立预览：
 
 ```bash
 python3 /ros2_ws/src/ur_teleop/ur_teleop/camera_inspector.py
@@ -69,7 +69,7 @@ for name, config in [('alicia', alicia), ('xbot', xbot)]:
 PY
 ```
 
-配置合并规则见[配置加载](alicia_teleop_config.md)。需要采集图像时，先在对应源码配置中设置 `recorder.cameras`；临时配置会继承它。
+相机发布若使用自定义文件，需同时设置 recorder.camera_config_file 为同一路径。配置合并规则见[配置加载](alicia_teleop_config.md)。需要采集图像时，先在对应源码配置中设置 `recorder.cameras`；临时配置会继承它。
 
 ## 4. 先运行 Home 和 teleop 测试
 
@@ -136,7 +136,7 @@ ros2 launch ur_teleop teleop.launch.py \
 | 丢弃 | B | D |
 | 保存并结束采集 | View 长按 | Q |
 
-默认 `debug: false`，正常输出包含操作、配置控制频率、tqdm 帧进度和实际采集 Hz。采集速度、数据字段、文件位置、相机选择与调试日志见[数据采集](data_recorder.md)。模拟数据仅用于流程验证，不当作真机任务数据。
+默认 `debug: false`，正常输出包含操作、配置控制频率、首次控制接口日志、tqdm 帧进度和实际采集 Hz，以及故障信息。采集速度、数据字段、文件位置、相机选择与调试日志见[数据采集](data_recorder.md)。模拟数据仅用于流程验证，不当作真机任务数据。
 
 ## 6. 结束
 

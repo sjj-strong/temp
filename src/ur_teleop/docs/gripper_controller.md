@@ -1,95 +1,32 @@
-# 夹爪控制（gripper_controller.py）
+# 夹爪控制
 
-> 路径：`ur_teleop/ur_teleop/gripper_controller.py` —— 纯逻辑（无 rclpy），带迟滞的二元状态机：把 Alicia 夹爪位置（m，0=开）映射为 Robotiq 2F-85 的开/合目标。
+实现：`ur_teleop/gripper_controller.py`（Alicia 纯逻辑）、`teleop_node.py` 和 `xbot_teleop_node.py`（ROS 执行）。默认打开 0.0 rad、闭合 0.4 rad，都是 Robotiq knuckle 目标；实际动作和 effort 单位由控制器定义。
 
-## 概述
+## Alicia 迟滞
 
-GripperController 是"目标决策"层：只根据主臂夹爪实时位置输出 `OPEN`/`CLOSED`/`UNKNOWN` 三态，不做任何 ROS 通信。执行层在 teleop_node：`_gripper_tick`（10 Hz）轮询 `update()`，目标变化时经 `ParallelGripperCommand` action 下发。夹爪单位约定：**Alicia 侧是位置（米，0=开）**，**Robotiq 侧是 knuckle 指令（弧度，0=开，0.4=闭）**，换算在本模块完成（`open_pos_rad`/`close_pos_rad` 参数化，见下）。
+`GripperController.update(alicia_gripper_m)` 的输入单位为米。大于 close_threshold_m 判闭合，小于 open_threshold_m 判张开，两个阈值之间（含等号）保持原目标。只有目标变化才返回 OPEN/CLOSED，否则返回 UNKNOWN。初始 current_target 也是 UNKNOWN。
 
-## 公开接口
+| `gripper` 参数 | 代码缺省 |
+| --- | --- |
+| `enabled` | false（纯逻辑模块缺省，YAML 可显式开启） |
+| `action_server` | /robotiq_gripper_controller/gripper_cmd |
+| `open_pos_rad`、`close_pos_rad` | 0.0、0.4 |
+| `open_threshold_m`、`close_threshold_m` | 0.005、0.0125 |
+| `max_effort` | 50.0 |
+| `fsm_rate_hz` | teleop 轮询缺省 10 Hz |
 
-### `GripperTarget(Enum)`
+阈值没有倒置校验，应保证 open 小于 close。`get_knuckle_command()` 对 CLOSED 返回闭合角，其余返回打开角；`get_gripper_command_signal()` 对 CLOSED 返回 1，其他返回 0。
 
-```python
-OPEN = 0      # 目标张开
-CLOSED = 1    # 目标闭合
-UNKNOWN = 2   # 无变化/未启用/未知
-```
+## ROS 请求
 
-### `GripperController(gripper_config: dict)`
+Alicia 夹爪定时器在 action server 未就绪时重试，节点启动后超过 30 秒仍未就绪才禁用。它不要求 teleop ACTIVE；软件停止或 enabled=false 才直接返回。保存的 future 是 `send_goal_async` 请求，等待的是发送请求结果，不是实际运动完成，也没有完整的结果处理/自动失败重发。
 
-构造参数全部经 `.get()` 带默认值（gripper_controller.py:19-29）：
+发送 `ParallelGripperCommand.Goal` 时，command.name 为 robotiq_85_left_knuckle_joint，position 为开合角，effort 为配置值。目标没有变化时不再发送，发送失败后不能假定会自动补发。
 
-| 键 | 类型 | 默认值 | 含义 |
-|---|---|---|---|
-| `enabled` | bool | `false` | 开关；关闭时 `update()` 恒 UNKNOWN |
-| `action_server` | str | `/robotiq_gripper_controller/gripper_cmd` | action server 名（节点用） |
-| `open_pos_rad` | float | `0.0` | 张开 knuckle 指令（rad） |
-| `close_pos_rad` | float | `0.4` | 闭合 knuckle 指令（rad） |
-| `close_threshold_m` | float | `0.0125` | 判 CLOSED 的阈值（Alicia 侧，m） |
-| `open_threshold_m` | float | `0.005` | 判 OPEN 的阈值（Alicia 侧，m） |
-| `max_effort` | float | `50.0` | 目标 effort |
+Xbot 不读取 Alicia 的迟滞阈值；A 键有效边沿、RB 运动已使能、夹爪反馈新鲜且服务就绪时切换上一次已接受的目标。首次反馈按开闭角中点初始化二值指令，目标拒绝时保持旧指令。请求接受后等待 action 结果，再释放忙碌门控；停止时会尝试取消已保存的 goal。
 
-属性：`open_position` / `close_position` / `max_effort` / `current_target`（最近一次 `update()` 后的目标，初始为 `UNKNOWN`）。
+## 启动开关和数据
 
-### `update(alicia_gripper_m: float) -> GripperTarget`（gripper_controller.py:47-59）
+`gripper.enabled` 控制执行；Alicia Home 的 `enable_gripper` CLI 仅覆盖阶段 1，阶段 2 仍读取 YAML，应保持一致。Alicia 关节阻抗 mock 只包含六轴，不加载夹爪；前向位置 mock 在开关开启时可加载夹爪。Xbot 使用组合模型，按开关加载夹爪控制器；未加载时外形/TF 仍存在。
 
-```python
-if not self.enabled:
-    return GripperTarget.UNKNOWN
-if alicia_gripper_m > self._close_threshold:
-    new_target = GripperTarget.CLOSED
-elif alicia_gripper_m < self._open_threshold:
-    new_target = GripperTarget.OPEN
-else:
-    new_target = self._current          # 死区：保持上一个目标
-changed = new_target != self._current
-self._current = new_target
-return new_target if changed else GripperTarget.UNKNOWN
-```
-
-### `get_knuckle_command(target) -> float` / `get_gripper_command_signal(target) -> float`
-
-```python
-get_knuckle_command(target):     # close_pos_rad 若 CLOSED，否则 open_pos_rad
-    return self._close_pos if target == GripperTarget.CLOSED else self._open_pos
-get_gripper_command_signal(target):    # 1.0 若 CLOSED，否则 0.0
-    return 1.0 if target == GripperTarget.CLOSED else 0.0
-```
-
-## 关键逻辑：阈值状态机
-
-- **迟滞/死区**：`close_threshold_m`（0.0125）与 `open_threshold_m`（0.005）之间的区间为死区，输入落在这里时保持上一目标，避免单阈值在开合边界来回抖动。
-- **UNKNOWN 语义**：仅两种情形——未启用，或目标未变化。它表示"无需动作"，不是"状态未知"；`current_target` 仍保留真实目标（供 `_publish_commands` 拼接第 7 维信号）。
-- 状态机只改变量，不缓存输入本身；无时间维度（没有"保持 X 毫秒后才动作"）。
-
-## 数据流 / 消费方（teleop_node `_gripper_tick`）
-
-teleop_node.py:321-342，10 Hz（`gripper.fsm_rate_hz`，默认 10.0，仅 enabled 时建 timer）：
-
-1. `_e_stop` 或未启用 → 直接返回（冻结）。
-2. **server 探测（一次）**：`_gripper_probed` 标志位；若 `_gripper_action` 为 None 或 `server_is_ready()` 为 False → 记警告并把 `self._gripper.enabled` 置 False 永久禁用 FSM（此时 `update()` 恒 UNKNOWN，天然静默）。
-3. **goals in-flight 门控**：`self._gripper_future` 非 None 且未 done → 本 tick 跳过（同一时刻最多一个未完成 goal）。
-4. 锁内 `update(self._master_gripper_m)`（`_master_gripper_m` 来自 `/joint_states` 的 `Gripper` 关节位置，m）。
-5. 结果非 UNKNOWN → `_send_gripper_goal(target)`：goal 的 `command.name=[UR_GRIPPER_JOINT]`、`position=[get_knuckle_command(target)]`、`effort=[max_effort]`，`send_goal_async` 存为 `_gripper_future`。
-
-此外 `_publish_commands`（teleop_node.py:346-352）把 `get_gripper_command_signal(current_target)`（1.0/0.0）拼到 `/teleop/commands` 第 7 维（即 FrameBuilder action 的 `cmd_gripper`），与夹爪 action 下发相互独立。
-
-## 错误处理 / 已知边界
-
-- **阈值倒置未校验**：构造不检查 `close_threshold_m > open_threshold_m`（默认 0.0125 > 0.005 正常）。若配置倒置（close ≤ open），两个分支会重叠：对落在 `(close_threshold_m, open_threshold_m)` 区间的输入，`>` 分支先判 → **CLOSED 胜出**。这是 `if/elif` 顺序决定的刻意行为（重叠区偏向闭合而非张开），文档明确记录，不视为缺陷。
-- **UNKNOWN → 张开**：`get_knuckle_command(UNKNOWN)` 走 else 分支返回 `open_pos_rad`（0.0）——安全默认（缺省张开而非闭合），测试锁定。
-- 门控失效后的补偿：goal 在飞时输入变化会被跳过，下个 tick 再判——接受至多一个 tick 的决策延迟（刻意，避免堆积 goals）。
-- 死区两端是严格不等式（`>` / `<`）；恰好等于阈值时保持上一目标。
-
-## 测试覆盖（tests/test_gripper_controller.py）
-
-- `test_disabled_by_config`：未启用 → 恒 UNKNOWN。
-- `test_open_to_closed_transition`：0.0 → OPEN、0.03 → CLOSED；knuckle 指令 0.4/0.0、信号 1.0/0.0 双出口。
-- `test_hysteresis_deadband_keeps_previous_target`：0.03→CLOSED 后，0.010（死区）→ UNKNOWN 且保持；0.004 越过 open 阈值 → OPEN；回 0.010 → 保持 OPEN；0.02 → CLOSED。
-- `test_current_target_follows_updates`：`current_target` 跟随。
-- `test_knuckle_default_safe_open`：UNKNOWN → 0.0（张开）。
-
-## Alicia 与 Xbot 统一开合目标
-
-默认仅发送打开 `0.0 rad` 和闭合 `0.4 rad` 两个目标，动作信号仍为打开 `0`、闭合 `1`。Alicia 保留主臂输入迟滞以防抖，只在开合状态变化时发送目标。Xbot 每次 A 键有效按下，切换上一次已接受的目标，不要求实测位置大于 `0.4`；目标拒绝时保持原目标。首次收到反馈时按两个目标的中点初始化状态。录制只通过 `recorder.record_action_gripper` 保存打开 `0`／闭合 `1` 的指令，不保存实测夹爪状态。
+`recorder.record_action_gripper` 决定是否保存二值 cmd_gripper（开 0、闭 1），不保存夹爪实测 observation，也不把录制开关解释为硬件开关。详见[数据采集](data_recorder.md)。
