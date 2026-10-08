@@ -1,39 +1,9 @@
-# ur_teleop 文档
+# ur_teleop 文档入口
 
-支持 Alicia 主从臂和 Xbot 手柄两种控制方式，通过 `teleop.control_source: alicia | xbot` 选择，不同时运行。
+本目录说明 Xbot/Alicia 遥操作 UR、相关控制器及采集前后操作。
 
-| 文档 | 内容 |
-| --- | --- |
-| [读取从臂初始位置](capture_slave_home.md) | 启动或复用 UR 控制器，将当前关节角保存到两个配置的 home.slave |
-| [Camera setup](camera_inspector.md) | PySide6 + PyQtGraph live preview, camera controls and YAML fields |
-| [启动与相机](launch.md) | 两阶段启动、配置选择、相机发布 |
-| [Xbot 手柄](xbot_control.md) | 校准、按键、base/TCP 切换、安全限制与测试 |
-| [Xbot 配置参数](xbot_teleop_config.md) | `xbot_teleop.yaml` 每个参数的作用、单位与实际生效条件 |
-| [数据采集](data_recorder.md) | 两种控制方式的录制操作、帧格式与数据集 |
-| [配置](config.md) | 配置加载与字段说明 |
-| [Alicia 数据流](pipeline.md) | 主从臂拓扑、状态机与接口 |
+按顺序阅读：[硬件准备](hardware.md) → [完整流程](workflow.md) → [相机调试](camera_inspector.md) → [启动说明](launch.md) → [数据采集](data_recorder.md)。控制器对应关系见[控制器说明](controllers.md)，所有文档及用途见[功能包 README](../README.md#文档导航)。
 
-## 实现参考
+Xbot 的标定和按键见[手柄操作](xbot_control.md)，逐项参数见[Xbot 配置](xbot_teleop_config.md)，不连接机器人的输入检查见[独立手柄测试](xbot_joy_test.md)。Alicia 的配置和节点逻辑见[配置加载](config.md)、[数据流](pipeline.md)与[遥操作节点](teleop_node.md)。
 
-以下文档主要说明 Alicia 分支；Xbot 分支见手柄文档。
-
-- [Home](home_node.md)、[遥操作状态机](teleop_node.md)、[控制器切换](controller_switcher.md)
-- [关节映射](joint_mapper.md)、[会话偏移](session_offset.md)、[Ruckig 平滑](ruckig_node.md)
-- [夹爪迟滞控制](gripper_controller.md)、[键盘读取](keyboard.md)
-
-## 测试
-
-先加载 ROS 和工作区环境：
-
-```bash
-source /opt/ros/jazzy/setup.bash
-source /ros2_ws/install/setup.bash
-PYTHONPATH=/ros2_ws/src/ur_teleop:$PYTHONPATH \
-  /usr/bin/python3 -m pytest /ros2_ws/src/ur_teleop/tests -q
-```
-
-默认不执行原有 `integration` 测试，Xbot mock 测试需按[手柄文档](xbot_control.md#测试)单独启用。测试不得连接真机。
-
-## 真机回 Home 前确认
-
-Alicia 与 Xbot 共用 `home.launch.py` 的确认流程：控制栈启动后，终端提示在示教器点击启动“外部控制（External Control）”程序；完成后按回车，再等待状态与轨迹控制器就绪并回 Home。等待确认期间不发送 Home 指令。仿真不等待人工确认。Alicia 的 `sim` 启动参数覆盖同样生效。
+修改从臂初始位置时使用[只读关节位置工具](capture_slave_home.md)。Home 确认、控制器切换、映射、offset、Ruckig、夹爪与键盘等实现细节从功能包 README 的文档导航进入。

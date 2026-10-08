@@ -1,8 +1,8 @@
 # Xbot 手柄遥操作
 
-使用 `cartesian_impedance_controller` 控制 `tool0` 法兰位姿，复用 `ur10e_robotiq_ft_description` 的组合 URDF。夹爪末端 `gripper_tcp` 与 `tool0` 不重合。Xbot 不启动 Alicia 或 Ruckig。
+使用 `cartesian_impedance_controller` 控制 `tool0` 法兰位姿，复用 `ur10e_robotiq_ft_description` 的组合 URDF。夹爪末端 `gripper_tcp` 与 `tool0` 不重合。Xbot 不启动 Alicia 或 Ruckig。相关控制器参数文档见[控制器说明](controllers.md)，从设备准备到采集的命令见[完整流程](workflow.md)。
 
-Xbot 不在手柄配置中定义阻抗刚度、阻尼、wrench 或力矩；这些参数保存在控制器 YAML 中。`xbot.controller_config_file` 指定该文件，`xbot_cell.launch.py` 将同一完整路径传给 spawner 的 `--param-file`。手柄节点和录制器也从该文件读取控制器参考 link，避免目标与 action 使用另一套坐标系。启动 `home.launch.py` 时终端会打印所传路径；Home 阶段控制器虽为 inactive，参数文件已传入。
+Xbot 不在手柄配置中定义阻抗刚度、阻尼、wrench 或力矩；这些参数保存在控制器 YAML 中。`xbot.controller_config_file` 指定该文件，`xbot_cell.launch.py` 将同一完整路径传给 spawner 的 `--param-file`。手柄节点和录制器也从该文件读取控制器参考 link，避免目标与 action 使用另一套坐标系。顶层 `debug: true` 时，启动 `home.launch.py` 会打印所传路径；Home 阶段控制器虽为 inactive，参数文件已传入。
 
 ```yaml
 xbot:

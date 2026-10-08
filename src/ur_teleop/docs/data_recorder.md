@@ -1,6 +1,6 @@
 # 数据采集与帧格式
 
-`ros2 launch ur_teleop teleop.launch.py config_file:=/ros2_ws/src/ur_teleop/config/xbot_teleop.yaml mode:=record` 启动手柄、遥操作和录制器。组合单元须先按[手柄启动说明](xbot_control.md)启动并完成 Home；相机按其驱动说明单独启动。录制数据写入 `recorder.root`，不会自动上传。
+`ros2 launch ur_teleop teleop.launch.py config_file:=/ros2_ws/src/ur_teleop/config/xbot_teleop.yaml mode:=record` 启动手柄、遥操作和录制器。组合单元须先按[手柄启动说明](xbot_control.md)启动并完成 Home；相机先按[调试说明](camera_inspector.md)确认参数，再按[相机发布说明](launch.md#相机)单独启动。从硬件准备到先测试后采集的命令见[完整流程](workflow.md)。录制数据写入 `recorder.root`，不会自动上传。
 
 ## 操作
 

@@ -18,14 +18,16 @@ source /ros2_ws/install/setup.bash
 
 `mode:=record` 在遥操作阶段增加录制器，详见[数据采集](data_recorder.md)。Xbot 的完整配置、校准和命令见[手柄说明](xbot_control.md)。
 
+完整的硬件、相机调试、teleop 测试到 record 采集步骤见[完整流程](workflow.md)，控制器参数见[控制器说明](controllers.md)。
+
 ## Alicia 启动
 
 ```bash
-# 终端 1：UR 仿真；Alicia 仍使用真实主臂
-ros2 launch ur_teleop home.launch.py sim:=true
+# 终端 1：当前 Alicia 配置选择关节阻抗；UR 仿真，Alicia 仍是真实主臂
+ros2 launch ur_teleop home.launch.py sim:=true controller:=joint_impedance
 
 # 终端 2：Home 到位后启动，进入 ARMED 后按 Enter
-ros2 launch ur_teleop teleop.launch.py
+ros2 launch ur_teleop teleop.launch.py mode:=teleop
 ```
 
 使用自定义配置时，两个阶段传入同一 `config_file:=/绝对路径/配置.yaml`。
@@ -51,7 +53,7 @@ Alicia Home 的参数默认值来自安装目录的 `ur_teleop.yaml`；自定义
 ```bash
 ros2 launch ur_teleop home.launch.py sim:=true controller:=joint_impedance
 # Home 到位后，在另一终端执行
-ros2 launch ur_teleop teleop.launch.py
+ros2 launch ur_teleop teleop.launch.py mode:=teleop
 ```
 
 该仿真分支使用仅含 UR 六轴的 mock，建议关闭 `gripper.enabled`。Ruckig 向 `/joint_impedance_controller/target_joint_state` 发布目标；关闭 `ruckig.enabled` 时由遥操作直接发送。
@@ -69,6 +71,6 @@ ros2 launch ur_teleop camera.launch.py \
 
 - RealSense 使用 `data_collection/launch/dual_realsense.launch.py`，设置位于 `cameras.realsense`。
 - USB/OpenCV 使用 `data_collection/launch/opencv_cameras.launch.py`，设备与图像参数由 `cameras.opencv.config_file` 指定，默认 `opencv_cameras.yaml`；相对路径以 `camera.yaml` 所在目录为基准。
-- `ur_teleop.yaml` / `xbot_teleop.yaml` 的 `recorder.cameras` 只选择数据集保存的图像，见[录制配置](data_recorder.md#配置与存储)。
+- `ur_teleop.yaml` / `xbot_teleop.yaml` 的 `recorder.cameras` 只选择数据集保存的图像，见[录制配置](data_recorder.md)。
 - `cameras.visualization.topics` 定义预览话题，拼接结果为 `/camera_mosaic/image_raw`，由 rqt 显示。
 - 命令行 `launch_realsense`、`launch_opencv_cameras`、`launch_image_viewers` 等参数可覆盖相机配置。
