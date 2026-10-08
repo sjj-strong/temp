@@ -1,4 +1,5 @@
 """采集日志：结构化事件、可关闭的调试输出及实时帧进度。"""
+import hashlib
 import json
 import time
 
@@ -8,7 +9,15 @@ def log_event(node, event, *, level='info', message=None, **fields):
     options = {key: fields.pop(key) for key in ('throttle_duration_sec', 'once', 'skip_first') if key in fields}
     if message is not None:
         fields['message'] = message
-    getattr(node.get_logger(), level)(json.dumps(dict(event=event, **fields), ensure_ascii=False), **options)
+    # ROS 按调用位置缓存等级和过滤参数；为不同事件及设置保留独立日志上下文。
+    key = (event, level, tuple(sorted(options.items())))
+    if not hasattr(node, '_event_loggers'):
+        node._event_loggers = {}
+    if key not in node._event_loggers:
+        suffix = hashlib.sha256(repr(key).encode()).hexdigest()[:16]
+        node._event_loggers[key] = node.get_logger().get_child('event_' + suffix)
+    getattr(node._event_loggers[key], level)(
+        json.dumps(dict(event=event, **fields), ensure_ascii=False), **options)
 
 
 def debug_log(node, message, **options):

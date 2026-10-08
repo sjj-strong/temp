@@ -42,5 +42,20 @@ def test_missing_tf_blocks_target():
     def missing(*args):
         raise TransformException('缺少 TF')
     node.buffer = SimpleNamespace(lookup_transform=missing)
-    node.get_logger = lambda: SimpleNamespace(error=lambda *args, **kwargs: None)
+    logger = SimpleNamespace(error=lambda *args, **kwargs: None)
+    logger.get_child = lambda name: logger
+    node.get_logger = lambda: logger
     assert node.controller_transform() is None
+
+
+def test_selected_high_config_uses_base_link_without_tf_lookup():
+    from types import SimpleNamespace
+    from ur_teleop.xbot_teleop_node import XbotTeleopNode
+    configs = Path(__file__).resolve().parents[2] / 'cartesian_impedance_controller/config'
+    node = object.__new__(XbotTeleopNode)
+    node.controller_frame = controller_base_frame(configs / 'ur10e_cartesian_impedance_high.yaml')
+    assert node.controller_frame == 'base_link'
+    def unexpected(*args):
+        raise AssertionError('相同坐标系不应查询 base TF')
+    node.buffer = SimpleNamespace(lookup_transform=unexpected)
+    np.testing.assert_allclose(node.controller_transform(), [0, 0, 0, 0, 0, 0, 1])

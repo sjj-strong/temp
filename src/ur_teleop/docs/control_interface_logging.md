@@ -14,3 +14,5 @@
 | 夹爪 | `_gripper_tick` 或 `toggle_gripper → ActionClient.send_goal_async` | 配置的 `gripper.action_server` | `control_msgs/action/ParallelGripperCommand` |
 
 当前 Alicia 配置选择关节阻抗并启用 Ruckig，因此首次控制时 teleop 与 Ruckig 各输出一条接口日志。`/teleop/commands` 是数采话题，不是机械臂控制接口。
+
+日志按事件、等级及过滤设置分别维护上下文，避免 INFO 切换 ERROR 或改变节流设置导致节点退出。TF 暂未就绪时停止发布目标并输出提示，待反馈恢复后继续检查。

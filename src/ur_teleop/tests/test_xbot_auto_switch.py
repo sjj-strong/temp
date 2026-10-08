@@ -28,9 +28,9 @@ def fixture_node():
         return object()
     node.switcher = SimpleNamespace(switch=switch, list_controllers=lambda: None,
                                     list_result=lambda future: future.result())
-    node.get_logger = lambda: SimpleNamespace(info=lambda *args: None,
+    node.get_logger = lambda: _child_logger(SimpleNamespace(info=lambda *args: None,
                                                warn=lambda *args, **kwargs: None,
-                                               error=lambda *args, **kwargs: None)
+                                               error=lambda *args, **kwargs: None))
     return node, calls
 
 
@@ -103,7 +103,8 @@ def test_controller_state_unconfirmed_for_ten_seconds_latches_fault():
 def test_diagnostic_shows_comparable_poses_and_is_rate_limited():
     node = object.__new__(XbotTeleopNode)
     messages = []
-    node.get_logger = lambda: SimpleNamespace(info=messages.append)
+    node.get_logger = lambda: _child_logger(SimpleNamespace(info=messages.append))
+    node._debug = True
     node.diagnostic_hz = 5.
     node.last_diagnostic_at = -float('inf')
     node.x = {'joy_timeout_s': .25, 'tcp_timeout_s': .25}
@@ -130,3 +131,9 @@ def test_diagnostic_shows_comparable_poses_and_is_rate_limited():
     assert len(messages) == 1
     node.log_diagnostic(10.21, actual, True, identity)
     assert len(messages) == 2
+
+
+def _child_logger(logger):
+    """模拟 ROS 子日志器接口，保留原有消息收集。"""
+    logger.get_child = lambda name: logger
+    return logger

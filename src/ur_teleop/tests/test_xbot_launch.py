@@ -106,7 +106,7 @@ def test_controller_and_recording_use_tool0():
     data = yaml.safe_load(controller_config.read_text())
     params = next(value['ros__parameters'] for key, value in data.items()
                   if key.endswith('cartesian_impedance_controller'))
-    assert params['base_frame'] == 'base'
+    assert params['base_frame'] == 'base_link'
     assert params['tip_frame'] == 'tool0'
 
 

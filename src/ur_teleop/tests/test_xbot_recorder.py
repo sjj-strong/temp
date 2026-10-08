@@ -66,7 +66,7 @@ def test_episode_events_and_stale_gate(monkeypatch, mode):
         clear_episode_buffer=frames.clear, finalize=lambda: finished.append(True))
     node._finished_pub = SimpleNamespace(publish=lambda m: None)
     node._enable_pub = SimpleNamespace(publish=lambda m: pytest.fail('Xbot 不应等待或发布 Alicia enable'))
-    log = SimpleNamespace(info=lambda *a: None, warn=lambda *a: None, error=lambda *a: None)
+    log = _child_logger(SimpleNamespace(info=lambda *a: None, warn=lambda *a: None, error=lambda *a: None))
     monkeypatch.setattr(DataRecorderNode, 'get_logger', lambda self: log)
     monkeypatch.setattr(DataRecorderNode, '_get_ee_pose', lambda self: [0, 0, 0, 0, 0, 0, 1])
 
@@ -226,7 +226,7 @@ def test_existing_dataset_uses_hyphenated_timestamp(monkeypatch, root):
     node._rec = dict(repo_id='user/test', root=root)
     node._fps = 20
     node._features = {}
-    node.get_logger = lambda: SimpleNamespace(warn=lambda *args: None)
+    node.get_logger = lambda: _child_logger(SimpleNamespace(warn=lambda *args: None))
     node._init_dataset()
     assert calls[0]['repo_id'] == 'user/test'
     assert calls[1]['repo_id'] == 'user/test-2026-10-08-22-30-15-123456'
@@ -267,3 +267,9 @@ def test_camera_saved_size(monkeypatch, tmp_path, resize):
     assert np.all(saved == 123)
     if not resize:
         assert saved is image
+
+
+def _child_logger(logger):
+    """模拟 ROS 子日志器接口，保留原有消息收集。"""
+    logger.get_child = lambda name: logger
+    return logger

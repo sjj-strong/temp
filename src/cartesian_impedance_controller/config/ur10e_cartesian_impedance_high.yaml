@@ -7,7 +7,7 @@
     tf_prefix: ""
     # 使用 UR 原始 tool0，不使用安装在其后的 FT300、夹爪或 gripper_tcp。
     # 相对位移工具从控制器的 ~/current_pose 获取相同 KDL 链的当前 tool0 位姿。
-    base_frame: base
+    base_frame: base_link
     tip_frame: tool0
     target_topic: ~/target_pose
     joints:

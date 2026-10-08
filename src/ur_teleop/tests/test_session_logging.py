@@ -8,6 +8,7 @@ from ur_teleop import session_logging as module
 def test_debug_switch_and_structured_events():
     messages = []
     logger = SimpleNamespace(info=lambda value, **kwargs: messages.append((value, kwargs)))
+    logger.get_child = lambda name: logger
     node = SimpleNamespace(_debug=False, get_logger=lambda: logger)
     module.debug_log(node, '位姿诊断')
     assert messages == []
@@ -47,3 +48,15 @@ def test_progress_shows_episode_target():
         assert progress.bar.desc == 'episode=3/50'
     finally:
         progress.close()
+
+
+def test_real_logger_separates_levels_and_filters():
+    from rclpy.logging import get_logger
+    logger = get_logger('ur_session_logging_regression')
+    node = SimpleNamespace(get_logger=lambda: logger)
+    module.log_event(node, 'control_frequency', command_hz=50.)
+    module.log_event(node, 'error', level='error', message='缺少 TF', throttle_duration_sec=2.)
+    module.log_event(node, 'error', level='error', message='缺少 TF', throttle_duration_sec=2.)
+    module.log_event(node, 'error', level='warn', message='等待反馈', once=True)
+    module.log_event(node, 'error', level='error', message='其他故障')
+    assert len(node._event_loggers) == 4

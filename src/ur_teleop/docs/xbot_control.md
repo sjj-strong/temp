@@ -41,7 +41,7 @@ ros2 launch ur_teleop teleop.launch.py \
   config_file:=/ros2_ws/src/ur_teleop/config/xbot_teleop.yaml mode:=teleop
 ```
 
-真机需设置 `sim: false`、实际 IP 和 Home；控制器参考坐标系通常为 `base`。仿真设置 `sim: true` 并使用 `ur10e_xbot_sim_cartesian_impedance.yaml`，参考坐标系为 `base_link`。两种模式都使用真实手柄。
+真机需设置 `sim: false`、实际 IP 和 Home；当前高档配置参考坐标系为 `base_link`。仿真设置 `sim: true` 并使用 `ur10e_xbot_sim_cartesian_impedance.yaml`，参考坐标系为 `base_link`。两种模式都使用真实手柄。
 
 真机 Home 命令为：
 
@@ -77,7 +77,7 @@ base 模式沿 `base_link` 轴运动，TCP 模式沿实测 `tool0` 局部轴运�
 
 手柄节点收到的首条 `/cartesian_impedance_controller/current_pose` 锁定本次运行的工作空间原点。目标在控制器参考坐标系按 `workspace_half_extent_m` 对 XYZ 裁剪，默认相对原点各 ±0.20 m；本次节点运行期间不重新锁定。此处只限制目标位置，不限制姿态；控制器内部仍有位姿误差、wrench 和关节力矩限幅。
 
-内部实测位姿来自 `base_link → tool0`；发布前完整转换到控制器要求的参考 link，真机为 `base`，仿真为 `base_link`。工作空间裁剪在转换后执行，绝对和相对录制动作也在此参考 link 中编码。缺少有效 TF 或工作空间原点时不允许手柄更新目标。
+内部实测位姿来自 `base_link → tool0`；发布前完整转换到控制器要求的参考 link，当前高档真机和仿真配置均为 `base_link`；其他配置按其 `base_frame` 转换。工作空间裁剪在转换后执行，绝对和相对录制动作也在此参考 link 中编码。缺少有效 TF 或工作空间原点时不允许手柄更新目标。
 
 录制按键、数据格式及数据集位置见[数据采集](data_recorder.md)。
 

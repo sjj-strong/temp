@@ -33,6 +33,9 @@ class FakePub:
 
 
 class FakeLogger:
+    def get_child(self, name):
+        return self
+
     def info(self, *args, **kwargs):
         pass
 

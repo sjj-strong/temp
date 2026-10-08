@@ -13,7 +13,7 @@
 
 Alicia 默认源码配置选择 `joint_impedance`。其 Home 命令应显式带 `controller:=joint_impedance`，确保 cell 与遥操作节点选择相同控制器。关节阻抗参数与接口见[关节阻抗文档](../../joint_impedance_controller/docs/README.md)。若改用前向位置，应同时修改 YAML 和 Home 命令的 `controller` 参数。
 
-Xbot 的 `xbot.controller_config_file` 是阻抗参数入口：控制和录制共用其参考坐标系；`damping: null` 自动按 `2√K` 计算阻尼，显式填写则使用给定值。仿真应指向 `ur10e_xbot_sim_cartesian_impedance.yaml`，参考 link 为 `base_link`；真机应使用匹配实际硬件的配置，通常为 `base`。当前源码选择 `ur10e_cartesian_impedance_high.yaml`，不要把它直接用作 mock 参数。
+Xbot 的 `xbot.controller_config_file` 是阻抗参数入口：控制和录制共用其参考坐标系；`damping: null` 自动按 `2√K` 计算阻尼，显式填写则使用给定值。仿真应指向 `ur10e_xbot_sim_cartesian_impedance.yaml`，参考 link 为 `base_link`；当前 Xbot 真机选用的 `ur10e_cartesian_impedance_high.yaml` 使用 `base_link`，与手柄内部及录制参考系一致；其他参数文件以其 `base_frame` 为准。高档真机参数不要直接用于 mock。
 
 刚度、阻尼、误差/wrench/力矩限幅见[参数与安全](../../cartesian_impedance_controller/docs/04_参数与安全.md)；已有配置档位见[刚度阻尼三档配置](../../cartesian_impedance_controller/docs/07_刚度阻尼三档配置.md)。控制器参考 link 会决定目标转换与数据集 action 的坐标系。
 
@@ -28,3 +28,5 @@ ros2 topic echo --once /joint_states
 ```
 
 状态广播器应保持 active，轨迹与遥操作控制器按阶段切换。Xbot Home 阶段阻抗控制器应为 inactive。切换行为见[控制器切换](controller_switcher.md)，组合 mock 说明见[xbot_effort_mock](../../ur10e_robotiq_ft_description/docs/xbot_effort_mock.md)。`debug` 日志开关见[采集日志](data_recorder.md#采集日志与进度)。
+
+`base` 与 `base_link` 在当前 UR 模型中绕 Z 轴相差 180°，不能只改消息的坐标系名称。修改 `base_frame` 后需重新启动 Home 控制栈及遥操作，让控制器、目标和录制使用相同参考系。

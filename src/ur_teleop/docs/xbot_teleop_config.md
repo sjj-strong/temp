@@ -74,7 +74,7 @@
 | `recorder.record_action_gripper` | `false` | 是否在 action 末尾保存夹爪二值指令：打开 `0`、闭合 `1`。 |
 | `recorder.record_joint_position` / `record_joint_velocity` / `record_joint_effort` | `true` | 分别保存 6 维关节位置、速度、effort；UR 的 effort 可能是电机电流，不当作实测关节力矩。 |
 | `recorder.data_timeout_s` | `0.5` | 启用字段及就绪心跳、动作允许的最大数据龄；缺失或超时则跳过该帧。 |
-| `recorder.ee_pose_parent_frame` | `base_link` | Alicia 的 TF 父 link；Xbot 自动使用控制器参考 link，真机 `base`、仿真 `base_link`。 |
+| `recorder.ee_pose_parent_frame` | `base_link` | Alicia 的 TF 父 link；Xbot 自动使用控制器参考 link，当前高档真机和仿真配置均为 `base_link`，其他配置以 `base_frame` 为准。 |
 | `recorder.ee_pose_child_frame` | `tool0` | observation 的 TCP 子 link；保存时同时记录该 link。 |
 | `recorder.use_videos` | `true` | 非空相机配置下，`true` 将图像字段保存为视频特征，`false` 保存为图像特征；当前 `cameras: {}` 时没有图像字段。 |
 | `recorder.cameras` | `{}` | 按 camera.yaml 顶层名称选择相机，仅配置 enabled 和可选 image_key；话题及保存尺寸从相机文件读取。 |

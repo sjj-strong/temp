@@ -48,8 +48,8 @@ def test_episode_target_counts_saved_only_and_finalizes(monkeypatch, source):
                                    clear_episode_buffer=lambda: calls.append('discard'),
                                    finalize=lambda: calls.append('finalize'))
     node._finished_pub = SimpleNamespace(publish=lambda message: finished.append(message.data))
-    monkeypatch.setattr(DataRecorderNode, 'get_logger', lambda self: SimpleNamespace(
-        info=lambda *args: None, warn=lambda *args: None))
+    monkeypatch.setattr(DataRecorderNode, 'get_logger', lambda self: _child_logger(SimpleNamespace(
+        info=lambda *args: None, warn=lambda *args: None)))
     for method, frames in [('_save_episode', 1), ('_discard_episode', 5), ('_save_episode', 3)]:
         node._recording, node._frame_count = True, frames
         getattr(node, method)()
@@ -76,7 +76,7 @@ def test_unlimited_and_save_failure_do_not_finish(monkeypatch):
     node._progress = None
     node._recording, node._frame_count = True, 5
     node._dataset = SimpleNamespace(save_episode=lambda: None)
-    monkeypatch.setattr(DataRecorderNode, 'get_logger', lambda self: SimpleNamespace(info=lambda *args: None))
+    monkeypatch.setattr(DataRecorderNode, 'get_logger', lambda self: _child_logger(SimpleNamespace(info=lambda *args: None)))
     node._save_episode()
     assert node._episode_count == 101 and not node._finish_requested
     node._num_episodes = 102
@@ -122,3 +122,9 @@ def test_recording_unknown_or_disabled_camera(tmp_path, config):
     path.write_text(yaml.safe_dump(config))
     with pytest.raises(ValueError, match='不存在或未启用'):
         recording_cameras(dict(cameras={'front': {}}), path)
+
+
+def _child_logger(logger):
+    """模拟 ROS 子日志器接口，保留原有消息收集。"""
+    logger.get_child = lambda name: logger
+    return logger

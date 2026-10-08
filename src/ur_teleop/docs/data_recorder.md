@@ -29,7 +29,7 @@
 
 `recorder.action_mode: abs` 保存手柄节点最终发布给阻抗控制器的绝对目标 `x,y,z,qx,qy,qz,qw`。`rel` 保存该目标相对**同一控制周期实测 TCP** 的 `dx,dy,dz,drx,dry,drz`；姿态增量是参考坐标系中的最短旋转向量，满足 `q_target = dq × q_actual`。工作空间裁剪发生在编码之前，因此 action 与最终下发目标一致。摇杆回中时仍保存保持目标；此时相对 action 可能非零。
 
-Xbot 两种 action 模式均逐帧保存字符串 `action.reference_link`：真机通常为 `base`，仿真为 `base_link`。`record_action_gripper: true` 时再附加 `cmd_gripper`（打开 `0`、闭合 `1`）；无夹爪时建议设为 `false`。修改模式、坐标系或字段配置后请重启遥操作和录制器，新建数据集。
+Xbot 两种 action 模式均逐帧保存字符串 `action.reference_link`：当前高档真机及仿真配置为 `base_link`，其他配置以控制器 `base_frame` 为准。`record_action_gripper: true` 时再附加 `cmd_gripper`（打开 `0`、闭合 `1`）；无夹爪时建议设为 `false`。修改模式、坐标系或字段配置后请重启遥操作和录制器，新建数据集。
 
 ## 可选 observation
 
