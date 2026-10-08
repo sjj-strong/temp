@@ -60,12 +60,11 @@ recorder:
   action_space: cartesian_pose
   action_mode: abs  # abs：最终目标 xyz+xyzw；rel：最终目标相对同周期实测 TCP 的 xyz+旋转向量。
   record_action_joints: true
-  record_action_gripper: false    # 夹爪关闭时不保存动作末维；位姿动作始终保存。
+  record_action_gripper: false    # 是否保存夹爪开合指令：打开 0，闭合 1。
   record_joint_position: true
   record_joint_velocity: true
   record_joint_effort: true      # /joint_states.effort；UR 上可能表示电机电流，非实测关节力矩。
   record_tcp_pose: true
-  record_ur_gripper: false
   record_wrench: true            # FT300 启用时取外部传感器，否则取 UR 内置传感器。
   data_timeout_s: 0.5
   ee_pose_source: tf
@@ -75,4 +74,3 @@ recorder:
   cameras: {}                    # 仅定义数据集图像；发布与预览见 camera.yaml，示例见 docs/data_recorder.md。
   task: xbot_teleoperation
   min_frames_per_episode: 2
-  state_threshold_rad: 0.2

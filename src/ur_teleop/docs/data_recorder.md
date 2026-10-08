@@ -17,7 +17,7 @@
 
 `recorder.action_mode: abs` 保存手柄节点最终发布给阻抗控制器的绝对目标 `x,y,z,qx,qy,qz,qw`。`rel` 保存该目标相对**同一控制周期实测 TCP** 的 `dx,dy,dz,drx,dry,drz`；姿态增量是参考坐标系中的最短旋转向量，满足 `q_target = dq × q_actual`。工作空间裁剪发生在编码之前，因此 action 与最终下发目标一致。摇杆回中时仍保存保持目标；此时相对 action 可能非零。
 
-两种模式均逐帧保存字符串 `action.reference_link`：真机通常为 `base`，仿真为 `base_link`。`record_action_gripper: true` 时再附加 `cmd_gripper`；无夹爪时建议设为 `false`。修改模式、坐标系或字段配置后请重启遥操作和录制器，新建数据集。
+两种模式均逐帧保存字符串 `action.reference_link`：真机通常为 `base`，仿真为 `base_link`。`record_action_gripper: true` 时再附加 `cmd_gripper`（打开 `0`、闭合 `1`）；无夹爪时建议设为 `false`。修改模式、坐标系或字段配置后请重启遥操作和录制器，新建数据集。
 
 ## 可选 observation
 
@@ -29,7 +29,6 @@ Xbot 的下列开关相互独立。启用的数值字段按表格顺序拼接为
 | `record_joint_velocity` | `/joint_states.velocity` | 6 |
 | `record_joint_effort` | `/joint_states.effort`，UR 上可能是电机电流，不能视为实测关节力矩 | 6 |
 | `record_tcp_pose` | 配置的 TCP link 相对控制器参考 link 的 xyz+xyzw | 7 |
-| `record_ur_gripper` | 夹爪实测开合状态，阈值由 `state_threshold_rad` 指定 | 1 |
 | `record_wrench` | 原始 `force.xyz, torque.xyz` | 6 |
 
 启用 TCP 时，还保存 `observation.tcp_reference_link` 和 `observation.tcp_link`。`ee_pose_child_frame` 指定 TCP link；Xbot 的父 link 自动采用控制器参考 link。`ee_pose_source` 可选 `tf` 或 `topic`，关闭 TCP 观测时也可设 `none`。
@@ -49,7 +48,7 @@ recorder:
       width: 640
 ```
 
-录制开始和写帧时只要求**启用**的字段有新鲜数据；任一启用字段缺失、非有限或超过 `data_timeout_s` 时跳过整帧，不写缺键或 NaN。手柄就绪心跳与位姿 action 始终是必要条件。Alicia 的旧 `observation.state` 和关节 action 格式保持原有配置。
+录制开始和写帧时只要求**启用**的字段有新鲜数据；任一启用字段缺失、非有限或超过 `data_timeout_s` 时跳过整帧，不写缺键或 NaN。手柄就绪心跳与位姿 action 始终是必要条件。Alicia 的 observation 不再附加夹爪实测状态；关节 action 可通过同一个开关附加夹爪指令。
 
 ## 话题与验证
 
@@ -63,3 +62,7 @@ ros2 topic echo --once /robotiq_force_torque_sensor_broadcaster/wrench
 ```
 
 单元测试位于 `tests/test_xbot_core.py`、`tests/test_xbot_recorder.py` 和 `tests/test_frame_builder.py`。
+
+## 夹爪录制开关
+
+Alicia 与 Xbot 仅使用 `recorder.record_action_gripper` 控制夹爪录制：`true` 在 action 末尾保存二值 `cmd_gripper`（打开 `0`、闭合 `1`），`false` 不保存。不再录制夹爪实测 observation；已移除 `record_ur_gripper` 和 `state_threshold_rad`。录制无需等待夹爪反馈。该开关不控制夹爪执行，执行仍由 `gripper.enabled` 控制。已有数据集的 observation 维度会变化，请使用新数据集。

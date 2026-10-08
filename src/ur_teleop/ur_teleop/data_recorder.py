@@ -19,7 +19,7 @@ try:
 except ImportError:
     LeRobotDataset = None
 
-from ur_teleop.config import UR_GRIPPER_JOINT, UR_JOINT_NAMES, default_config_path, load_config
+from ur_teleop.config import UR_JOINT_NAMES, default_config_path, load_config
 from ur_teleop.frame_builder import FrameBuilder
 from ur_teleop.cartesian_action import action_label
 from ur_teleop.controller_frame import controller_base_frame
@@ -52,7 +52,6 @@ class DataRecorderNode(Node):
         self._joint_effort = None
         self._wrench = None
         self._wrench_reference_link = None
-        self._ur_gripper_rad = 0.0
         self._teleop_cmd = None
         self._ur_ee_pose = None
         self._ee_at = -float('inf')
@@ -63,7 +62,6 @@ class DataRecorderNode(Node):
         self._events = queue.Queue(maxsize=32)
         self._ready = False
         self._ready_at = self._cmd_at = self._joint_at = -float('inf')
-        self._gripper_at = -float('inf')
         self._joint_velocity_at = self._joint_effort_at = self._wrench_at = -float('inf')
         self._camera_at = {}
         self._data_timeout = float(self._rec.get('data_timeout_s', .5))
@@ -137,8 +135,6 @@ class DataRecorderNode(Node):
                 (not flags['joint_velocity'] or now - self._joint_velocity_at < self._data_timeout) and
                 (not flags['joint_effort'] or now - self._joint_effort_at < self._data_timeout) and
                 (not flags['wrench'] or now - self._wrench_at < self._data_timeout) and
-                (not flags['gripper'] or
-                 now - self._gripper_at < self._data_timeout) and
                 all(now - self._camera_at.get(n, -float('inf')) < self._data_timeout
                     for n in self._cameras))
 
@@ -172,11 +168,6 @@ class DataRecorderNode(Node):
                     if len(values) == len(msg.name) and all(math.isfinite(values[i]) for i in indices):
                         setattr(self, field, [values[i] for i in indices])
                         setattr(self, stamp, time.monotonic())
-            # 实机夹爪是独立 controller_manager，可能单独发布 JointState。
-            if (UR_GRIPPER_JOINT in names and len(msg.position) == len(msg.name) and
-                    math.isfinite(msg.position[msg.name.index(UR_GRIPPER_JOINT)])):
-                self._ur_gripper_rad = msg.position[msg.name.index(UR_GRIPPER_JOINT)]
-                self._gripper_at = time.monotonic()
 
     def _wrench_cb(self, msg: WrenchStamped):
         force, torque = msg.wrench.force, msg.wrench.torque
@@ -328,7 +319,6 @@ class DataRecorderNode(Node):
             wrench = list(self._wrench) if self._wrench else None
             wrench_link = self._wrench_reference_link
             cmd = list(self._teleop_cmd) if self._teleop_cmd else None
-            gripper_rad = self._ur_gripper_rad
             cameras = dict(self._camera_frames)
         need_tcp = not self._xbot or self._builder.observation_flags()['tcp_pose']
         ee = self._get_ee_pose() if need_tcp else None
@@ -337,7 +327,7 @@ class DataRecorderNode(Node):
         if ee is None and not self._ee_warned and self._ee_source != "none":
             self._ee_warned = True
             self.get_logger().warn("EE 位姿查询失败，该段以 NaN 记录（仅警告一次）")
-        frame = self._builder.build(ur, ee, gripper_rad, cmd,
+        frame = self._builder.build(ur, ee, cmd,
                                     joint_velocity=velocity, joint_effort=effort, wrench=wrench,
                                     wrench_reference_link=wrench_link,
                                     reference_link=self._reference_link, tcp_link=self._tcp_link)

@@ -71,9 +71,8 @@
 | `recorder.action_space`           | `cartesian_pose`        | Xbot 固定使用笛卡尔位姿动作，配置校验不接受其他值。                                                                                                              |
 | `recorder.action_mode` | `abs` | `abs` 保存最终发布的 xyz+xyzw；`rel` 保存最终目标相对同周期实测 TCP 的 xyz+旋转向量。均另存 `action.reference_link`。 |
 | `recorder.record_action_joints`   | `true`                  | Xbot 位姿动作始终保存；该旧字段在 Xbot 中固定为 true。                                 |
-| `recorder.record_action_gripper` | `false` | 是否在位姿 action 末尾保存夹爪目标；位姿部分始终保存。 |
+| `recorder.record_action_gripper` | `false` | 是否在 action 末尾保存夹爪二值指令：打开 `0`、闭合 `1`。 |
 | `recorder.record_joint_position` / `record_joint_velocity` / `record_joint_effort` | `true` | 分别保存 6 维关节位置、速度、effort；UR 的 effort 可能是电机电流，不当作实测关节力矩。 |
-| `recorder.record_tcp_pose` / `record_ur_gripper` / `record_wrench` | `true` / `false` / `true` | 分别控制 TCP 位姿、夹爪状态和 6 维力／力矩观测。关闭的字段不要求数据。 |
 | `recorder.data_timeout_s` | `0.5` | 启用字段及就绪心跳、动作允许的最大数据龄；缺失或超时则跳过该帧。 |
 | `recorder.ee_pose_source`         | `tf`                    | 末端位姿来源；`tf` 查询 TF，`topic` 订阅位姿话题。启用 `record_tcp_pose` 时必须有有效位姿；关闭时可设为 `none`。                                              |
 | `recorder.ee_pose_parent_frame` | `base_link` | Alicia 的 TF 父 link；Xbot 自动使用控制器参考 link，真机 `base`、仿真 `base_link`。 |
@@ -82,6 +81,7 @@
 | `recorder.cameras` | `{}` | 每台相机独立配置 `enabled`、`topic`、`image_key`、`height`、`width`；未启用的相机不进入数据集。 |
 | `recorder.task`                   | `xbot_teleoperation`    | 写入每帧的任务标签。                                                                                                                                             |
 | `recorder.min_frames_per_episode` | `2`                     | 保存 episode 所需的最少有效帧数；不足时自动丢弃。                                                                                                                |
-| `recorder.state_threshold_rad`    | `0.2`                   | 录制夹爪 observation 时，将实测夹爪关节角大于此值判为闭合`1`，否则为张开 `0`。                                                                               |
 
-无夹爪时设置 `recorder.record_ur_gripper: false` 和 `recorder.record_action_gripper: false`。各观测开关及 FT300／UR 内置力数据来源见[数据采集](data_recorder.md)。
+仅通过 `recorder.record_action_gripper` 控制是否保存夹爪开合指令（打开 `0`、闭合 `1`）。各观测开关及 FT300／UR 内置力数据来源见[数据采集](data_recorder.md)。
+
+`recorder.record_tcp_pose` 控制是否保存 TCP 位姿；`record_wrench` 控制是否保存力／力矩。夹爪只保存指令，不保存实测开合 observation，也不依赖夹爪反馈进行录制。

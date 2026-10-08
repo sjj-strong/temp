@@ -138,7 +138,6 @@ gripper_value_to_position(value: float, gripper_type: str = "50mm") -> float
 | `cameras`                | dict  | `{}`                  | `{"wrist": {topic, image_key, height, width}}` | FrameBuilder、data_recorder 图像订阅           |
 | `task`                   | str   | `teleoperation`       | 每帧写入的 task 字段                             | FrameBuilder`build`                          |
 | `min_frames_per_episode` | int   | `2`                   | 低于则自动丢弃 episode                           | data_recorder.py:35,173                        |
-| `state_threshold_rad`    | float | `0.2`                 | UR 夹爪弧度 → 0/1 state 的阈值                  | FrameBuilder`build`                          |
 
 ## 错误处理 / 已知边界
 

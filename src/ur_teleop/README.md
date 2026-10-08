@@ -76,7 +76,6 @@ source /opt/lerobot_venv/bin/activate
 | `recorder.cameras`                                                            | 相机映射`{"wrist": {topic, image_key, height, width}, ...}`                                                                        |
 | `recorder.task`                                                               | lerobot 任务名（默认`teleoperation`）                                                                                              |
 | `recorder.min_frames_per_episode`                                             | 低于此帧数的短 episode 自动丢弃                                                                                                      |
-| `recorder.state_threshold_rad`                                                | robotiq 夹爪 rad → 0/1 state 的阈值（默认 0.4）                                                                                     |
 
 ## 3. 两阶段使用流程
 
@@ -227,10 +226,9 @@ record 模式下控制在整个会话中持续，episode 边界只影响录制�
 
 每帧由 FrameBuilder 组装（见 `ur_teleop/frame_builder.py`）：
 
-- **observation.state：14 维 float32** = 6 个 UR 关节（按 `mapping.ur_joint_order`，实测值） + 7 维 EE 位姿 + 1 维夹爪 state。
-  - state 特征名：`[shoulder_pan_joint, shoulder_lift_joint, elbow_joint, wrist_1_joint, wrist_2_joint, wrist_3_joint, ee_x, ee_y, ee_z, ee_qx, ee_qy, ee_qz, ee_qw, gripper_state]`
+- **observation.state：13 维 float32** = 6 个 UR 关节（按 `mapping.ur_joint_order`，实测值） + 7 维 EE 位姿。
+  - state 特征名：`[shoulder_pan_joint, shoulder_lift_joint, elbow_joint, wrist_1_joint, wrist_2_joint, wrist_3_joint, ee_x, ee_y, ee_z, ee_qx, ee_qy, ee_qz, ee_qw]`
   - EE 位姿查询失败时该帧 ee 段填 **NaN**（不填 0 占位）+ 一次性警告。
-  - `gripper_state` 为 0/1（读 UR `/joint_states` 的 `robotiq_85_left_knuckle_joint` 真实状态，按 `recorder.state_threshold_rad` 阈值二值化）。
 - **action：7 维 float32** = 6 个关节指令 + 1 维夹爪指令（取 `/teleop/commands[6]` 指令信号）。
   - action 特征名：`[cmd_shoulder_pan_joint, cmd_shoulder_lift_joint, cmd_elbow_joint, cmd_wrist_1_joint, cmd_wrist_2_joint, cmd_wrist_3_joint, cmd_gripper]`
 - **相机**（可选，`recorder.cameras` 配置）：`observation.images.<image_key>`，`use_videos: true` 时以 video 编码。

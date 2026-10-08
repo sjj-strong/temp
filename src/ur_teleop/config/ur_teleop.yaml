@@ -61,6 +61,7 @@ gripper:
   close_pos_rad: 0.4
   max_effort: 50.0
 recorder:
+  record_action_gripper: true    # 仅保存打开 0／闭合 1 的夹爪指令。
   repo_id: my_user/ur_teleop
   root: "/ros2_ws/dataset/testv1"                       # 空 = HF_LEROBOT_HOME
   fps: 60
@@ -74,4 +75,3 @@ recorder:
   cameras: {}                    # 仅定义数据集图像；发布与预览见 camera.yaml，示例见 docs/data_recorder.md。
   task: teleoperation
   min_frames_per_episode: 2
-  state_threshold_rad: 0.2       # robotiq 夹爪 rad → 0/1 state 阈值

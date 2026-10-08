@@ -77,7 +77,7 @@ def load_config(path: str | Path) -> dict[str, Any]:
         if rec.get('action_space', 'cartesian_pose') != 'cartesian_pose':
             raise ConfigError('Xbot 的 recorder.action_space 必须为 cartesian_pose，不再记录速度')
         for key in ('record_action_gripper', 'record_joint_position', 'record_joint_velocity',
-                    'record_joint_effort', 'record_tcp_pose', 'record_ur_gripper', 'record_wrench'):
+                    'record_joint_effort', 'record_tcp_pose', 'record_wrench'):
             if key in rec and not isinstance(rec[key], bool):
                 raise ConfigError(f'recorder.{key} 必须为布尔值')
         if rec.get('record_tcp_pose', True) and rec.get('ee_pose_source', 'tf') == 'none':

@@ -14,7 +14,6 @@ class FrameBuilder:
     def __init__(self, recorder_config: dict, gripper_config: dict):
         self._rec = recorder_config
         self._gripper = gripper_config
-        self._state_threshold = float(recorder_config.get("state_threshold_rad", 0.4))
         self._task = recorder_config.get("task", "teleoperation")
         self._use_videos = bool(recorder_config.get("use_videos", True))
         self._cartesian = recorder_config.get('action_space') == 'cartesian_pose'
@@ -27,7 +26,6 @@ class FrameBuilder:
             ('joint_velocity', 'record_joint_velocity', False),
             ('joint_effort', 'record_joint_effort', False),
             ('tcp_pose', 'record_tcp_pose', True),
-            ('gripper', 'record_ur_gripper', True),
             ('wrench', 'record_wrench', False),
         )}
 
@@ -44,8 +42,6 @@ class FrameBuilder:
                 state_names.extend(f'joint_effort.{name}' for name in UR_JOINT_NAMES)
             if flags['tcp_pose']:
                 state_names.extend(f'tcp_{name}' for name in self.EE_NAMES)
-            if flags['gripper']:
-                state_names.append('gripper_state')
             if flags['wrench']:
                 state_names.extend(('force.x', 'force.y', 'force.z',
                                     'torque.x', 'torque.y', 'torque.z'))
@@ -58,8 +54,6 @@ class FrameBuilder:
                 state_names.extend(UR_JOINT_NAMES)
             if self._rec.get("record_ur_ee_pose", True):
                 state_names.extend(self.EE_NAMES)
-            if self._rec.get("record_ur_gripper", True):
-                state_names.append("gripper_state")
         if state_names:
             features["observation.state"] = {
                 "dtype": "float32", "shape": (len(state_names),), "names": state_names,
@@ -88,7 +82,7 @@ class FrameBuilder:
             }
         return features, state_names, action_names
 
-    def build(self, ur_joints, ee_pose, gripper_state_rad, teleop_cmd,
+    def build(self, ur_joints, ee_pose, teleop_cmd,
               joint_velocity=None, joint_effort=None, wrench=None,
               wrench_reference_link=None, reference_link=None, tcp_link=None):
         """None when essential data missing; ee_pose None → NaN segment."""
@@ -108,14 +102,10 @@ class FrameBuilder:
                                 not np.isfinite(values).all())
                    for enabled, values, size in sources):
                 return None
-            if flags['gripper'] and (gripper_state_rad is None or not np.isfinite(gripper_state_rad)):
-                return None
             for name, values in (('joint_position', ur_joints), ('joint_velocity', joint_velocity),
                                  ('joint_effort', joint_effort), ('tcp_pose', ee_pose)):
                 if flags[name]:
                     state_parts.extend(values)
-            if flags['gripper']:
-                state_parts.append(1.0 if gripper_state_rad > self._state_threshold else 0.0)
             if flags['wrench']:
                 if not wrench_reference_link:
                     return None
@@ -125,8 +115,6 @@ class FrameBuilder:
                 state_parts.extend(ur_joints[:6])
             if self._rec.get("record_ur_ee_pose", True):
                 state_parts.extend(ee_pose if ee_pose is not None else [np.nan] * 7)
-            if self._rec.get("record_ur_gripper", True):
-                state_parts.append(1.0 if gripper_state_rad > self._state_threshold else 0.0)
         action_parts = []
         motion_size = len(self._cart_names) - 1 if self._cartesian else 6
         if self._rec.get("record_action_joints", True):
