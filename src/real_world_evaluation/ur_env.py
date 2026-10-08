@@ -7,6 +7,12 @@ from scipy.spatial.transform import Rotation
 
 from protocol import ActionChunk, ImageData, Observation
 
+# 与现有 Robotiq 控制器约定一致，不提供 YAML 覆盖。
+GRIPPER_ACTION = '/robotiq_gripper_controller/gripper_cmd'
+GRIPPER_JOINT = 'robotiq_85_left_knuckle_joint'
+GRIPPER_OPEN_RAD = 0.0
+GRIPPER_CLOSE_RAD = 0.4
+
 TCP_NAMES = ['tcp_ee_' + axis for axis in ('x', 'y', 'z', 'qx', 'qy', 'qz', 'qw')]
 
 
@@ -103,7 +109,7 @@ class UREnv:
             if (prefix + base, prefix + tip) != (health.reference_frame, health.tcp_link):
                 raise ValueError('阻抗控制器基座或 TCP 与训练定义不一致')
             self.gripper = ActionClient(self.node, ParallelGripperCommand,
-                config.get('gripper', {}).get('action_server', '/robotiq_gripper_controller/gripper_cmd'))
+                GRIPPER_ACTION)
             if len(health.action_names) == 7 and not self.read_only:
                 if not config.get('gripper', {}).get('enabled', False) or not self.gripper.wait_for_server(timeout_sec=3.):
                     raise RuntimeError('七维动作需要已启用的夹爪控制器')
@@ -210,8 +216,8 @@ class UREnv:
             self._wait(self.grip_goal.cancel_goal_async())
         config = self.config['gripper']
         goal = self.gripper_type.Goal()
-        goal.command.name = [config.get('joint', 'robotiq_85_left_knuckle_joint')]
-        goal.command.position = [float(config.get('close_pos_rad', .4) if closed else config.get('open_pos_rad', 0.))]
+        goal.command.name = [GRIPPER_JOINT]
+        goal.command.position = [GRIPPER_CLOSE_RAD if closed else GRIPPER_OPEN_RAD]
         goal.command.effort = [float(config.get('max_effort', 50.))]
         self.pending_grip = self.gripper.send_goal_async(goal)
         def accepted(future):

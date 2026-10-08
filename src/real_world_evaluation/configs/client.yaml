@@ -15,8 +15,4 @@ cameras:
   observation.images.front: /camera/usb_front/color/image_raw
 gripper:
   enabled: false  # 七维动作在仿真执行前需配置 true 并启动现有夹爪控制器。
-  action_server: /robotiq_gripper_controller/gripper_cmd
-  joint: robotiq_85_left_knuckle_joint
-  open_pos_rad: 0.0
-  close_pos_rad: 0.4
   max_effort: 50.0

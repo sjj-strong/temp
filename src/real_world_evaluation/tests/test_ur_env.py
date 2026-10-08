@@ -72,7 +72,7 @@ def simulated_controller():
         state['gripper'].append(handle.request)
         handle.succeed()
         return ParallelGripperCommand.Result()
-    action = ActionServer(node, ParallelGripperCommand, '/rwe_test/gripper', execute)
+    action = ActionServer(node, ParallelGripperCommand, '/robotiq_gripper_controller/gripper_cmd', execute)
     executor = SingleThreadedExecutor(context=context)
     executor.add_node(node)
     thread = threading.Thread(target=executor.spin, daemon=True)
@@ -83,7 +83,7 @@ def simulated_controller():
     config = dict(ros_domain_id=231, controller='/rwe_test/controller', read_only=False,
                   data_timeout_s=.3, startup_timeout_s=3., joint_topic='/rwe_test/joints',
                   wrench_topic='/rwe_test/wrench', cameras={'observation.images.front': '/rwe_test/image'},
-                  gripper={'enabled': True, 'action_server': '/rwe_test/gripper'})
+                  gripper={'enabled': True})
     try:
         yield config, health, state
     finally:
@@ -109,17 +109,22 @@ def test_ros_observe_step_gripper_and_stale(simulated_controller):
         eventually(lambda: len(state['targets']) == 2)
         assert np.isclose(state['pose'][0], .003)
         assert len(state['gripper']) == 1
+        assert state['gripper'][0].command.name == ['robotiq_85_left_knuckle_joint']
+        assert list(state['gripper'][0].command.position) == [.4]
+        env.step([0.] * 7)
+        eventually(lambda: len(state['gripper']) == 2 and len(state['targets']) == 3)
+        assert list(state['gripper'][1].command.position) == [0.]
         # 相机失败不妨碍用仍新鲜的 TCP 进入保持。
         with env.lock:
             _, image = env.messages['observation.images.front']
             env.messages['observation.images.front'] = (0., image)
         env.hold()
-        eventually(lambda: len(state['targets']) == 3)
+        eventually(lambda: len(state['targets']) == 4)
         state['publish'] = False
         time.sleep(.4)
         with pytest.raises(RuntimeError, match='过期'):
             env.step([0.] * 7)
-        assert len(state['targets']) == 3
+        assert len(state['targets']) == 4
     finally:
         env.close()
 

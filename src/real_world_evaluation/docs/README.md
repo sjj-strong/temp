@@ -91,7 +91,7 @@ source /ros2_ws/install/setup.bash
 
 启动读取控制器 `base_frame`、`tip_frame`、`tf_prefix` 参数，与训练配置比较；每条位姿还检查 `header.frame_id`。力数据保持消息原始坐标系，检查 `wrench_frame`。接收时间和消息时间戳都必须新鲜，主机及 ROS 时钟必须一致。当前支持 `rgb8/bgr8` 原始图像，正确忽略行尾填充字节。
 
-仅在仿真运动验证时设置 `read_only: false`。七维动作还需 `gripper.enabled: true` 和可用夹爪 action 服务；六维动作不操作夹爪。夹爪按 0.5 阈值开合，同状态不重复发送；开合位置与力度沿用配置。ROS executor 持续更新消息，HTTP 和动作前缀执行仍为同步流程。
+仅在仿真运动验证时设置 `read_only: false`。七维动作还需 `gripper.enabled: true` 和可用夹爪 action 服务；六维动作不操作夹爪。夹爪按 0.5 阈值开合，同状态不重复发送；Action 地址、驱动关节、打开 0.0 rad、闭合 0.4 rad 固定在 `ur_env.py`，不支持 YAML 覆盖；配置仅保留夹爪启用开关和力度。ROS executor 持续更新消息，HTTP 和动作前缀执行仍为同步流程。
 
 末端目标按 `p_target=p_current+Δp` 和 `q_target=rotvec(Δr)×q_current` 计算，每一步使用最新实测 pose。旋转向量位于参考坐标系，不能逐项相加欧拉角，也不能累计上一目标。客户端不会 Home、切换控制器或启动硬件。
 
@@ -116,7 +116,7 @@ ssh -N -o ExitOnForwardFailure=yes -L 8000:127.0.0.1:8000 用户名@10.5.174.93
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 /opt/lerobot_venv/bin/python -m pytest tests/test_protocol.py tests/test_rollout.py -q
 # 权重已生成：实际模型、反归一化和 HTTP。
 HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 /opt/lerobot_venv/bin/python -m pytest tests/test_server.py -q
-# ROS 消息模拟器，DDS 域固定 231、话题固定 /rwe_test，不加载硬件。
+# ROS 消息模拟器，DDS 域固定 231；观测/位姿使用 /rwe_test，夹爪使用固定 Action 地址，不加载硬件。
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 /opt/lerobot_venv/bin/python -m pytest tests/test_ur_env.py -q
 ```
 
@@ -131,3 +131,25 @@ ROS 测试检查图像颜色和步长、原始数值读取、逐步使用反馈�
 - 没有访问 `10.5.174.93`，没有进行 RTX 4090 性能测试、完整阻抗动力学仿真或真机运动。远程主机 SSH 用户、实际模型路径和训练坐标系仍需部署时填写。
 
 上述 Python 运行与依赖安装均使用 `/opt/lerobot_venv`。最初尝试创建的临时测试环境已停用，不作为本项目运行环境。
+
+## 硬件启动与包复用
+
+`real_world_evaluation` 不自动启动硬件，也不调用 launch 或遥操作脚本。它通过 ROS 话题和 Action 复用已有运行中的接口。
+
+| 功能 | 现有入口 | 作用 |
+| --- | --- | --- |
+| UR、组合描述、笛卡尔阻抗 | `cartesian_impedance_controller/launch/standalone_real.launch.py` | 包含 `ur10e_robotiq_ft_description/launch/real_bringup.launch.py`，启动驱动并加载、激活阻抗控制器，可选择夹爪及 FT300 |
+| 相机 | `ur_teleop/launch/camera.launch.py` | 读取 `ur_teleop/config/camera.yaml`，启动 `data_collection/opencv_camera_node` 或 `realsense2_camera/realsense2_camera_node` |
+| 已有 Xbot 硬件流程 | `ur_teleop/launch/home.launch.py` → `xbot_cell.launch.py` | 包含 Home 动作，且笛卡尔控制器初始为 inactive；不能当作独立推理的一键启动入口 |
+
+相机启动命令：
+
+```bash
+source /opt/ros/jazzy/setup.bash
+source /ros2_ws/install/setup.bash
+ros2 launch ur_teleop camera.launch.py config_file:=/ros2_ws/src/ur_teleop/config/camera.yaml
+```
+
+UR 独立入口的参数包括必填 `robot_ip`，以及 `use_gripper`、`use_ft300`、`gripper_com_port`、`ft_sensor_ftdi_id`。这是已有硬件入口说明，不是本次执行记录；本次不运行真机启动、Home 或笛卡尔运动测试。运行 rollout 前要求阻抗控制器已激活、反馈有效，且没有其他目标发布者。
+
+完整顺序为：启动现有硬件/相机 → 服务器加载 checkpoint 并完成探测 → 建立 SSH 隧道 → 主机读取 `/health` 并初始化环境 → 采集原始观测 → `/infer` 预处理、完整 chunk 推理及反归一化 → 主机执行指定前缀，每步从最新 pose 合成目标 → 重新采集。正常结束或异常退出时尝试保持并释放连接。`mode: mock` 不访问硬件；`mode: ros, read_only: true` 只读取一次观测即退出，不进入推理执行循环。
