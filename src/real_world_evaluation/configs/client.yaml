@@ -1,0 +1,22 @@
+server_url: http://127.0.0.1:8000
+request_timeout_s: 10.0
+action_hz: 20.0
+execute_steps: 2
+max_steps: 10
+mode: mock  # mock 不导入 ROS；ros 复用现有控制器和相机。
+read_only: true  # ROS 模式默认只读；本次不允许真机笛卡尔运动测试。
+data_timeout_s: 0.5
+startup_timeout_s: 5.0
+controller: /cartesian_impedance_controller
+joint_topic: /joint_states
+wrench_topic: /force_torque_sensor_broadcaster/ft_data
+instruction: 模拟相对位姿测试
+cameras:
+  observation.images.front: /camera/usb_front/color/image_raw
+gripper:
+  enabled: false  # 七维动作在仿真执行前需配置 true 并启动现有夹爪控制器。
+  action_server: /robotiq_gripper_controller/gripper_cmd
+  joint: robotiq_85_left_knuckle_joint
+  open_pos_rad: 0.0
+  close_pos_rad: 0.4
+  max_effort: 50.0

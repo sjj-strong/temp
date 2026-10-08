@@ -64,3 +64,70 @@ artifacts/act/checkpoints/000001/
 已验证 ACT 完整 4 步输出，即使 checkpoint 的 `n_action_steps=2` 也不截断。第二策略 Diffusion 的配置识别和权重重载通过；本仓库其直接 chunk 接口读取内部观测队列，因此启动探测明确拒绝，不宣称支持 Diffusion 实际 rollout。
 
 验证环境：LeRobot 源码提交 `1396b9f`、PyTorch `2.10.0+cpu`。服务器与模型测试 4 项通过，协议测试 8 项通过。测试全程使用 `/opt/lerobot_venv`；CPU 验证不代表 RTX 4090 性能测试。
+
+## 主机与 UR 环境
+
+另一个终端进入项目目录后运行：
+
+```bash
+/opt/lerobot_venv/bin/python -m rollout --config configs/client.yaml
+```
+
+默认 `mode: mock`，不导入 ROS，不访问机器人；使用上面生成的 ACT 样本，可完成 10 步、每次执行 2 步的 HTTP 闭环。`max_steps` 是总执行动作数，`execute_steps` 是每次执行的前缀长度。每个动作至少留出 `1/action_hz` 的时间；调用过慢时不追赶补发，最后一步也等待一个周期再采集。同步 HTTP 延迟会降低平均动作频率。
+
+`ur_env.py` 将 ROS 消息、资源管理和执行作为同一个环境职责，提供 `observe/step/hold/close`。约 250 行，已检查职责，没有为减少行数额外引入 manager 或抽象基类。
+
+### ROS 接口
+
+先按现有工作流启动控制器和相机，source ROS 环境，再使用同一 `/opt/lerobot_venv/bin/python`：
+
+```bash
+source /opt/ros/jazzy/setup.bash
+source /ros2_ws/install/setup.bash
+/opt/lerobot_venv/bin/python -m rollout --config configs/client.yaml
+```
+
+将配置改为 `mode: ros`，保留 `read_only: true` 时只获取一次观测并退出，不发布位姿或夹爪目标。相机映射的键必须与 `/health` 完全一致，值是原始图像话题。数值字段使用训练元信息的名称：`joint_position.<关节名>`、`joint_velocity.<关节名>`、`joint_effort.<关节名>`、`tcp_ee_x...tcp_ee_qw`、`force.x...torque.z`。不存在或过期的必要字段导致失败，不填零。
+
+启动读取控制器 `base_frame`、`tip_frame`、`tf_prefix` 参数，与训练配置比较；每条位姿还检查 `header.frame_id`。力数据保持消息原始坐标系，检查 `wrench_frame`。接收时间和消息时间戳都必须新鲜，主机及 ROS 时钟必须一致。当前支持 `rgb8/bgr8` 原始图像，正确忽略行尾填充字节。
+
+仅在仿真运动验证时设置 `read_only: false`。七维动作还需 `gripper.enabled: true` 和可用夹爪 action 服务；六维动作不操作夹爪。夹爪按 0.5 阈值开合，同状态不重复发送；开合位置与力度沿用配置。ROS executor 持续更新消息，HTTP 和动作前缀执行仍为同步流程。
+
+末端目标按 `p_target=p_current+Δp` 和 `q_target=rotvec(Δr)×q_current` 计算，每一步使用最新实测 pose。旋转向量位于参考坐标系，不能逐项相加欧拉角，也不能累计上一目标。客户端不会 Home、切换控制器或启动硬件。
+
+异常或正常结束都尝试保持并关闭资源。保持只依赖新鲜 TCP，相机失效不会阻止保持；TCP 过期时停止发布并报告保持失败。现有阻抗控制器没有命令超时自动停止功能，仍可能保持上一目标；这不等于硬件急停。并发操纵同一控制器的遥操作程序必须先停止。
+
+## 远程部署
+
+服务器准备与训练一致的 LeRobot 环境和本项目文件，全部 Python 依赖使用 `/opt/lerobot_venv`，通过 `uv pip install --python /opt/lerobot_venv/bin/python ...` 管理。复制 `pretrained_model` 及训练数据的 `meta`，配置服务器上的路径和 `device: cuda`。服务器仍只监听 `127.0.0.1:8000`。
+
+主机手工建立隧道（替换 SSH 用户名）：
+
+```bash
+ssh -N -o ExitOnForwardFailure=yes -L 8000:127.0.0.1:8000 用户名@10.5.174.93
+```
+
+主机 `server_url` 保持 `http://127.0.0.1:8000`。隧道断开或请求超时即终止，不重试。服务器不会调用任何机器人接口。SSH 隧道和现有相机、控制器进程之外，新增业务进程只有 `server` 和 `rollout` 两个。
+
+## 测试分层
+
+```bash
+# 无 ROS、无实际权重：协议与 Mock 执行。
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 /opt/lerobot_venv/bin/python -m pytest tests/test_protocol.py tests/test_rollout.py -q
+# 权重已生成：实际模型、反归一化和 HTTP。
+HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 /opt/lerobot_venv/bin/python -m pytest tests/test_server.py -q
+# ROS 消息模拟器，DDS 域固定 231、话题固定 /rwe_test，不加载硬件。
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 /opt/lerobot_venv/bin/python -m pytest tests/test_ur_env.py -q
+```
+
+ROS 测试检查图像颜色和步长、原始数值读取、逐步使用反馈、夹爪去重、相机故障时保持、过期反馈拒绝、只读模式与 TCP 不匹配拒绝。它验证消息接口，不替代真实阻抗控制动力学验证。本次未对真实机械臂下发任何命令。
+
+## 本次验证记录（2026-10-09）
+
+- 协议与 Mock rollout：21 项通过。
+- 实际 checkpoint、反归一化、HTTP 与第二策略加载：4 项通过。
+- 隔离 ROS 模拟接口：2 项通过。
+- 两个真实 Python 入口分别启动，`GET /health` 和 5 次 `POST /infer` 均返回 200；Mock 共执行 10 步后正常退出，验证用服务器随后关闭。
+- 没有访问 `10.5.174.93`，没有进行 RTX 4090 性能测试、完整阻抗动力学仿真或真机运动。远程主机 SSH 用户、实际模型路径和训练坐标系仍需部署时填写。
+
+上述 Python 运行与依赖安装均使用 `/opt/lerobot_venv`。最初尝试创建的临时测试环境已停用，不作为本项目运行环境。
