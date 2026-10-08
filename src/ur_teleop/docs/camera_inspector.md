@@ -32,9 +32,9 @@ After rebuilding the package and sourcing the workspace, `ros2 run ur_teleop cam
 
 ## Configuration fields
 
-- `config/opencv_cameras.yaml`: `device` uses `/dev/v4l/by-path` when available. Width, height, FPS and FourCC come from the active stream's actual profile. Preserve unique name, topic and frame_id values. With two USB cameras, disable or remove the unused third entry.
-- `config/camera.yaml`: use the detected RealSense serial in `d435i_serial` or `d455_serial`, set enabled and color_profile, and preserve the opencv and visualization sections. Set visualization topics to the actual camera image topics.
-- Exposure, white balance and other native controls are session settings. The current two YAML schemas do not load these values when dataset collection starts.
+- USB 配置统一放在 `config/camera.yaml` 的顶层 `opencv_cameras` 列表。`device` 优先使用 `/dev/v4l/by-path`；宽高、帧率和 FourCC 采用实际采集参数。每台相机的 name、topic 和 frame_id 必须唯一，只有两台 USB 相机时禁用或删除第三项。
+- RealSense 配置放在同一文件的 `cameras.realsense` 中，填写检测到的序列号、启用开关和 color_profile；`cameras.visualization.topics` 填写实际图像话题。
+- 调参工具中的曝光、白平衡等原生控件设置只在当前采集会话生效；复制配置时仅写入驱动支持的字段。
 
 The existing RealSense launch always starts D455 and optionally starts D435i. A single D455 can use enable_d435i=false. A single D435i requires a separate launch change to disable the absent D455. Other RealSense models cannot map directly to the current launch configuration.
 

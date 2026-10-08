@@ -12,7 +12,6 @@ setup(
             "config/alicia_teleop.yaml",
             "config/ur_controllers_sim.yaml",
             "config/ur_controllers_impedance_sim.yaml",
-            "config/opencv_cameras.yaml",
             "config/camera.yaml",
             "config/xbot_teleop.yaml",
             "config/xbot_mock_controllers.yaml",

@@ -12,11 +12,48 @@ cameras:
     camera_namespace: camera
   opencv:
     enabled: true
-    # 相对路径以本配置所在目录为基准，设备、话题和分辨率在此文件定义。
-    config_file: opencv_cameras.yaml
+    # USB 设备、话题及采集参数统一在下方 opencv_cameras 配置。
   visualization:
     enabled: true
     topics:
       - /camera/usb_front/color/image_raw
       - /camera/usb_left/color/image_raw
       - /camera/usb_right/color/image_raw
+
+# USB/OpenCV 相机列表；使用固定物理 USB 端口，避免 /dev/videoN 随插拔变化。
+opencv_cameras:
+  - name: usb_front
+    enabled: true
+    device: /dev/v4l/by-path/pci-0000:00:14.0-usb-0:6.2.1:1.0-video-index0
+    topic: /camera/usb_front/color/image_raw
+    frame_id: usb_front_color_optical_frame
+    width: 640
+    height: 480
+    fps: 30
+    fourcc: MJPG
+    publish_compressed: true
+    compressed_quality: 90
+
+  - name: usb_left
+    enabled: true
+    device: /dev/v4l/by-path/pci-0000:00:14.0-usb-0:6.2.2:1.0-video-index0
+    topic: /camera/usb_left/color/image_raw
+    frame_id: usb_left_color_optical_frame
+    width: 640
+    height: 480
+    fps: 30
+    fourcc: MJPG
+    publish_compressed: true
+    compressed_quality: 90
+
+  - name: usb_right
+    enabled: true
+    device: /dev/v4l/by-path/pci-0000:00:14.0-usb-0:6.3.2:1.0-video-index0
+    topic: /camera/usb_right/color/image_raw
+    frame_id: usb_right_color_optical_frame
+    width: 640
+    height: 480
+    fps: 30
+    fourcc: MJPG
+    publish_compressed: true
+    compressed_quality: 90

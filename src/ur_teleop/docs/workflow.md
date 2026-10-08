@@ -31,7 +31,7 @@ Xbot 首次使用先标定并运行[独立手柄测试](xbot_joy_test.md)。Alic
 python3 /ros2_ws/src/ur_teleop/ur_teleop/camera_inspector.py
 ```
 
-逐台确认型号、稳定设备路径、分辨率、帧率和曝光效果，将界面生成的字段合并到 `config/camera.yaml`、`config/opencv_cameras.yaml`。只有两台 USB 时禁用不存在的第三台。关闭调参预览，释放设备。
+逐台确认型号、稳定设备路径、分辨率、帧率和曝光效果，将界面生成的字段合并到 `config/camera.yaml`（RealSense 参数放在 `cameras.realsense`，USB 参数放在顶层 `opencv_cameras` 列表）。只有两台 USB 时禁用不存在的第三台。关闭调参预览，释放设备。
 
 新开相机终端，加载上述 ROS 环境后执行并保持运行：
 

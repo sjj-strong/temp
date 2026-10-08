@@ -70,7 +70,7 @@ ros2 launch ur_teleop camera.launch.py \
 ```
 
 - RealSense 使用 `data_collection/launch/dual_realsense.launch.py`，设置位于 `cameras.realsense`。
-- USB/OpenCV 使用 `data_collection/launch/opencv_cameras.launch.py`，设备与图像参数由 `cameras.opencv.config_file` 指定，默认 `opencv_cameras.yaml`；相对路径以 `camera.yaml` 所在目录为基准。
+- 相机配置统一使用 `camera.yaml`：`cameras` 定义 RealSense、USB 和预览的开关，顶层 `opencv_cameras` 列表定义 USB 设备、话题、分辨率、帧率及压缩参数。USB 启动入口直接读取同一个文件，不再使用 `opencv_cameras.yaml` 或 `opencv_camera_config` 参数。自定义配置也通过 `config_file` 一次传入。
 - `alicia_teleop.yaml` / `xbot_teleop.yaml` 的 `recorder.cameras` 只选择数据集保存的图像，见[录制配置](data_recorder.md)。
 - `cameras.visualization.topics` 定义预览话题，拼接结果为 `/camera_mosaic/image_raw`，由 rqt 显示。
 - 命令行 `launch_realsense`、`launch_opencv_cameras`、`launch_image_viewers` 等参数可覆盖相机配置。

@@ -44,18 +44,11 @@ def generate_launch_description():
 
 def _camera_actions(context):
     # 在展开启动描述时读取实际传入的配置，保留命令行参数覆盖能力。
-    pkg_share = get_package_share_directory("ur_teleop")
     config_file = LaunchConfiguration("config_file").perform(context)
     with open(config_file) as stream:
         config = yaml.safe_load(stream)
     if not isinstance(config, dict) or not isinstance(config.get("cameras"), dict):
         raise ValueError("相机配置必须包含 cameras 映射，请使用 camera.yaml")
-    opencv_config = _yaml_default(
-        config_file, "cameras", "opencv", "config_file", fallback="")
-    if not opencv_config:
-        opencv_config = os.path.join(pkg_share, "config", "opencv_cameras.yaml")
-    elif not os.path.isabs(opencv_config):
-        opencv_config = os.path.join(os.path.dirname(os.path.abspath(config_file)), opencv_config)
     data_collection_share = get_package_share_directory("data_collection")
     image_topics = _yaml_topics(config_file)
 
@@ -66,7 +59,6 @@ def _camera_actions(context):
             config_file, "cameras", "opencv", "enabled", fallback="false")),
         DeclareLaunchArgument("launch_image_viewers", default_value=_yaml_default(
             config_file, "cameras", "visualization", "enabled", fallback="false")),
-        DeclareLaunchArgument("opencv_camera_config", default_value=opencv_config),
         DeclareLaunchArgument("d435i_serial", default_value=_yaml_default(
             config_file, "cameras", "realsense", "d435i_serial", fallback="")),
         DeclareLaunchArgument("d455_serial", default_value=_yaml_default(
@@ -99,7 +91,7 @@ def _camera_actions(context):
             PythonLaunchDescriptionSource(os.path.join(
                 data_collection_share, "launch", "opencv_cameras.launch.py")),
             condition=IfCondition(LaunchConfiguration("launch_opencv_cameras")),
-            launch_arguments={"camera_config": LaunchConfiguration("opencv_camera_config")}.items(),
+            launch_arguments={"camera_config": config_file}.items(),
         ),
         # rqt_image_view 一次只能显示一个 topic。此节点先合成多视角拼图，
         # rqt 再显示该单一拼图话题；二者都只订阅图像、不参与控制。
