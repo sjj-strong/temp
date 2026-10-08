@@ -73,7 +73,7 @@ class DataRecorderNode(Node):
                               if self._xbot else None)
         flags = self._builder.observation_flags() if self._xbot else {}
         need_joints = not self._xbot or any(flags[name] for name in (
-            'joint_position', 'joint_velocity', 'joint_effort', 'gripper'))
+            'joint_position', 'joint_velocity', 'joint_effort'))
         self._joint_sub = (self.create_subscription(JointState, "/joint_states", self._joint_cb, 10)
                            if need_joints else None)
         self._cmd_sub = self.create_subscription(Float64MultiArray, "/teleop/commands", self._cmd_cb, 10)

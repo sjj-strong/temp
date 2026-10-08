@@ -66,3 +66,5 @@ ros2 topic echo --once /robotiq_force_torque_sensor_broadcaster/wrench
 ## 夹爪录制开关
 
 Alicia 与 Xbot 仅使用 `recorder.record_action_gripper` 控制夹爪录制：`true` 在 action 末尾保存二值 `cmd_gripper`（打开 `0`、闭合 `1`），`false` 不保存。不再录制夹爪实测 observation；已移除 `record_ur_gripper` 和 `state_threshold_rad`。录制无需等待夹爪反馈。该开关不控制夹爪执行，执行仍由 `gripper.enabled` 控制。已有数据集的 observation 维度会变化，请使用新数据集。
+
+录制器仅在保存关节位置、速度或 effort 时订阅关节反馈；夹爪指令录制不参与该订阅判断。
