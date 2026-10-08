@@ -1,3 +1,4 @@
+debug: false            # true：显示调试诊断；false：仅操作、频率和采集进度
 mode: teleop            # teleop | record —— 配置文件配置模式
 sim: true               # cell 端：sim(mock+rviz) / real(真机+夹爪+FT)
 cell:

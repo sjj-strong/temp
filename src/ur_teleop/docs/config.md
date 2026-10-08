@@ -60,6 +60,8 @@ gripper_value_to_position(value: float, gripper_type: str = "50mm") -> float
 | `mode` | str  | —（必填） | `teleop` / `record`，非二者报错            | teleop_node`_mode`（launch 参数 `mode` 优先，yaml 兜底） |
 | `sim`  | bool | —（必填） | cell 端 sim（mock+rviz）/ real（真机+夹爪+FT） | teleop_node 日志；cell.launch.py 分支                        |
 
+顶层 `debug: false` 控制本包调试日志，必须是真正的 YAML 布尔值，不接受字符串。`true` 显示状态、位姿和初始化诊断；`false` 保留操作、配置频率、采集进度和故障信息。详见[采集日志与进度](data_recorder.md#采集日志与进度)。
+
 ### cell（可选）
 
 | 键                         | 类型 | 默认值           | 含义                                                                                                                                                                                                         | 消费方                                                                                       |

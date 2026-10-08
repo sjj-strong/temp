@@ -50,7 +50,7 @@ def _nodes(context):
             }]))
     if mode == 'record':
         nodes.append(Node(package='ur_teleop', executable='data_recorder',
-                          parameters=[{'config_file': config}]))
+                          parameters=[{'config_file': config}], output='screen', emulate_tty=True))
     return nodes
 
 

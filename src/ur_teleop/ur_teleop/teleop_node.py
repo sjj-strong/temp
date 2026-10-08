@@ -17,6 +17,7 @@ from rclpy.node import Node
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Bool, Float64MultiArray
 
+from ur_teleop.session_logging import debug_log, log_event
 from ur_teleop.config import (
     ALICIA_JOINT_NAMES,
     GRIPPER_JOINT,
@@ -64,6 +65,7 @@ class TeleopNode(Node):
         if self.get_parameter("force_home").value:
             cfg = dict(cfg, home=dict(cfg["home"], at_home_tolerance_rad=float("inf")))
         self._cfg = cfg
+        self._debug = self._cfg.get("debug", False)
         self._mode = self.get_parameter("mode").value or cfg["mode"]   # launch 参数优先 yaml 兜底
         self._command_rate = float(cfg["teleop"].get("command_rate_hz", 50))
         self._watchdog_timeout = float(cfg["teleop"].get("watchdog_timeout_s", 0.5))
@@ -163,15 +165,15 @@ class TeleopNode(Node):
 
     def _enable_cb(self, msg: Bool):
         if msg.data and self._state == State.ARMED:
-            self.get_logger().info("[teleop] enable 收到 — 开始控制")
+            debug_log(self, "[teleop] enable 收到 — 开始控制")
             self._begin_switch()
         elif msg.data:
-            self.get_logger().info(f"[teleop] enable 已收到但状态为 {self._state.name}，等待 ARMED 后执行")
+            debug_log(self, f"[teleop] enable 已收到但状态为 {self._state.name}，等待 ARMED 后执行")
             self._enable_pending = True
 
     def _estop_cb(self, msg: Bool):
         self._e_stop = msg.data
-        self.get_logger().warn(f"[teleop] e_stop={'ON' if msg.data else 'OFF'}")
+        log_event(self, "warn", level="warn", message=f"[teleop] e_stop={'ON' if msg.data else 'OFF'}")
 
     # ---------- state machine ----------
 
@@ -181,10 +183,8 @@ class TeleopNode(Node):
         if self._state == State.WAITING_CELL:
             if time.time() - self._start_time > 30.0:
                 self._fatal_error = True
-                self.get_logger().error(
-                    "30 s 内未检测到 cell（/joint_states + controller_manager）。"
-                    "请先运行 home.launch。"
-                )
+                log_event(self, "error", level="error", message="30 s 内未检测到 cell（/joint_states + controller_manager）。"
+                    "请先运行 home.launch。")
                 rclpy.try_shutdown()
                 return
             with self._lock:
@@ -208,7 +208,7 @@ class TeleopNode(Node):
 
     def _log_state(self, new: State):
         self._state = new
-        self.get_logger().info(f"[teleop] 状态: {new.name}")
+        debug_log(self, f"[teleop] 状态: {new.name}")
 
     def _verify_home(self):
         home = self._cfg["home"]
@@ -221,10 +221,8 @@ class TeleopNode(Node):
             self._last_pose = None
             self._log_state(State.SETTLING)
         else:
-            self.get_logger().warn(
-                f"[teleop] 双臂不在 home（master err={m_err:.3f} rad, slave err={s_err:.3f} rad），"
-                f"请先运行 home.launch；确认已到位可用 force_home:=true 跳过"
-            )
+            log_event(self, "warn", level="warn", message=f"[teleop] 双臂不在 home（master err={m_err:.3f} rad, slave err={s_err:.3f} rad），"
+                f"请先运行 home.launch；确认已到位可用 force_home:=true 跳过")
 
     def _settling(self):
         settle = float(self._cfg["home"].get("settle_time_s", 2.0))
@@ -247,23 +245,21 @@ class TeleopNode(Node):
         self._mapper = JointMapper(
             build_mapping_config(self._cfg), self._offset.master_home, self._offset.slave_home
         )
-        self.get_logger().info(
-            f"[teleop] offset 捕获完成 master={self._offset.master_home} slave={self._offset.slave_home}"
-        )
+        debug_log(self, f"[teleop] offset 捕获完成 master={self._offset.master_home} slave={self._offset.slave_home}")
         if self._mode == "record":
-            self.get_logger().info("[teleop] 等待 recorder 的 Enter（/teleop/enable）...")
+            log_event(self, "keyboard", message="等待采集器 Enter 开始控制")
         else:
-            self.get_logger().info("[teleop] 按 Enter 开始控制")
+            log_event(self, "keyboard", message="按 Enter 开始控制")
         self._log_state(State.ARMED)
 
     def _armed(self):
         if self._enable_pending:
             self._enable_pending = False
-            self.get_logger().info("[teleop] enable 已在 ARMED 前收到 — 开始控制")
+            debug_log(self, "[teleop] enable 已在 ARMED 前收到 — 开始控制")
             self._begin_switch()
             return
         if self._mode == "teleop" and self._kb.read_key(0.0) == "enter":
-            self.get_logger().info("[teleop] Enter 按下 — 开始")
+            log_event(self, "keyboard", message="Enter 按下，开始控制")
             self._begin_switch()
 
     def _begin_switch(self):
@@ -275,7 +271,7 @@ class TeleopNode(Node):
     def _switching(self):
         fut = self._switch_future
         if fut is None:
-            self.get_logger().error("controller_manager 服务未就绪，无法切换")
+            log_event(self, "error", level="error", message="controller_manager 服务未就绪，无法切换")
             self._log_state(State.ARMED)
             return
         if not fut.done():
@@ -309,7 +305,7 @@ class TeleopNode(Node):
                     [self._motion_ctrl], [self._traj_ctrl]
                 )
             else:
-                self.get_logger().error(f"加载 {self._motion_ctrl} 失败")
+                log_event(self, "error", level="error", message=f"加载 {self._motion_ctrl} 失败")
                 self._log_state(State.ARMED)
         elif self._switch_phase == "switch":
             try:
@@ -317,24 +313,24 @@ class TeleopNode(Node):
             except Exception:
                 ok = False
             if ok:
-                self.get_logger().info("[teleop] 控制器切换完成 → ACTIVE")
+                debug_log(self, "[teleop] 控制器切换完成 → ACTIVE")
                 self._publish_demo(True)
                 self._publish_status(True)
                 self._log_state(State.ACTIVE)
             else:
                 self._switch_attempt += 1
                 if self._switch_attempt >= 5:
-                    self.get_logger().error("控制器切换 5 次失败，回到 ARMED；检查 controller_manager")
+                    log_event(self, "error", level="error", message="控制器切换 5 次失败，回到 ARMED；检查 controller_manager")
                     self._log_state(State.ARMED)
                 else:
-                    self.get_logger().warn(f"[teleop] 切换失败（第 {self._switch_attempt} 次），重试...")
+                    log_event(self, "warn", level="warn", message=f"[teleop] 切换失败（第 {self._switch_attempt} 次），重试...")
                     # 重试前重新查询状态，避免重复 deactivate 已 inactive 的控制器
                     self._switch_phase = "list"
                     self._switch_future = self._switcher.list_controllers()
 
     def _active(self):
         if time.time() - self._last_master_stamp > self._watchdog_timeout:
-            self.get_logger().warn("[teleop] 主臂数据超时 → INACTIVE（改发当前位置）")
+            log_event(self, "warn", level="warn", message="[teleop] 主臂数据超时 → INACTIVE（改发当前位置）")
             self._publish_status(False)
             self._log_state(State.INACTIVE)
             return
@@ -345,7 +341,7 @@ class TeleopNode(Node):
     def _inactive(self):
         with self._lock:
             if time.time() - self._last_master_stamp <= self._watchdog_timeout:
-                self.get_logger().info("[teleop] 主臂恢复 → ACTIVE")
+                debug_log(self, "[teleop] 主臂恢复 → ACTIVE")
                 self._publish_status(True)
                 self._log_state(State.ACTIVE)
                 return
@@ -361,15 +357,13 @@ class TeleopNode(Node):
             if self._gripper_action is None or not self._gripper_action.server_is_ready():
                 elapsed = time.time() - self._gripper_probe_start
                 if elapsed > 30.0:
-                    self.get_logger().warn(
-                        "[teleop] 夹爪 action server 30 s 仍未就绪，禁用夹爪 FSM"
-                    )
+                    log_event(self, "warn", level="warn", message="[teleop] 夹爪 action server 30 s 仍未就绪，禁用夹爪 FSM")
                     self._gripper.enabled = False
                     return
                 # 重试中，不阻塞 FSM 外的逻辑
                 return
             self._gripper_probed = True
-            self.get_logger().info("[teleop] 夹爪 action server 已就绪")
+            debug_log(self, "[teleop] 夹爪 action server 已就绪")
         if self._gripper_future is not None and not self._gripper_future.done():
             return                                          # 上一个 goal 未完成，跳过本 tick
         with self._lock:
@@ -432,23 +426,21 @@ class TeleopNode(Node):
                         ok = ControllerSwitcher.switch_ok(fut)
                     except Exception:
                         ok = False
-                self.get_logger().info(
-                    f"[teleop] 退出恢复切回 trajectory controller {'成功' if ok else '失败/未确认'}"
-                )
+                if ok:
+                    debug_log(self, "[teleop] 退出恢复切回 trajectory controller 成功")
+                else:
+                    log_event(self, "error", level="error", message="退出恢复控制器失败/未确认")
 
 
 def main():
     rclpy.init()
     node = TeleopNode()
     ruckig_hz = float(node._cfg.get("ruckig", {}).get("control_hz", 500.0))
-    node.get_logger().info("=" * 60)
-    node.get_logger().info(f"ur_teleop 就绪 — mode={node._mode}, sim={node._cfg['sim']}")
-    route = (f"Ruckig 平滑 {ruckig_hz:g} Hz" if node._use_ruckig
-             else "直接发送至从臂控制器")
-    node.get_logger().info(f"  控制频率: teleop 命令 {node._command_rate:g} Hz | {route}")
-    node.get_logger().info(f"  从臂控制器: {node._motion_ctrl} ({node._controller_kind})")
-    node.get_logger().info("  等待双臂到位 → 静止 → offset → Enter 开始控制")
-    node.get_logger().info("=" * 60)
+    debug_log(node, f"ur_teleop 就绪 — mode={node._mode}, sim={node._cfg['sim']}")
+    log_event(node, "control_frequency", command_hz=node._command_rate,
+              ruckig_hz=ruckig_hz if node._use_ruckig else None)
+    debug_log(node, f"  从臂控制器: {node._motion_ctrl} ({node._controller_kind})")
+    debug_log(node, "  等待双臂到位 → 静止 → offset → Enter 开始控制")
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:

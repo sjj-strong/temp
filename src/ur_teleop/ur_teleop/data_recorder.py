@@ -19,6 +19,7 @@ try:
 except ImportError:
     LeRobotDataset = None
 
+from ur_teleop.session_logging import debug_log, log_event, EpisodeProgress
 from ur_teleop.config import UR_JOINT_NAMES, default_config_path, load_config
 from ur_teleop.frame_builder import FrameBuilder
 from ur_teleop.cartesian_action import action_label
@@ -33,6 +34,8 @@ class DataRecorderNode(Node):
             raise RuntimeError("LeRobot 未安装：source /opt/lerobot_venv/bin/activate")
         self.declare_parameter("config_file", default_config_path())
         cfg = load_config(self.get_parameter("config_file").value)
+        self._debug = cfg.get("debug", False)
+        self._progress = None
         self._xbot = cfg['teleop'].get('control_source', 'alicia') == 'xbot'
         self._rec = cfg.get("recorder", {})
         if self._xbot:
@@ -41,6 +44,8 @@ class DataRecorderNode(Node):
                                 if self._xbot else None)
         self._tcp_link = self._rec.get('ee_pose_child_frame', 'tool0')
         self._fps = int(self._rec.get("fps", 50))
+        if self._fps <= 0:
+            raise ValueError("recorder.fps 必须为正数")
         self._min_frames = int(self._rec.get("min_frames_per_episode", 2))
         self._cameras = {name: camera for name, camera in self._rec.get('cameras', {}).items()
                          if camera.get('enabled', True)}
@@ -111,7 +116,7 @@ class DataRecorderNode(Node):
             try:
                 self._events.put_nowait((msg.data, time.monotonic()))
             except queue.Full:
-                self.get_logger().error('录制操作队列已满，请等待当前操作完成')
+                log_event(self, "error", level="error", message='录制操作队列已满，请等待当前操作完成')
 
     def _ready_cb(self, msg):
         self._ready, self._ready_at = msg.data, time.monotonic()
@@ -137,10 +142,11 @@ class DataRecorderNode(Node):
         except queue.Empty:
             return False
         if event == 'finalize':
+            log_event(self, 'keyboard', action='quit', message='View 长按，退出采集')
             self._finished_pub.publish(Bool(data=True))
             return True
         if time.monotonic() - stamp > 2.:
-            self.get_logger().warn('忽略过期录制操作，请重新按键')
+            log_event(self, "warn", level="warn", message='忽略过期录制操作，请重新按键')
         elif event == 'start':
             self._start_episode()
         elif event == 'save':
@@ -226,7 +232,7 @@ class DataRecorderNode(Node):
         )
         try:
             self._dataset = LeRobotDataset.create(**kwargs)
-            self.get_logger().info(f"创建数据集: {repo_id}")
+            debug_log(self, f"创建数据集: {repo_id}")
         except FileExistsError:
             import datetime
             suffix = datetime.datetime.now().strftime('%Y%m%d_%H%M%S_%f')
@@ -235,7 +241,7 @@ class DataRecorderNode(Node):
             if root is not None:
                 kwargs['root'] = root.with_name(root.name + '_' + suffix)
             self._dataset = LeRobotDataset.create(**kwargs)
-            self.get_logger().warn(f"数据集已存在，新建带时间戳: {new_id}")
+            log_event(self, "warn", level="warn", message=f"数据集已存在，新建带时间戳: {new_id}")
 
     # ---------- episode control ----------
 
@@ -244,43 +250,47 @@ class DataRecorderNode(Node):
             return
         need_tcp = self._xbot and self._builder.observation_flags()['tcp_pose']
         if self._xbot and (not self._xbot_data_ready() or (need_tcp and self._get_ee_pose() is None)):
-            self.get_logger().warn('遥操作/状态/相机未就绪，拒绝开始 episode；就绪后重新按 Menu')
+            log_event(self, "warn", level="warn", message='遥操作/状态/相机未就绪，拒绝开始 episode；就绪后重新按 Menu')
             return
         missing = [name for name in self._cameras if name not in self._camera_frames]
         if missing:
-            self.get_logger().error(
-                f"相机未收到帧，拒绝开始 episode: {missing}。检查相机 topic 后重新按 Enter")
+            log_event(self, "error", level="error", message=f"相机未收到帧，拒绝开始 episode: {missing}。检查相机 topic 后重新按 Enter")
             return
         self._missing_cam_warned = set()
         self._init_dataset()
         if not self._xbot and not self._enable_sent:
             self._enable_pub.publish(Bool(data=True))
             self._enable_sent = True
-            self.get_logger().info("已发送 /teleop/enable → teleop_node 开始控制")
+            debug_log(self, "已发送 /teleop/enable → teleop_node 开始控制")
         self._recording = True
         self._frame_count = 0
         hint = 'Y=保存 B=丢弃 View长按=退出' if self._xbot else 'S=保存 D=丢弃 Q=退出'
-        self.get_logger().info(f"Episode {self._episode_count + 1} 开始（{hint}）")
+        log_event(self, "keyboard", action="start", episode=self._episode_count + 1, message=hint)
+        self._progress = EpisodeProgress(self._episode_count + 1, self._fps)
 
     def _save_episode(self):
         if not self._recording:
             return
+        self._close_progress()
         if self._frame_count < self._min_frames:
-            self.get_logger().warn(f"少于 {self._min_frames} 帧，自动丢弃")
+            log_event(self, "warn", level="warn", message=f"少于 {self._min_frames} 帧，自动丢弃")
             self._dataset.clear_episode_buffer()
         else:
             self._dataset.save_episode()
             self._episode_count += 1
-            self.get_logger().info(f"Episode {self._episode_count} 已保存（{self._frame_count} 帧）")
+            log_event(self, "keyboard", action="save", episode=self._episode_count, frames=self._frame_count)
         self._recording = False
+        self._close_progress()
         self._missing_cam_warned = set()
 
     def _discard_episode(self):
         if not self._recording:
             return
+        self._close_progress()
         self._dataset.clear_episode_buffer()
-        self.get_logger().info(f"Episode 已丢弃（{self._frame_count} 帧）")
+        log_event(self, "keyboard", action="discard", frames=self._frame_count)
         self._recording = False
+        self._close_progress()
         self._missing_cam_warned = set()
 
     def _record_frame(self):
@@ -300,7 +310,7 @@ class DataRecorderNode(Node):
             return
         if need_tcp and ee is None and not self._ee_warned:
             self._ee_warned = True
-            self.get_logger().warn("EE 位姿查询失败，该段以 NaN 记录（仅警告一次）")
+            log_event(self, "warn", level="warn", message="EE 位姿查询失败，该段以 NaN 记录（仅警告一次）")
         frame = self._builder.build(ur, ee, cmd,
                                     joint_velocity=velocity, joint_effort=effort, wrench=wrench,
                                     wrench_reference_link=wrench_link,
@@ -312,22 +322,31 @@ class DataRecorderNode(Node):
             if img is None:
                 if cam_name not in self._missing_cam_warned:
                     self._missing_cam_warned.add(cam_name)
-                    self.get_logger().warn(
-                        f"相机 {cam_name} 无帧，本 episode 该相机的图像帧将被跳过")
+                    log_event(self, "warn", level="warn", message=f"相机 {cam_name} 无帧，本 episode 该相机的图像帧将被跳过")
                 continue
             frame[f"observation.images.{cam_cfg.get('image_key', cam_name)}"] = img
         try:
             self._dataset.add_frame(frame)
             self._frame_count += 1
+            if getattr(self, "_progress", None) is not None:
+                self._progress.update()
         except Exception as e:
-            self.get_logger().error(f"add_frame 失败: {e}")
+            log_event(self, "error", level="error", message=f"add_frame 失败: {e}")
+
+    def _close_progress(self):
+        if getattr(self, "_progress", None) is not None:
+            self._progress.close()
+            self._progress = None
 
     def finalize(self):
-        if self._recording:
-            self._save_episode()
-        if self._dataset is not None:
-            self._dataset.finalize()
-            self.get_logger().info(f"数据集 finalize 完成（{self._episode_count} episodes）")
+        try:
+            if self._recording:
+                self._save_episode()
+            if self._dataset is not None:
+                self._dataset.finalize()
+                debug_log(self, f"数据集 finalize 完成（{self._episode_count} episodes）")
+        finally:
+            self._close_progress()
 
 
 def main():
@@ -345,17 +364,13 @@ def main():
             os.execv(venv_python, [venv_python] + sys.argv)
     rclpy.init()
     node = DataRecorderNode()
-    node.get_logger().info("=" * 60)
-    node.get_logger().info(f"Data Recorder 就绪 — 录制频率 {node._fps} Hz")
-    node.get_logger().info("  手柄: Menu=开始 Y=保存 B=丢弃 View长按=退出" if node._xbot else
-                           "  键盘: Enter=开始  S=保存  D=丢弃  Q=退出")
-    node.get_logger().info("=" * 60)
+    log_event(node, "collection_frequency", target_hz=node._fps)
+    log_event(node, "keyboard", message="手柄: Menu=开始 Y=保存 B=丢弃 View长按=退出" if node._xbot else
+              "键盘: Enter=开始 S=保存 D=丢弃 Q=退出")
 
     spin_thread = threading.Thread(target=rclpy.spin, args=(node,), daemon=True)
     spin_thread.start()
     period = 1.0 / node._fps
-    hint_interval = 5.0          # 定期重印键盘提示，保证提示始终在终端可见
-    last_hint = 0.0
     try:
         while rclpy.ok():
             t0 = time.time()
@@ -371,22 +386,20 @@ def main():
             elif key == "d":
                 node._discard_episode()
             elif key == "q":
-                node.get_logger().info("Q 按下，退出")
+                log_event(node, "keyboard", action="quit", message="Q 按下，退出")
                 break
-            if t0 - last_hint >= hint_interval:
-                last_hint = t0
-                state = "录制中" if node._recording else "待机"
-                hint = '[手柄] Menu=开始 Y=保存 B=丢弃 View长按=退出' if node._xbot else '[键盘] Enter=开始 S=保存 D=丢弃 Q=退出'
-                print(f"{hint} | 状态: {state} "
-                      f"| episodes={node._episode_count} frames={node._frame_count} "
-                      f"| {node._fps} Hz", flush=True)
+            if node._progress is not None:
+                node._progress.tick()
             time.sleep(max(0.0, period - (time.time() - t0)))
     except KeyboardInterrupt:
         pass
     finally:
-        node.finalize()
-        node.destroy_node()
-        rclpy.try_shutdown()
+        try:
+            node.finalize()
+        finally:
+            node._close_progress()
+            node.destroy_node()
+            rclpy.try_shutdown()
 
 
 if __name__ == "__main__":

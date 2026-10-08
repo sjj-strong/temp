@@ -35,7 +35,7 @@
 | `xbot.calibration_file`                 | `/ros2_ws/src/ur_teleop/config/xbot_joy.yaml` | Joy 按键编号、轴编号、静止值和正方向端点的标定文件；由`xbot_calibrate` 生成。遥操作启动时必须存在。                                    |
 | `xbot.controller_config_file` | `/ros2_ws/src/cartesian_impedance_controller/config/ur10e_ft300_cartesian_impedance.yaml` | 实际传给笛卡尔阻抗控制器 `--param-file` 的 YAML。支持绝对路径，或相对本 Xbot 配置文件所在目录的路径；手柄与录制器也从中读取 `base_frame`、`tf_prefix` 和 `tip_frame`。仿真时改为 `ur10e_xbot_sim_cartesian_impedance.yaml` 或等效配置。文件不存在、缺少控制器参数或受控末端不是 `tool0` 时启动报错。 |
 | `xbot.control_hz`                       | `50.0`                                        | 遥操作定时器频率，单位 Hz；每周期读取最近一次 Joy 状态及实测`tool0` 位姿并发布目标。                                                   |
-| `xbot.diagnostic_hz`                    | `5.0`                                         | “遥操作诊断”日志频率，单位 Hz，不改变控制频率。                                                                                        |
+| `xbot.diagnostic_hz`                    | `5.0`                                         | 仅 `debug: true` 时的“遥操作诊断”频率，单位 Hz，不改变控制频率。                                                                                        |
 | `xbot.joy_timeout_s`                    | `0.25`                                        | 最近一次有效`/joy` 消息允许的数据龄，单位秒；超时退出运动使能，恢复后需松开再按 RB。                                                   |
 | `xbot.tcp_timeout_s`                    | `0.25`                                        | `tool0` TF 和 UR 关节反馈允许的数据龄，单位秒；夹爪反馈新鲜度也使用此值。                                                              |
 | `xbot.max_linear_speed_m_s` | `1.0` | 满量程平移速度，单位 m/s；单周期增量为此值除以 `control_hz`。 |

@@ -1,3 +1,4 @@
+debug: false            # true：显示调试诊断；false：仅操作、频率和采集进度
 # XBot 专用配置：不继承 ur_teleop.yaml。
 # 修改本文件即可完成 XBot 的 Home、真机连接、遥操作和采集配置。
 mode: record

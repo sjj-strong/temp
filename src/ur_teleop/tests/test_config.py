@@ -167,3 +167,11 @@ def test_gripper_conversion_50mm():
 def test_gripper_conversion_100mm():
     assert gripper_position_to_value(0.05, "100mm") == 0.0
     assert gripper_value_to_position(0.0, "100mm") == pytest.approx(0.05)
+
+
+def test_debug_must_be_boolean(tmp_path):
+    assert load_config(_write(tmp_path, BASE))['debug'] is False
+    assert load_config(_write(tmp_path, 'debug: true\n' + BASE))['debug'] is True
+    for value in ['1', '"false"', 'null']:
+        with pytest.raises(ConfigError, match='debug'):
+            load_config(_write(tmp_path, f'debug: {value}\n' + BASE))

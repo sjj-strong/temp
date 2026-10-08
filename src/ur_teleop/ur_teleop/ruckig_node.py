@@ -10,6 +10,7 @@ from std_msgs.msg import Float64MultiArray
 
 from ruckig import Ruckig, InputParameter, OutputParameter, Result
 
+from ur_teleop.session_logging import debug_log, log_event
 from ur_teleop.config import default_config_path, load_config
 
 
@@ -60,8 +61,10 @@ class RuckigNode(Node):
         # UR10e 和遥操需要调整
         # ------------------------------------------------------------
 
+        self._debug = False
         try:
             config = load_config(self.get_parameter("config_file").value)
+            self._debug = config.get("debug", False)
             ruckig_cfg = config.get("ruckig", {})
             self.controller_kind = config["teleop"].get("controller", "forward_position")
         except Exception:
@@ -178,22 +181,14 @@ class RuckigNode(Node):
             self.control_loop,
         )
 
-        self.get_logger().info(
-            "Ruckig node started"
-        )
+        debug_log(self, "Ruckig node started")
 
-        self.get_logger().info(
-            f"control frequency: {self.control_hz:.1f} Hz"
-        )
+        log_event(self, "control_frequency", command_hz=self.control_hz)
 
-        self.get_logger().info(
-            f"control period: {self.dt:.6f} s"
-        )
-        self.get_logger().info(f"target controller: {self.controller_kind}")
+        debug_log(self, f"control period: {self.dt:.6f} s")
+        debug_log(self, f"target controller: {self.controller_kind}")
 
-        self.get_logger().info(
-            "waiting for UR /joint_states ..."
-        )
+        debug_log(self, "waiting for UR /joint_states ...")
 
     # ================================================================
     # UR actual joint state
@@ -249,11 +244,9 @@ class RuckigNode(Node):
 
         if len(msg.data) != DOF:
 
-            self.get_logger().error(
-                "Target must contain exactly "
+            log_event(self, "error", level="error", message="Target must contain exactly "
                 f"{DOF} joint positions, "
-                f"received {len(msg.data)}"
-            )
+                f"received {len(msg.data)}")
 
             return
 
@@ -264,9 +257,7 @@ class RuckigNode(Node):
 
         if not np.all(np.isfinite(new_target)):
 
-            self.get_logger().error(
-                "Target contains NaN or Inf"
-            )
+            log_event(self, "error", level="error", message="Target contains NaN or Inf")
 
             return
 
@@ -319,17 +310,13 @@ class RuckigNode(Node):
 
         self.initialized = True
 
-        self.get_logger().info(
-            "Ruckig initialized from UR state"
-        )
+        debug_log(self, "Ruckig initialized from UR state")
 
-        self.get_logger().info(
-            "initial q: "
+        debug_log(self, "initial q: "
             + np.array2string(
                 self.robot_q,
                 precision=6,
-            )
-        )
+            ))
 
         return True
 
@@ -379,9 +366,7 @@ class RuckigNode(Node):
             Result.Finished,
         ):
 
-            self.get_logger().error(
-                f"Ruckig update failed: {result}"
-            )
+            log_event(self, "error", level="error", message=f"Ruckig update failed: {result}")
 
             return
 

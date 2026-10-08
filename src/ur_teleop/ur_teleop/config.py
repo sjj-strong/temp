@@ -39,6 +39,10 @@ def load_config(path: str | Path) -> dict[str, Any]:
     if data["mode"] not in ("teleop", "record"):
         raise ConfigError(f"mode must be 'teleop' or 'record', got '{data['mode']}'")
 
+    if not isinstance(data.get("debug", False), bool):
+        raise ConfigError("debug 必须为布尔值")
+    data.setdefault("debug", False)
+
     source = data["teleop"].get("control_source", "alicia")
     if source not in ("alicia", "xbot"):
         raise ConfigError("teleop.control_source must be 'alicia' or 'xbot'")

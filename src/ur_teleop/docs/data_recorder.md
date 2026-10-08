@@ -68,3 +68,37 @@ ros2 topic echo --once /robotiq_force_torque_sensor_broadcaster/wrench
 Alicia 与 Xbot 仅使用 `recorder.record_action_gripper` 控制夹爪录制：`true` 在 action 末尾保存二值 `cmd_gripper`（打开 `0`、闭合 `1`），`false` 不保存。不再录制夹爪实测 observation；已移除 `record_ur_gripper` 和 `state_threshold_rad`。录制无需等待夹爪反馈。该开关不控制夹爪执行，执行仍由 `gripper.enabled` 控制。已有数据集的 observation 维度会变化，请使用新数据集。
 
 录制器仅在保存关节位置、速度或 effort 时订阅关节反馈；夹爪指令录制不参与该订阅判断。
+
+## 采集日志与进度
+
+两个遥操作配置均新增顶层 `debug` 布尔开关，默认关闭：
+
+```yaml
+debug: false
+```
+
+`mode: record` 下，正常日志只保留按键/手柄操作、控制配置频率和采集进度。事件正文使用 JSON，ROS 自身保留日志等级、时间和节点名。例如：
+
+```text
+{"event": "control_frequency", "command_hz": 50.0}
+{"event": "collection_frequency", "target_hz": 20}
+{"event": "keyboard", "action": "start", "episode": 1, "message": "Y=保存 B=丢弃 View长按=退出"}
+episode=1 | frames=100 | elapsed=00:05, collect_hz=19.8, target_hz=20
+{"event": "keyboard", "action": "save", "episode": 1, "frames": 100}
+```
+
+`tqdm` 进度行只统计 `add_frame` 成功的帧，`collect_hz` 每秒按成功写入帧数/实际经过时间计算；数据未就绪暂停采集时会降到 0。`target_hz` 是 `recorder.fps`，`control_frequency.command_hz` 是控制节点的配置频率，不能当作实测机器人执行频率。Episode 由用户按键结束，没有固定总帧数，显示帧数和耗时，不显示百分比。保存、丢弃或退出时关闭进度行。采集器取消每 5 秒重复打印的状态提示，保留启动时的按键说明及实际操作事件。
+
+改为 `debug: true` 后显示：
+
+| 位置 | 受开关控制的现有诊断 |
+| --- | --- |
+| `xbot_teleop_node.py` | 位姿/目标差、RB/LB、输入量、数据龄、控制器状态、工作空间原点、夹爪请求/接受反馈、状态变化 |
+| `teleop_node.py` | Alicia 状态机、offset、enable、控制器切换成功、夹爪就绪、启动/恢复信息 |
+| `ruckig_node.py` | 控制周期、目标控制器、初始关节角与初始化信息 |
+| `data_recorder.py` | 数据集创建、enable 发布、数据集 finalize 信息 |
+| `xbot_cell.launch.py` | 控制器参数路径与笛卡尔控制器“已接收目标 pose”的 INFO 日志 |
+
+关闭 debug 不隐藏错误或故障警告。此开关管理本包诊断及 Xbot 笛卡尔控制器的 INFO 输出，不改变其他 ROS 驱动的日志配置，也不改变机器人控制行为。修改配置后重启遥操作/采集节点；笛卡尔控制器日志等级在 Home 阶段加载，修改它需重启对应启动流程。
+
+新增依赖为 `python3-tqdm`，LeRobot 虚拟环境也需安装 `tqdm`。启动采集器时启用终端模拟，以便显示实时进度。接口参考：[tqdm 文档](https://tqdm.github.io/docs/tqdm/)。

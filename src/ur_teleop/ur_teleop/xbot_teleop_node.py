@@ -16,6 +16,7 @@ from sensor_msgs.msg import Joy, JointState
 from std_msgs.msg import Bool, String, Float64MultiArray, MultiArrayDimension
 from tf2_ros import Buffer, TransformListener, TransformException
 
+from ur_teleop.session_logging import debug_log, log_event
 from ur_teleop.config import load_config, default_config_path, UR_JOINT_NAMES, UR_GRIPPER_JOINT
 from ur_teleop.controller_switcher import ControllerSwitcher
 from ur_teleop.xbot_core import AXES, BUTTONS, JoyMapping, ButtonEvents, PoseIntegrator, orientation_distance
@@ -29,6 +30,7 @@ class XbotTeleopNode(Node):
         super().__init__('xbot_teleop')
         self.declare_parameter('config_file', default_config_path())
         self.cfg = load_config(self.get_parameter('config_file').value)
+        self._debug = self.cfg.get('debug', False)
         if self.cfg['teleop'].get('control_source') != 'xbot':
             raise ValueError('节点只接受 control_source: xbot')
         self.x = self.cfg['xbot']
@@ -104,14 +106,15 @@ class XbotTeleopNode(Node):
         self.gripper = ActionClient(self, ParallelGripperCommand,
                                     grip.get('action_server', '/robotiq_gripper_controller/gripper_cmd'))
         self.create_timer(1. / self.x['control_hz'], self.tick)
-        self.get_logger().info('Xbot 启动：反馈就绪且已到 Home 后自动切换阻抗；RB 仅用于运动使能')
+        log_event(self, 'control_frequency', command_hz=self.x['control_hz'])
+        debug_log(self, 'Xbot 启动：反馈就绪且已到 Home 后自动切换阻抗；RB 仅用于运动使能')
 
     def on_joy(self, msg):
         try:
             axes, buttons = self.mapping.decode(msg.axes, msg.buttons)
         except (ValueError, IndexError) as exc:
             self.joy_at = -float('inf')
-            self.get_logger().error(str(exc), throttle_duration_sec=2.)
+            log_event(self, "error", level="error", message=str(exc), throttle_duration_sec=2.)
             return
         now = time.monotonic()
         if now - self.joy_at > self.x['joy_timeout_s']:
@@ -152,7 +155,7 @@ class XbotTeleopNode(Node):
         origin = np.array([p.x, p.y, p.z], dtype=float)
         if np.isfinite(origin).all():
             self.workspace_origin = origin
-            self.get_logger().info(f'工作空间原点已锁定：{origin.tolist()}（{self.controller_frame}）')
+            debug_log(self, f'工作空间原点已锁定：{origin.tolist()}（{self.controller_frame}）')
 
     def on_finished(self, msg):
         if msg.data:
@@ -189,7 +192,7 @@ class XbotTeleopNode(Node):
             transform_pose([0., 0., 0., 0., 0., 0., 1.], transform)
             return transform
         except (TransformException, ValueError):
-            self.get_logger().error('控制器基座 TF 无效，禁止发布目标', throttle_duration_sec=2.)
+            log_event(self, "error", level="error", message='控制器基座 TF 无效，禁止发布目标', throttle_duration_sec=2.)
             return None
 
     def cancel_gripper(self):
@@ -204,7 +207,7 @@ class XbotTeleopNode(Node):
             return
         # 按已接受的开合目标切换，夹持物体时无需等待实测位置越过阈值。
         desired = 1. - self.gripper_command
-        self.get_logger().info(f'夹爪请求: 实测={self.gripper_state:.3f}, 目标={desired}')
+        debug_log(self, f'夹爪请求: 实测={self.gripper_state:.3f}, 目标={desired}')
         goal = ParallelGripperCommand.Goal()
         goal.command.name = [UR_GRIPPER_JOINT]
         goal.command.position = [float(grip.get('close_pos_rad', .4) if desired else grip.get('open_pos_rad', 0.))]
@@ -217,17 +220,17 @@ class XbotTeleopNode(Node):
                 handle = f.result()
                 if not handle.accepted:
                     self.gripper_pending = False
-                    self.get_logger().warn('夹爪 action 拒绝目标，请检查命令字段及控制器接口')
+                    log_event(self, "warn", level="warn", message='夹爪 action 拒绝目标，请检查命令字段及控制器接口')
                     return
                 self.gripper_goal = handle
                 self.gripper_command = desired
-                self.get_logger().info(f'夹爪目标已接受: {desired}')
+                debug_log(self, f'夹爪目标已接受: {desired}')
                 if not self.core.enabled or self.estop or self.finished:
                     handle.cancel_goal_async()
                 handle.get_result_async().add_done_callback(done)
             except Exception as exc:
                 self.gripper_pending = False
-                self.get_logger().error(f'夹爪请求失败: {exc}')
+                log_event(self, "error", level="error", message=f'夹爪请求失败: {exc}')
 
         def done(f):
             self.gripper_pending = False
@@ -246,7 +249,7 @@ class XbotTeleopNode(Node):
             self.core.stop(actual)
             self.controller_active = True
             self.awaiting_controller_confirmation = False
-            self.get_logger().info('已接管激活的阻抗控制器；松开 RB 后按住 RB 操作')
+            debug_log(self, '已接管激活的阻抗控制器；松开 RB 后按住 RB 操作')
             return
         home_ok = (self.joints is not None and np.max(np.abs(self.joints - self.cfg['home']['slave']))
                    <= self.cfg['home'].get('at_home_tolerance_rad', .05))
@@ -270,9 +273,9 @@ class XbotTeleopNode(Node):
                     self.controller_active = False
                     self.finished = True
                     self.core.stop(actual)
-                    self.get_logger().error('阻抗控制器已失活，锁定遥操作；检查后重启')
+                    log_event(self, "error", level="error", message='阻抗控制器已失活，锁定遥操作；检查后重启')
             except Exception as exc:
-                self.get_logger().warn(f'控制器状态查询失败，保留上次状态: {exc}', throttle_duration_sec=2.)
+                log_event(self, "warn", level="warn", message=f'控制器状态查询失败，保留上次状态: {exc}', throttle_duration_sec=2.)
             self.list_future = None
         if now - self.list_at >= .5 and self.list_future is None:
             self.list_future = self.switcher.list_controllers()
@@ -281,10 +284,12 @@ class XbotTeleopNode(Node):
             self.controller_active = False
             self.finished = True
             self.core.stop(actual)
-            self.get_logger().error('控制器状态连续 10 秒未确认，锁定遥操作；检查后重启')
+            log_event(self, "error", level="error", message='控制器状态连续 10 秒未确认，锁定遥操作；检查后重启')
 
     def log_diagnostic(self, now, actual, published, target_transform):
         """定频输出同一 base_link 坐标系中的实测与目标位姿。"""
+        if not getattr(self, "_debug", False):
+            return
         if now - self.last_diagnostic_at < 1. / self.diagnostic_hz:
             return
         self.last_diagnostic_at = now
@@ -327,8 +332,7 @@ class XbotTeleopNode(Node):
             state = '等待RB'
         translation = (self.axes['ly'], self.axes['lx'], self.axes['rt'] - self.axes['lt'])
         rotation = (self.axes['ry'], self.axes['rx'], self.axes['yaw'])
-        self.get_logger().info(
-            f'遥操作诊断 [{state}] 坐标系=base_link 模式={self.core.frame} '
+        debug_log(self, f'遥操作诊断 [{state}] 坐标系=base_link 模式={self.core.frame} '
             f'RB={int(self.buttons["rb"])} LB={int(self.buttons["lb"])} '
             f'输入平移={tuple(round(value, 2) for value in translation)} '
             f'输入旋转={tuple(round(value, 2) for value in rotation)} '
@@ -357,17 +361,17 @@ class XbotTeleopNode(Node):
             self.switch_future = None
             self.core.stop(actual)
             self.awaiting_controller_confirmation = self.controller_active
-            self.get_logger().info(f'笛卡尔控制器自动切换结果: {self.controller_active}')
+            debug_log(self, f'笛卡尔控制器自动切换结果: {self.controller_active}')
             if not self.controller_active:
                 self.finished = True
-                self.get_logger().error('自动切换失败，锁定遥操作；检查控制器后重启')
+                log_event(self, "error", level="error", message='自动切换失败，锁定遥操作；检查控制器后重启')
             # 下一次查询确认 active 前禁止运动。
             self.controllers = {}
         available = fresh and not self.estop and not self.finished
         self.ensure_impedance(actual, feedback_ready, now)
         if self.switch_future is not None and now - self.switch_at > 10.:
             self.finished = True
-            self.get_logger().error('切换超时，锁定遥操作；检查控制器状态后重启', throttle_duration_sec=5.)
+            log_event(self, "error", level="error", message='切换超时，锁定遥操作；检查控制器状态后重启', throttle_duration_sec=5.)
         safe = (available and not self.finished and self.controller_active
                 and not self.awaiting_controller_confirmation and self.workspace_origin is not None
                 and 0 < elapsed_dt <= .1)
@@ -415,7 +419,7 @@ class XbotTeleopNode(Node):
         self.ready_pub.publish(Bool(data=bool(safe and not self.finished)))
         status = f'{self.core.frame}: ' + ('允许输入更新目标' if self.core.enabled else '目标更新禁用，末次目标仍可被跟踪')
         if status != self.last_status:
-            self.get_logger().info(status)
+            debug_log(self, status)
             self.last_status = status
         self.status_pub.publish(String(data=status))
         self.log_diagnostic(now, actual, published_target, target_transform)

@@ -84,11 +84,15 @@ def _build_cell(context):
                            "--param-file", os.path.join(pkg_share, "config", "xbot_ur_controllers.yaml")],
             ))
 
-    actions.append(LogInfo(msg=f"笛卡尔阻抗控制器参数文件（--param-file）：{cart_config}"))
+    if cfg.get("debug", False):
+        actions.append(LogInfo(msg=f"笛卡尔阻抗控制器参数文件（--param-file）：{cart_config}"))
     actions.append(Node(
         package="controller_manager", executable="spawner",
         arguments=["cartesian_impedance_controller", "-c", "/controller_manager",
                    "--param-file", cart_config,
+                   "--controller-ros-args",
+                   "--ros-args --log-level cartesian_impedance_controller:=" +
+                   ("info" if cfg.get("debug", False) else "warn"),
                    "--inactive"],
     ))
     return actions

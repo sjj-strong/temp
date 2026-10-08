@@ -158,3 +158,30 @@ def test_feedback_queries_tool0():
     node.x = dict(tcp_timeout_s=.25)
     assert node.actual_pose() is not None
     assert calls == [('base_link', 'tool0')]
+
+
+@pytest.mark.parametrize('debug,level', [(False, 'warn'), (True, 'info')])
+def test_debug_controls_controller_pose_logs(tmp_path, debug, level):
+    """诊断开关传到控制器节点，保持运动控制器启动为 inactive。"""
+    from launch import LaunchContext
+    path = Path(__file__).resolve().parents[1]
+    config = tmp_path / 'config.yaml'
+    config.write_text(yaml.safe_dump(dict(base_config=str(path / 'config/xbot_teleop.yaml'),
+                                         sim=False, debug=debug)))
+    context = LaunchContext()
+    context.launch_configurations['config_file'] = str(config)
+    actions = runpy.run_path(str(path / 'launch/xbot_cell.launch.py'))['_build_cell'](context)
+    impedance = next(action._Node__arguments for action in actions
+                     if getattr(action, 'node_executable', None) == 'spawner'
+                     and action._Node__arguments[0] == 'cartesian_impedance_controller')
+    assert impedance[impedance.index('--controller-ros-args') + 1] == (
+        '--ros-args --log-level cartesian_impedance_controller:=' + level)
+    assert '--inactive' in impedance
+
+
+def test_disabled_debug_skips_pose_diagnostic():
+    from ur_teleop.xbot_teleop_node import XbotTeleopNode
+    node = object.__new__(XbotTeleopNode)
+    node._debug = False
+    # 无需访问位姿、输入或日志器，默认关闭时直接返回。
+    node.log_diagnostic(0., None, False, None)

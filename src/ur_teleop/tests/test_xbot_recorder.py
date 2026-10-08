@@ -52,6 +52,8 @@ def test_episode_events_and_stale_gate(monkeypatch, mode):
     node._joint_velocity_at = node._joint_effort_at = node._wrench_at = -float('inf')
     node._recording = False
     node._frame_count = node._episode_count = 0
+    node._fps = 50
+    node._progress = None
     node._min_frames = 2
     node._missing_cam_warned = set()
     node._lock = threading.Lock()
@@ -77,7 +79,15 @@ def test_episode_events_and_stale_gate(monkeypatch, mode):
     assert node._recording
     node._record_frame()
     node._record_frame()
+    progress = node._progress
+    assert progress.bar.n == 2
+    original_add = node._dataset.add_frame
+    node._dataset.add_frame = lambda frame: (_ for _ in ()).throw(RuntimeError('模拟写入失败'))
+    node._record_frame()
+    assert progress.bar.n == node._frame_count == 2
+    node._dataset.add_frame = original_add
     event('save')
+    assert progress.bar.disable and node._progress is None
     assert len(saved) == 1 and not node._recording
     event('start')
     node._record_frame()
