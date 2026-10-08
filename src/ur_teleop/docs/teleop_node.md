@@ -1,46 +1,41 @@
-# Alicia 遥操作节点
+# Alicia 遥操作
 
-实现：`ur_teleop/teleop_node.py`。本节点只负责 Alicia 关节映射、控制器切换和夹爪跟随；Xbot 见[手柄说明](xbot_control.md)。先完成 Home，保持硬件终端，再启动阶段 2，命令见[启动说明](launch.md)。
+先运行 Home，保持硬件终端，再启动遥操作。仿真/真机完整命令见[使用流程](workflow.md#3-回-home)。
 
-## 状态机
+```bash
+ros2 launch ur_teleop teleop.launch.py \
+  config_file:=/ros2_ws/src/ur_teleop/config/alicia_teleop.yaml mode:=teleop
+```
 
-| 状态 | 行为和转换 |
+## 开始操作
+
+程序依次等待主从臂反馈、验证 Home、等待静止并捕获会话偏移。出现就绪提示后按 Enter，控制器切换成功后开始跟随主臂。采集模式由首次开始一段录制触发使能，见[数据采集](data_recorder.md)。
+
+| 参数 | 作用 |
 | --- | --- |
-| `WAITING_CELL` | 等主从关节缓存与 controller_manager 的 list/load/switch 服务；30 秒超时退出，返回非零码 |
-| `VERIFY_HOME` | 两侧最大关节误差不超过 `home.at_home_tolerance_rad`；不满足时等待并警告 |
-| `SETTLING` | 双侧逐周期变化不超过 `settle_motion_threshold_rad`，持续 `settle_time_s` |
-| `CAPTURE_OFFSET` | 复制双方实际位置作为映射基准，构造 JointMapper，进入 ARMED |
-| `ARMED` | teleop 等 Enter，record 等 `/teleop/enable`；提前到达的 true 使能会锁存 |
-| `SWITCHING` | 异步 list → 必要时 load → STRICT switch，future 未完成时立即返回 |
-| `ACTIVE` | 发布映射关节目标与录制动作；主臂超过 watchdog 阈值进入 INACTIVE |
-| `INACTIVE` | 发布 UR 当前反馈位置作为保持目标；主臂数据恢复后自动回 ACTIVE |
+| `teleop.controller` | forward_position 或 joint_impedance |
+| `teleop.command_rate_hz` | 主臂映射与目标更新频率，Hz |
+| `teleop.watchdog_timeout_s` | 主臂反馈超时阈值，秒 |
+| `teleop.restore_controller_on_exit` | Alicia 退出时是否尝试恢复轨迹控制器 |
 
-切换目标由 `teleop.controller` 决定。查询阶段只停用实际 active 的轨迹控制器和另一个冲突遥操作控制器；加载成功分支请求停用轨迹控制器。切换失败会重新查询状态再重试，累计 5 次失败回 ARMED；加载失败或服务未就绪也回 ARMED，等待重新使能。
+映射参数见[Alicia 配置](alicia_teleop_config.md)，平滑参数见[Ruckig](ruckig_node.md)。夹爪启用后独立跟随，不以按 Enter 为开合门控，见[夹爪控制](gripper_controller.md)。
 
-`force_home` 仅把 teleop 的 Home 验证容差设为无穷，不改变 Home 节点或实际位置。完整六轴 Home/遥操作测试仅使用 mock，工作区真机测试仅允许 `wrist_3_joint`。
+## 停止与退出
 
-## 参数与输出
+主臂反馈超时后改发 UR 当前反馈位置作为保持目标，反馈恢复后自动继续跟随。
 
-ROS 参数：`config_file`（安装目录 Alicia 配置）、`mode`（空则读 YAML）、`force_home`（false）。
+`/teleop/e_stop` 软件停止只暂停本节点的关节和夹爪处理，不取消已有夹爪请求，也不清除 Ruckig 的既有目标，不能替代硬件急停。
 
-| YAML 参数 | 代码缺省 | 当前 Alicia 配置 |
-| --- | --- | --- |
-| `teleop.controller` | `forward_position` | `joint_impedance` |
-| `teleop.command_rate_hz` | 50 | 500 |
-| `teleop.watchdog_timeout_s` | 0.5 秒 | 0.5 秒 |
-| `teleop.restore_controller_on_exit` | true | true |
-| `home.at_home_tolerance_rad` | 0.05 rad | 0.1 rad |
-| `home.settle_time_s` | 2 秒 | 2 秒 |
-| `home.settle_motion_threshold_rad` | 0.01 rad | 0.01 rad |
+Ctrl-C 退出时，若启用了恢复开关且已进入控制阶段，会尝试切回轨迹控制器；恢复未成功会输出错误，应查看实际控制器状态。
 
-前向位置始终使用 Ruckig；关节阻抗依据 YAML `ruckig.enabled` 选择 Ruckig 或直接发布。输出类型、频率与唯一发布者见[数据流](pipeline.md)。`/teleop/commands` 始终包含六个关节目标和一个二值夹爪信号，数据集是否保存这些字段另由 recorder 开关决定。
+## 常见问题
 
-## 夹爪与停止
+| 现象 | 检查 |
+| --- | --- |
+| 等不到硬件 | Home 终端、ROS 域、主从臂关节反馈和 controller_manager 服务 |
+| 一直验证 Home | 实际关节角与 `home.master/slave`、Home 容差 |
+| 一直等待静止 | 主从臂是否移动及静止阈值 |
+| 回到等待使能 | 控制器加载/切换失败；排查后重新使能 |
+| 没有跟随 | 当前控制器、Ruckig 配置与主臂反馈是否一致 |
 
-`gripper.enabled` 为真时建立夹爪定时器，频率由 `gripper.fsm_rate_hz` 决定（缺省 10 Hz）。action server 未就绪时逐 tick 重试，节点启动后超过 30 秒仍不就绪才警告并禁用。此定时器不检查 ACTIVE，因此不能认为夹爪一定受 Enter 门控；只受启用开关、软件停止和请求未完成门控约束。
-
-目标变化时发送 `ParallelGripperCommand`；记录的 future 是发送请求的 future，其 done 不代表夹爪运动已完成。具体迟滞和边界见[夹爪控制](gripper_controller.md)。
-
-`/teleop/e_stop=true` 暂停关节与夹爪定时器处理，但不会清除已有 Ruckig 目标、停用控制器或取消已发送 action。退出先发布 `/demonstration=false`，然后在 ACTIVE/INACTIVE/SWITCHING 且恢复开关开启时尝试切回轨迹控制器，最多等待 5 秒；失败或未确认会输出 error。
-
-状态、offset 和成功切换日志由 `debug` 控制；错误、按键提示、配置频率与首次[接口日志](control_interface_logging.md)始终可见。
+不要用 `force_home` 跳过验证来掩盖 Home 故障。

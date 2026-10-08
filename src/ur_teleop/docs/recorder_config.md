@@ -1,6 +1,6 @@
 # Record 配置参数
 
-Alicia 使用 `config/alicia_teleop.yaml`，Xbot 使用 `config/xbot_teleop.yaml`；两者的 `recorder` 都由采集器读取。以下创建参数已按当前实际安装的 `LeRobotDataset.create` 接口核对，源码位于 [lerobot_dataset.py](../../lerobot/src/lerobot/datasets/lerobot_dataset.py)。升级 LeRobot 后应重新核对接口。
+Alicia 使用 `config/alicia_teleop.yaml`，Xbot 使用 `config/xbot_teleop.yaml`；两者的 `recorder` 都由采集器读取。运行命令和按键见[数据采集](data_recorder.md)。
 
 ## 采集数量与采集循环
 
@@ -11,7 +11,7 @@ recorder:
   min_frames_per_episode: 2
 ```
 
-`num_episodes` 是本包参数，不直接传给 LeRobot：`0` 不限制段数；正整数表示本次新数据集需要成功保存的 episode 数。丢弃、过短片段和保存失败不计数。每段仍按原有 Enter/Menu 开始、S/Y 保存，不自动生成或开始下一段。保存够目标后采集器发布结束通知、finalize 并退出，硬件终端和其他遥操作节点不会随采集器退出而自动关闭。
+`num_episodes` 是本包参数：`0` 不限制段数；正整数表示本次新数据集需要成功保存的 episode 数。丢弃、过短片段和保存失败不计数。每段仍按原有 Enter/Menu 开始、S/Y 保存，不自动生成或开始下一段。保存够目标后采集器发布结束通知、finalize 并退出，硬件终端和其他遥操作节点不会随采集器退出而自动关闭。
 
 进度显示 `episode=3/50`、本段帧数和实际采集 Hz；未指定目标时显示 `episode=3`。Q/View 长按仍可提前保存并结束。Xbot 收到结束通知后锁定手柄输入；Alicia 保持原有遥操作退出方式，结束时仍需 Ctrl-C 停止相应终端。
 
@@ -25,7 +25,7 @@ recorder:
 
 ## LeRobot 数据集创建参数
 
-下列字段直接传给当前 `LeRobotDataset.create`；其中 `repo_id`、`root`、`robot_type` 和 `fps` 由采集器组装，其余通过同名字段透传。
+下列字段用于创建本地 LeRobot 数据集。
 
 | 参数 | 类型/默认值 | 作用与生效条件 |
 | --- | --- | --- |
@@ -35,7 +35,7 @@ recorder:
 | `use_videos` | bool，`true` | 相机图像存 MP4；false 存图像；没有启用相机时不产生视频 |
 | `tolerance_s` | 有限非负数，`0.0001` | LeRobot 时间戳间隔校验容差，单位秒；不是本包数据超时阈值 |
 | `image_writer_processes` | 非负整数，`0` | 异步图像写入进程数；0 使用线程 |
-| `image_writer_threads` | 非负整数，`2` | 异步图像写入线程数；本包保留原默认 2，LeRobot 当前接口默认 0 |
+| `image_writer_threads` | 非负整数，`2` | 异步图像写入线程数 |
 | `video_backend` | 非空字符串或 `null` | 数据集视频读取后端，如 `pyav`；null 自动选择，不决定视频编码器 |
 | `batch_encoding_size` | 正整数，`1` | 非流式视频每批编码的 episode 数；finalize 刷新剩余片段 |
 | `vcodec` | 非空字符串，`libsvtav1` | 视频编码器，当前 LeRobot 支持的值由其实现及环境决定，如 `libsvtav1`、`h264`、`hevc`、`auto` |
@@ -44,7 +44,7 @@ recorder:
 | `encoder_queue_maxsize` | 正整数，`30` | 流式编码时每台相机待编码的最大缓冲帧数 |
 | `encoder_threads` | 正整数或 `null` | 每个视频编码器的线程数；null 自动选择 |
 
-`features` 也属于 LeRobot 创建接口，但不提供任意 YAML 覆盖：本包根据下面的数据字段开关和相机配置自动生成，保证特征维度与实际帧一致。读取既有数据集使用的 `revision`、`episodes`、`delta_timestamps`、`image_transforms` 等不是 `create` 参数，不放入 record 创建配置。
+数据集特征由字段开关和相机配置自动生成，无需填写 `features`。
 
 ## 数据字段
 
@@ -76,6 +76,6 @@ recorder:
       image_key: front
 ```
 
-话题、采集宽高以及 `resize`、`resize_width`、`resize_height` 统一放在 `camera.yaml` 对应相机下；recorder 中的旧重复设置会被相机文件覆盖。所选相机不存在、被停用或保存尺寸非法时，在录制器构造阶段报错。相机发布使用自定义文件时，`recorder.camera_config_file` 必须指向同一文件。
+话题、采集宽高以及 `resize`、`resize_width`、`resize_height` 统一放在 `camera.yaml` 对应相机下；recorder 中的旧重复设置会被相机文件覆盖。所选相机不存在、被停用或保存尺寸非法时，录制器启动失败。相机发布使用自定义文件时，`recorder.camera_config_file` 必须指向同一文件。
 
 相机发布端口、曝光和预览由独立相机配置/调参工具管理，不属于 LeRobot 创建参数。完整字段格式与按键见[数据采集](data_recorder.md)，相机准备见[相机调试](camera_inspector.md)。`debug` 是配置顶层开关，不在 `recorder` 内；其作用见[采集日志](data_recorder.md#采集日志与进度)。

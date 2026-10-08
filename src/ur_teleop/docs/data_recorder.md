@@ -21,6 +21,10 @@
 
 不足 `min_frames_per_episode` 帧时自动丢弃，不计入采集数量。`recorder.num_episodes: 0` 不限数量；设为正整数后，成功保存达到该数量会自动 finalize 并退出采集器。目标未达到时，保存或丢弃后可开始下一段。
 
+## Alicia 数据格式
+
+`record_ur_joints` 保存六关节实测位置，`record_ur_ee_pose` 保存 TCP 的 xyz+xyzw；两者均开启时 `observation.state` 为 13 维。`record_action_joints` 保存六关节目标，`record_action_gripper` 可在 action 末尾附加一个二值夹爪指令。
+
 ## Xbot action
 
 `recorder.action_mode: abs` 保存手柄节点最终发布给阻抗控制器的绝对目标 `x,y,z,qx,qy,qz,qw`。`rel` 保存该目标相对**同一控制周期实测 TCP** 的 `dx,dy,dz,drx,dry,drz`；姿态增量是参考坐标系中的最短旋转向量，满足 `q_target = dq × q_actual`。工作空间裁剪发生在编码之前，因此 action 与最终下发目标一致。摇杆回中时仍保存保持目标；此时相对 action 可能非零。
@@ -70,13 +74,17 @@ recorder:
       image_key: front         # 可选；省略时使用 usb_front
 ```
 
-默认读取安装目录中的 `config/camera.yaml`。相机发布入口使用自定义文件时，在遥操作配置中设置 `recorder.camera_config_file: /绝对路径/camera.yaml`，让录制器读取同一文件；相对路径以遥操作配置文件所在目录为基准。`use_videos` 决定视频或逐帧图像特征，`recorder.cameras.<名称>.enabled` 只控制是否录制该相机（省略视为启用）。旧的录制配置中的 `topic`、`resize`、`width`、`height` 应迁移到相机文件；以相机文件为准。
+默认读取安装目录中的 `config/camera.yaml`。相机发布入口使用自定义文件时，在遥操作配置中设置 `recorder.camera_config_file: /绝对路径/camera.yaml`，让录制器读取同一文件；相对路径以遥操作配置文件所在目录为基准。`use_videos` 决定视频或逐帧图像特征，`recorder.cameras.<名称>.enabled` 只控制是否录制该相机（省略视为启用）。话题和尺寸以相机文件为准。
 
-Xbot 开始和写帧时检查就绪心跳、action 和启用字段的数据新鲜度；缺失、非有限或超过 `data_timeout_s` 时拒绝开始或跳过整帧。开启 TCP 时还要求有效 TF。Alicia 没有同等的数据龄门控，也未订阅 `/teleop/status`；它使用最新缓存，必要 UR/action 缺失时 FrameBuilder 返回 None，TCP 查询失败时会填 NaN 并只警告一次。两种模式开始录制前都要求所选相机至少收到一帧；Alicia 写帧时未实施相机数据龄检查。Alicia 的 observation 不再附加夹爪实测状态；关节 action 可通过同一个开关附加夹爪指令。
+## 数据就绪条件
 
-## 话题与验证
+Xbot 开始及写帧时要求就绪心跳、action 和启用字段均有效且未超过 `data_timeout_s`；开启 TCP 时还要求有效 TF。数据缺失、非有限或过期时拒绝开始或跳过整帧。
 
-Xbot 手柄节点通过 `/teleop/commands` 发布 action 数组，布局标签携带模式、参考 link 和 TCP link；录制器校验标签与原始数组维度。`/teleop/record_event` 传递开始、保存、丢弃和结束事件；`/teleop/xbot_ready` 提供就绪心跳。
+Alicia 使用最新缓存，没有同等数据龄检查；必要关节或 action 缺失时跳过帧，TCP 查询失败时填 NaN 并警告。两种模式开始前均要求所选相机至少收到一帧。
+
+## 查看数据话题
+
+`/teleop/commands` 为目标动作，`/teleop/record_event` 为手柄录制事件，`/teleop/xbot_ready` 为就绪心跳。
 
 ```bash
 ros2 topic echo --once /teleop/commands
@@ -85,44 +93,17 @@ ros2 topic echo --once /force_torque_sensor_broadcaster/ft_data
 ros2 topic echo --once /robotiq_force_torque_sensor_broadcaster/wrench
 ```
 
-单元测试位于 `tests/test_xbot_core.py`、`tests/test_xbot_recorder.py` 和 `tests/test_frame_builder.py`。
 
 ## 夹爪录制开关
 
-Alicia 与 Xbot 仅使用 `recorder.record_action_gripper` 控制夹爪录制：`true` 在 action 末尾保存二值 `cmd_gripper`（打开 `0`、闭合 `1`），`false` 不保存。不再录制夹爪实测 observation；已移除 `record_ur_gripper` 和 `state_threshold_rad`。录制无需等待夹爪反馈。该开关不控制夹爪执行，执行仍由 `gripper.enabled` 控制。已有数据集的 observation 维度会变化，请使用新数据集。
+Alicia 与 Xbot 仅使用 `recorder.record_action_gripper` 控制夹爪录制：`true` 在 action 末尾保存二值 `cmd_gripper`（打开 `0`、闭合 `1`），`false` 不保存。不保存夹爪实测 observation。录制无需等待夹爪反馈。该开关不控制夹爪执行，执行仍由 `gripper.enabled` 控制。更改字段后请使用新数据集。
 
-Xbot 录制器仅在保存关节位置、速度或 effort 时订阅关节反馈；Alicia 当前始终订阅关节反馈。夹爪指令录制不参与该订阅判断。
+
 
 ## 采集日志与进度
 
-两个遥操作配置均新增顶层 `debug` 布尔开关，默认关闭：
+顶层 `debug: false` 显示操作提示、配置频率、首次控制接口、采集进度和故障。改为 `true` 后增加输入、位姿、状态及控制器诊断，修改后重启相关进程。
 
-```yaml
-debug: false
-```
+进度中的 `frames` 是成功写入帧数，`collect_hz` 是实际写入频率，`target_hz` 是 `recorder.fps`。配置控制频率不等于实测机器人执行频率。数据未就绪时写入频率会下降；每段由用户保存或丢弃，没有固定帧数。
 
-`mode: record` 下，正常日志包含按键/手柄操作、控制配置频率、采集进度、首次 control_interface、错误和警告。事件正文使用 JSON，ROS 自身保留日志等级、时间和节点名。例如：
-
-```text
-{"event": "control_frequency", "command_hz": 50.0}
-{"event": "collection_frequency", "target_hz": 20}
-{"event": "keyboard", "action": "start", "episode": 1, "message": "Y=保存 B=丢弃 View长按=退出"}
-episode=1 | frames=100 | elapsed=00:05, collect_hz=19.8, target_hz=20
-{"event": "keyboard", "action": "save", "episode": 1, "frames": 100}
-```
-
-`tqdm` 进度行只统计 `add_frame` 成功的帧，`collect_hz` 每秒按成功写入帧数/实际经过时间计算；数据未就绪暂停采集时会降到 0。`target_hz` 是 `recorder.fps`，`control_frequency.command_hz` 是控制节点的配置频率，不能当作实测机器人执行频率。Episode 由用户按键结束，没有固定总帧数，显示帧数和耗时，不显示百分比。保存、丢弃或退出时关闭进度行。采集器取消每 5 秒重复打印的状态提示，保留启动时的按键说明及实际操作事件。
-
-改为 `debug: true` 后显示：
-
-| 位置 | 受开关控制的现有诊断 |
-| --- | --- |
-| `xbot_teleop_node.py` | 位姿/目标差、RB/LB、输入量、数据龄、控制器状态、工作空间原点、夹爪请求/接受反馈、状态变化 |
-| `teleop_node.py` | Alicia 状态机、offset、enable、控制器切换成功、夹爪就绪、启动/恢复信息 |
-| `ruckig_node.py` | 控制周期、目标控制器、初始关节角与初始化信息 |
-| `data_recorder.py` | 数据集创建、enable 发布、数据集 finalize 信息 |
-| `xbot_cell.launch.py` | 控制器参数路径与笛卡尔控制器“已接收目标 pose”的 INFO 日志 |
-
-关闭 debug 不隐藏错误或故障警告。此开关管理本包诊断及 Xbot 笛卡尔控制器的 INFO 输出，不改变其他 ROS 驱动的日志配置，也不改变机器人控制行为。修改配置后重启遥操作/采集节点；笛卡尔控制器日志等级在 Home 阶段加载，修改它需重启对应启动流程。
-
-新增依赖为 `python3-tqdm`，LeRobot 虚拟环境也需安装 `tqdm`。启动采集器时启用终端模拟，以便显示实时进度。接口参考：[tqdm 文档](https://tqdm.github.io/docs/tqdm/)。
+采集环境需安装 `tqdm`。正常结束时等待数据集写入完成，再关闭其他终端。

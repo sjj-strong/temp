@@ -1,13 +1,23 @@
-# ur_teleop 文档入口
+# ur_teleop 使用文档
 
-本目录说明 Xbot/Alicia 遥操作 UR、相关控制器及采集前后操作。
+本包支持 Alicia 主臂或 Xbot 手柄遥操作 UR，并采集 LeRobot 数据集。两种输入源二选一。
 
-按顺序阅读：[硬件准备](hardware.md) → [完整流程](workflow.md) → [相机调试](camera_inspector.md) → [启动说明](launch.md) → [数据采集](data_recorder.md)。控制器对应关系见[控制器说明](controllers.md)，所有文档及用途见[功能包 README](../README.md#文档导航)。
+## 开始使用
 
-Xbot 的标定和按键见[手柄操作](xbot_control.md)，逐项参数见[Xbot 配置](xbot_teleop_config.md)，不连接机器人的输入检查见[独立手柄测试](xbot_joy_test.md)。Alicia 的配置和节点逻辑见[配置加载](alicia_teleop_config.md)、[数据流](pipeline.md)与[遥操作节点](teleop_node.md)。
+1. [硬件与环境准备](hardware.md)：依赖、设备连接与初始位置。
+2. [完整使用流程](workflow.md)：相机、仿真/真机启动、遥操作与采集。
+3. [启动参数](launch.md)：入口参数、覆盖规则与相机配置。
 
-修改从臂初始位置时使用[只读关节位置工具](capture_slave_home.md)。Home 确认、控制器切换、映射、offset、Ruckig、夹爪与键盘等实现细节从功能包 README 的文档导航进入。
+## 配置与操作
 
-采集参数完整说明见[Record 配置参数](recorder_config.md)，包括 `num_episodes` 和 LeRobot 数据集创建选项。
+| 内容 | 文档 |
+| --- | --- |
+| Alicia 配置与操作 | [配置参数](alicia_teleop_config.md)、[遥操作](teleop_node.md)、[键盘操作](keyboard.md) |
+| Xbot 配置与操作 | [手柄标定和操作](xbot_control.md)、[配置参数](xbot_teleop_config.md)、[独立手柄检查](xbot_joy_test.md) |
+| 相机 | [检查与调参](camera_inspector.md)、[发布和保存尺寸](launch.md#相机) |
+| 数据采集 | [采集操作与数据格式](data_recorder.md)、[录制参数](recorder_config.md) |
+| 初始位置 | [读取从臂位置](capture_slave_home.md)、[回 Home](home_node.md) |
 
-本次入口、参数和控制逻辑的核对范围与验证方式见[文档核对记录](documentation_audit.md)。
+## 控制行为与排查
+
+[控制流程](pipeline.md) · [控制器](controllers.md) · [自动切换](controller_switcher.md) · [关节映射](joint_mapper.md) · [会话偏移](session_offset.md) · [Ruckig 平滑](ruckig_node.md) · [夹爪](gripper_controller.md) · [控制接口日志](control_interface_logging.md)

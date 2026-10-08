@@ -71,9 +71,3 @@ colcon build --packages-select ur_teleop --symlink-install
 source /ros2_ws/install/setup.bash
 ros2 run ur_teleop xbot_joy_test
 ```
-
-## 验证记录
-
-已通过 16 项动作日志自动测试，覆盖短按/松开、组合运动方向、死区、主轴过滤、向量限幅、精细模式、参考系切换、夹爪条件提示、录制动作、View 长按及断连恢复。覆盖 11 项输入使用 19 项标定、未映射输入静默、局部非法输入隔离，并确认正式遥操作的严格布局校验保持原行为。
-
-已通过包构建及专用话题的实际 ROS 动作日志验证。物理按键和轴方向按指定文件解释，仍需用户连接实体手柄核对。

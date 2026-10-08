@@ -1,12 +1,10 @@
-# 从硬件准备到数据采集
+# 完整使用流程
 
-顺序为：准备硬件与配置 → 相机调试 → 启动 Home → 用 teleop 验证 → 用 record 采集。Xbot 和 Alicia 二选一，不同时启动。
+操作顺序：准备设备和配置 → 启动相机 → 回 Home → 遥操作 → 数据采集。Alicia 与 Xbot 二选一，同一机器人只运行一套控制栈。
 
-以下机器人运动示例使用 **UR mock**，不连接 UR 真机；Xbot 手柄和 Alicia 主臂仍是物理设备。真机测试仅允许 `wrist_3_joint`，完整 Home/遥操作示例不用于真机测试。硬件接入与依赖见[硬件准备](hardware.md)，控制器选择见[控制器说明](controllers.md)。
+## 1. 准备环境与配置
 
-## 1. 准备硬件和本包
-
-按[硬件准备](hardware.md)确认依赖、UR 网络、输入设备及可选外设。构建本包：
+按[硬件准备](hardware.md)安装依赖并连接设备。首次构建：
 
 ```bash
 source /opt/ros/jazzy/setup.bash
@@ -14,130 +12,146 @@ cd /ros2_ws
 colcon build --packages-select ur_teleop --symlink-install
 ```
 
-每个 ROS 终端均加载以下环境；普通调试无需额外设置 `ROS_DOMAIN_ID`，沿用当前环境即可：
+每个 ROS 终端加载：
 
 ```bash
 source /opt/ros/jazzy/setup.bash
 source /ros2_ws/install/setup.bash
 ```
 
-Xbot 首次使用先标定并运行[独立手柄测试](xbot_joy_test.md)。Alicia 核对串口、`home.master` 与关节映射。记录实际 UR 当前位置作为 `home.slave` 的只读工具见[读取初始位置](capture_slave_home.md)；它读取真机时需在实际硬件所在 ROS 域中单独运行。
+本文直接使用源码配置路径，修改配置后重启对应进程即可，无需为配置修改重新构建。
 
-## 2. 相机调试与发布
+| 输入源 | 配置文件 | 启动前检查 |
+| --- | --- | --- |
+| Alicia | `/ros2_ws/src/ur_teleop/config/alicia_teleop.yaml` | 主臂串口、双臂 Home、映射、控制器和夹爪开关 |
+| Xbot | `/ros2_ws/src/ur_teleop/config/xbot_teleop.yaml` | 手柄标定、UR Home、机器人 IP 和阻抗参数文件 |
 
-先装好[相机调试依赖](camera_inspector.md#安装与运行)，打开独立预览：
+设备地址与 Home 必须匹配实际设备。Xbot 先完成[标定与输入检查](xbot_control.md#配置与校准)。需要更新 UR Home 时使用[位置读取工具](capture_slave_home.md)。
 
-```bash
-python3 /ros2_ws/src/ur_teleop/ur_teleop/camera_inspector.py
-```
+## 2. 启动相机（可选）
 
-逐台确认型号、稳定设备路径、分辨率、帧率和曝光效果，将界面生成的字段合并到 `config/camera.yaml`（顶层键为自定义相机名，每台相机独立填写 `type`、设备参数、`enabled` 和 `visualize`）。只有两台 USB 时禁用不存在的第三台。关闭调参预览，释放设备。
-
-新开相机终端，加载上述 ROS 环境后执行并保持运行：
+先用[相机工具](camera_inspector.md)确认设备和采集模式，关闭调参预览，再运行：
 
 ```bash
 ros2 launch ur_teleop camera.launch.py \
   config_file:=/ros2_ws/src/ur_teleop/config/camera.yaml
 ```
 
-在所选遥操作配置的 `recorder.cameras` 中启用需要保存的图像，名称与 `camera.yaml` 的顶层相机名一致即可。采集尺寸、话题和保存缩放统一在 `camera.yaml` 设置；开启 `resize` 后用 `resize_width/resize_height` 指定保存尺寸。USB 可通过各相机的 `auto_exposure` 和 `exposure_time_absolute` 设置曝光，其他调参值需在采集前重新确认。细节见[相机调试](camera_inspector.md)、[相机发布](launch.md#相机)与[数据字段](data_recorder.md)。
+`camera.yaml` 顶层每个键为相机名；每台相机独立设置设备、预览及 `resize`。在遥操作配置的 `recorder.cameras` 中按名称选择录制相机，并设置：
 
-## 3. 生成本次 mock 配置
-
-以下命令生成两份临时配置，不改变源码中的真机设置，并将 mock 数据写入独立目录。运行一次即可，后面仅选择其中一份：
-
-```bash
-/usr/bin/python3 - <<'PY'
-from pathlib import Path
-import yaml
-
-base = Path('/ros2_ws/src/ur_teleop/config')
-common = dict(sim=True, debug=False, cell=dict(ft300_enabled=False),
-              gripper=dict(enabled=False))
-alicia = dict(common, base_config=str(base / 'alicia_teleop.yaml'),
-              teleop=dict(controller='joint_impedance'),
-              recorder=dict(root='/ros2_ws/dataset/mock/alicia',
-                            repo_id='my_user/ur10e_alicia_mock'))
-xbot = dict(common, base_config=str(base / 'xbot_teleop.yaml'),
-            xbot=dict(controller_config_file=
-                      '/ros2_ws/src/cartesian_impedance_controller/config/ur10e_xbot_sim_cartesian_impedance.yaml'),
-            recorder=dict(root='/ros2_ws/dataset/mock/xbot',
-                          repo_id='my_user/ur10e_xbot_mock', record_wrench=False))
-for name, config in [('alicia', alicia), ('xbot', xbot)]:
-    Path(f'/tmp/ur_teleop_{name}_mock.yaml').write_text(
-        yaml.safe_dump(config, allow_unicode=True, sort_keys=False))
-PY
+```yaml
+recorder:
+  camera_config_file: /ros2_ws/src/ur_teleop/config/camera.yaml
 ```
 
-相机发布若使用自定义文件，需同时设置 recorder.camera_config_file 为同一路径。配置合并规则见[配置加载](alicia_teleop_config.md)。需要采集图像时，先在对应源码配置中设置 `recorder.cameras`；临时配置会继承它。
+相机发布和录制必须读取同一相机配置。尺寸设置见[相机配置](launch.md#相机)。
 
-## 4. 先运行 Home 和 teleop 测试
+## 3. 回 Home
 
-### Xbot
+选择以下一个分支。Home 成功后显示 `HOME REACHED`，保持该终端运行。
 
-硬件终端运行 Home，到 `HOME REACHED` 后保持终端运行：
+### Alicia 仿真
+
+在 Alicia 配置中设置 `sim: true`、`teleop.controller: joint_impedance`、`gripper.enabled: false`。UR 使用 mock，Alicia 主臂仍是真实设备并会回 Home。
 
 ```bash
 ros2 launch ur_teleop home.launch.py \
-  config_file:=/tmp/ur_teleop_xbot_mock.yaml
+  config_file:=/ros2_ws/src/ur_teleop/config/alicia_teleop.yaml \
+  sim:=true controller:=joint_impedance enable_gripper:=false enable_ft300:=false
 ```
 
-遥操作终端加载同一环境，显式选择 teleop 模式：
+### Alicia 真机
 
-```bash
-ros2 launch ur_teleop teleop.launch.py \
-  config_file:=/tmp/ur_teleop_xbot_mock.yaml mode:=teleop
-```
-
-反馈就绪后自动切换到笛卡尔阻抗控制器。先松开 RB，再按住 RB 操作，检查方向和松开后的目标保持；按键细节见[Xbot 操作](xbot_control.md)。
-
-### Alicia
-
-硬件终端启动 Home。UR 为 mock，Alicia 会接收真实 Home 指令：
+在 Alicia 配置中设置 `sim: false`，核对 `cell.robot_ip`、`cell.alicia_port`、`home.master` 和 `home.slave`。以下使用关节阻抗控制，关闭未连接的夹爪和 FT300；此时 YAML 中也应关闭对应开关。
 
 ```bash
 ros2 launch ur_teleop home.launch.py \
-  config_file:=/tmp/ur_teleop_alicia_mock.yaml sim:=true \
-  controller:=joint_impedance enable_gripper:=false enable_ft300:=false
+  config_file:=/ros2_ws/src/ur_teleop/config/alicia_teleop.yaml \
+  sim:=false controller:=joint_impedance \
+  robot_ip:=169.254.138.15 alicia_port:=/dev/ttyACM0 \
+  enable_gripper:=false enable_ft300:=false
 ```
 
-看到 `HOME REACHED` 后，遥操作终端执行：
+IP 和串口是示例，需替换为实际值。接入外设时同步开启 YAML 和 Home 参数，详见[启动参数](launch.md)。
+
+### Xbot 仿真
+
+在 Xbot 配置中设置 `sim: true`，并将 `xbot.controller_config_file` 设置为：
+
+```yaml
+xbot:
+  controller_config_file: /ros2_ws/src/cartesian_impedance_controller/config/ur10e_xbot_sim_cartesian_impedance.yaml
+```
 
 ```bash
-ros2 launch ur_teleop teleop.launch.py \
-  config_file:=/tmp/ur_teleop_alicia_mock.yaml mode:=teleop
+ros2 launch ur_teleop home.launch.py \
+  config_file:=/ros2_ws/src/ur_teleop/config/xbot_teleop.yaml
 ```
 
-等静止、offset 捕获完成并提示 Enter 后按回车，检查 mock UR 对主臂的跟随。Home 与遥操作必须使用同一配置，Alicia Home 的 `controller` 参数也必须与 YAML 一致；更多参数见[启动说明](launch.md)。
+### Xbot 真机
 
-## 5. 停止 teleop，再启动 record
+在 Xbot 配置中设置 `sim: false`，核对 `cell.robot_ip`、`home.slave` 和外设开关，选择与真机匹配的阻抗参数，例如：
 
-先 Ctrl-C 停止第二终端的 teleop，保留硬件和相机终端。控制器切换和 Home 校验仍需满足；若当前位置已离开 Home，先停止硬件终端并重新运行对应 mock Home，不能绕过校验。
+```yaml
+xbot:
+  controller_config_file: /ros2_ws/src/cartesian_impedance_controller/config/ur10e_ft300_cartesian_impedance.yaml
+```
 
-采集终端加载 ROS 环境及 LeRobot 环境，然后根据输入源选择一条命令：
+```bash
+ros2 launch ur_teleop home.launch.py \
+  config_file:=/ros2_ws/src/ur_teleop/config/xbot_teleop.yaml
+```
+
+Xbot 的仿真/真机选择由 YAML `sim` 决定，不能用 `sim:=false` 覆盖。
+
+真机 Home 启动后，在示教器启动 External Control 程序，再在 Home 终端按 Enter。确认后会执行六轴 Home 运动；Alicia 分支还会移动主臂。Home 失败时检查反馈和配置，不要跳过位置验证。
+
+## 4. 遥操作
+
+新终端选择与 Home 相同的配置。以下命令同时适用于对应配置的仿真和真机：
+
+```bash
+# Alicia
+ros2 launch ur_teleop teleop.launch.py \
+  config_file:=/ros2_ws/src/ur_teleop/config/alicia_teleop.yaml mode:=teleop
+```
+
+```bash
+# Xbot：与 Alicia 二选一
+ros2 launch ur_teleop teleop.launch.py \
+  config_file:=/ros2_ws/src/ur_teleop/config/xbot_teleop.yaml mode:=teleop
+```
+
+Alicia 等待静止和偏移捕获，提示后按 Enter 开始。Xbot 自动接管阻抗控制器，就绪后先松开 RB，再按住 RB 操作；按键见[手柄操作](xbot_control.md#按键与参考系)。
+
+## 5. 数据采集
+
+先 Ctrl-C 停止遥操作终端，保留硬件和相机终端。如果 Alicia 已离开 Home，重新运行 Home 后再启动采集。Xbot 在阻抗控制器仍 active 时可从当前位置接管。
+
+采集终端加载 ROS 环境和 LeRobot 环境，然后选择一条命令。仿真和真机使用相同入口，机器人模式由前面的 Home 配置决定：
 
 ```bash
 source /opt/lerobot_venv/bin/activate
-# Xbot：
+# Alicia
 ros2 launch ur_teleop teleop.launch.py \
-  config_file:=/tmp/ur_teleop_xbot_mock.yaml mode:=record
+  config_file:=/ros2_ws/src/ur_teleop/config/alicia_teleop.yaml mode:=record
 ```
 
 ```bash
-# Alicia：不要与上面的 Xbot 命令同时运行。
+# Xbot：与 Alicia 二选一
 ros2 launch ur_teleop teleop.launch.py \
-  config_file:=/tmp/ur_teleop_alicia_mock.yaml mode:=record
+  config_file:=/ros2_ws/src/ur_teleop/config/xbot_teleop.yaml mode:=record
 ```
 
-| 操作 | Xbot | Alicia |
+| 操作 | Alicia | Xbot |
 | --- | --- | --- |
-| 开始 episode | Menu | Enter |
-| 保存 | Y | S |
-| 丢弃 | B | D |
-| 保存并结束采集 | View 长按 | Q |
+| 开始一段 | Enter | Menu |
+| 保存 | S | Y |
+| 丢弃 | D | B |
+| 保存并结束 | Q | View 长按 |
 
-默认 `debug: false`，正常输出包含操作、配置控制频率、首次控制接口日志、tqdm 帧进度和实际采集 Hz，以及故障信息。采集速度、数据字段、文件位置、相机选择与调试日志见[数据采集](data_recorder.md)。模拟数据仅用于流程验证，不当作真机任务数据。
+修改 `recorder.root`、`task`、数据字段和相机选择后再采集。仿真无力数据时关闭 `record_wrench`。格式与参数见[数据采集](data_recorder.md)和[录制参数](recorder_config.md)。
 
 ## 6. 结束
 
-先保存并结束采集，确认数据集完成 finalize，再停止相机和硬件终端。不并行运行 teleop 和 record 两套遥操作节点。
+先保存并结束采集，等待数据集写入完成，再停止遥操作、相机和硬件终端。不要同时运行 teleop 与 record 两套遥操作进程。软件停止和退出的行为见[Alicia](teleop_node.md#停止与退出)与[Xbot](xbot_control.md#保护与限制)。

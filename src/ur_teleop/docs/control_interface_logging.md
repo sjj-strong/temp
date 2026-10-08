@@ -5,7 +5,7 @@
 字段：`function` 为业务函数及 ROS API，`endpoint` 为话题或 Action 名称，`message_type` 为消息或 Action 类型，`controller` 为所选控制器。话题使用发布器返回的实际名称，包含重映射。
 
 | 路径 | 函数接口 | ROS 接口 | 类型 |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | Alicia 经 Ruckig | `TeleopNode._publish_commands → Publisher.publish` | `/ruckig/target_joint_positions` | `std_msgs/msg/Float64MultiArray` |
 | Ruckig 前向位置输出 | `RuckigNode.control_loop → Publisher.publish` | `/forward_position_controller/commands` | `std_msgs/msg/Float64MultiArray` |
 | Ruckig 关节阻抗输出 | `RuckigNode.control_loop → Publisher.publish` | `/joint_impedance_controller/target_joint_state` | `sensor_msgs/msg/JointState` |
@@ -14,5 +14,3 @@
 | 夹爪 | `_gripper_tick` 或 `toggle_gripper → ActionClient.send_goal_async` | 配置的 `gripper.action_server` | `control_msgs/action/ParallelGripperCommand` |
 
 当前 Alicia 配置选择关节阻抗并启用 Ruckig，因此首次控制时 teleop 与 Ruckig 各输出一条接口日志。`/teleop/commands` 是数采话题，不是机械臂控制接口。
-
-验证仅运行离线测试，未向真实机械臂下发控制指令。

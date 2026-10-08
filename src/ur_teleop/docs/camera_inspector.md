@@ -22,7 +22,7 @@ python3 /ros2_ws/src/ur_teleop/ur_teleop/camera_inspector.py --list
 4. 对 USB 和 RealSense 都可用 Name 自定义相机名。点击 YAML Parameters，将生成项复制到 `config/camera.yaml` 顶层，相机名应唯一。
 5. 关闭预览或点击 Stop 释放设备，再启动正式相机发布。
 
-采集在后台线程进行，Qt 定时器刷新预览，显示范围固定 0–255。该工具的实时控制项默认仅作用于当前会话；USB 正式发布可读取 auto_exposure 和 exposure_time_absolute，其他控制项不要假定会随 YAML 自动恢复。
+该工具的实时控制项默认仅作用于当前会话；USB 正式发布可读取 auto_exposure 和 exposure_time_absolute，其他控制项不要假定会随 YAML 自动恢复。
 
 ## 配置对应
 
@@ -31,5 +31,3 @@ python3 /ros2_ws/src/ur_teleop/ur_teleop/camera_inspector.py --list
 导出的 width/height/fps 来自活动采集模式；未启动时使用界面输入。resize 默认 false，resize_width/resize_height 默认 320×240，修改它们只改变录制保存尺寸，不能改变此工具预览或驱动采集尺寸。完整启动参数见[相机发布](launch.md#相机)，录制选择见[数据采集](data_recorder.md)。
 
 USB 的 metadata 节点不是独立相机，工具按节点 index 过滤；RealSense 按序列号分组，并优先采用 SDK 序列号。两台 USB 可以有相同序列号，用物理端口区分；缺少稳定路径时 /dev/videoN 可能随插拔改变。
-
-逻辑与界面测试位于 `tests/test_camera_inspector.py`、`test_camera_inspector_gui.py`，启动配置测试位于 `test_camera_launch.py`，使用模拟设备，不证明真实相机型号、曝光或编码已验收。

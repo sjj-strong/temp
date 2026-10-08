@@ -25,7 +25,7 @@ ros2 pkg prefix cartesian_impedance_controller
 ros2 pkg prefix data_collection
 ```
 
-`src/lerobot`、`src/robot_utils` 当前可被 `COLCON_IGNORE` 排除；存在源码不等于 ROS 包已安装。`data_collection` 位于 robot_utils 中，相机 launch 需要其安装产物。`ros2 pkg prefix data_collection` 失败时应先安装该包，不能直接跳到相机发布。LeRobot 是 Python 依赖，不靠 colcon 构建；采集器可自动转入 `/opt/lerobot_venv`，该环境需已有 LeRobot、tqdm 及所需图像/视频依赖。
+相机发布依赖已安装的 `data_collection`；上述查询失败时需先安装该包。录制需配置 LeRobot Python 环境 `/opt/lerobot_venv`，包含 LeRobot、tqdm 和所需图像/视频依赖。
 
 ## UR 与初始位置
 
@@ -40,7 +40,7 @@ ping -c 3 169.254.138.15
 
 读取脚本会启动或复用控制器，不发送运动指令，并备份配置，详见[读取从臂初始位置](capture_slave_home.md)。Alicia 的 `home.master` 需独立设置，不由该脚本更新。
 
-真机 Home 会提示在示教器启动 External Control 并等回车。工作区真机测试仅允许控制 `wrist_3_joint`；完整六轴 Home/遥操作测试使用 mock，不将下文 mock 示例改为真机测试命令。
+真机 Home 会提示在示教器启动 External Control 并等回车；确认后执行 Home 运动。仿真与真机命令见[完整流程](workflow.md#3-回-home)。
 
 ## Alicia
 

@@ -1,32 +1,45 @@
-# 夹爪控制
+# 夹爪使用
 
-实现：`ur_teleop/gripper_controller.py`（Alicia 纯逻辑）、`teleop_node.py` 和 `xbot_teleop_node.py`（ROS 执行）。默认打开 0.0 rad、闭合 0.4 rad，都是 Robotiq knuckle 目标；实际动作和 effort 单位由控制器定义。
+`gripper.enabled` 控制夹爪执行，`recorder.record_action_gripper` 控制是否保存开合指令。两者独立。夹爪随 Home/遥操作启动，无需单独运行本包的夹爪模块；仿真与真机入口见[完整流程](workflow.md)。
 
-## Alicia 迟滞
+## 配置
 
-`GripperController.update(alicia_gripper_m)` 的输入单位为米。大于 close_threshold_m 判闭合，小于 open_threshold_m 判张开，两个阈值之间（含等号）保持原目标。只有目标变化才返回 OPEN/CLOSED，否则返回 UNKNOWN。初始 current_target 也是 UNKNOWN。
-
-| `gripper` 参数 | 代码缺省 |
+| `gripper` 参数 | 作用 |
 | --- | --- |
-| `enabled` | false（纯逻辑模块缺省，YAML 可显式开启） |
-| `action_server` | /robotiq_gripper_controller/gripper_cmd |
-| `open_pos_rad`、`close_pos_rad` | 0.0、0.4 |
-| `open_threshold_m`、`close_threshold_m` | 0.005、0.0125 |
-| `max_effort` | 50.0 |
-| `fsm_rate_hz` | teleop 轮询缺省 10 Hz |
+| `enabled` | 是否启用夹爪 |
+| `action_server` | 夹爪 Action，通常为 `/robotiq_gripper_controller/gripper_cmd` |
+| `open_pos_rad` | 打开目标关节角，例如 0.0 rad |
+| `close_pos_rad` | 闭合目标关节角，例如 0.4 rad |
+| `max_effort` | 下发的最大 effort；含义和单位以夹爪控制器为准 |
+| `open_threshold_m` | Alicia 输入小于此值时打开，例如 0.005 m |
+| `close_threshold_m` | Alicia 输入大于此值时闭合，例如 0.0125 m |
+| `fsm_rate_hz` | Alicia 夹爪输入检查频率，默认 10 Hz |
 
-阈值没有倒置校验，应保证 open 小于 close。`get_knuckle_command()` 对 CLOSED 返回闭合角，其余返回打开角；`get_gripper_command_signal()` 对 CLOSED 返回 1，其他返回 0。
+两个输入阈值只用于 Alicia，须满足打开阈值小于闭合阈值。区间内保持原开合状态，避免抖动；它们与输出目标角度不是同一物理量。Xbot 不使用这两个阈值。
 
-## ROS 请求
+## 操作
 
-Alicia 夹爪定时器在 action server 未就绪时重试，节点启动后超过 30 秒仍未就绪才禁用。它不要求 teleop ACTIVE；软件停止或 enabled=false 才直接返回。保存的 future 是 `send_goal_async` 请求，等待的是发送请求结果，不是实际运动完成，也没有完整的结果处理/自动失败重发。
+Alicia 根据主臂夹爪输入自动切换开合。夹爪检查不以关节遥操作的 Enter 使能为门控。启动后 30 秒内仍找不到 Action 服务时会禁用夹爪；排查驱动后重启遥操作。
 
-发送 `ParallelGripperCommand.Goal` 时，command.name 为 robotiq_85_left_knuckle_joint，position 为开合角，effort 为配置值。目标没有变化时不再发送，发送失败后不能假定会自动补发。
+Xbot 就绪并按住 RB 时，按 A 切换开合；夹爪忙碌、反馈过期或服务未就绪时忽略操作。录制指令为打开 0、闭合 1，表示目标状态，不代表夹爪已运动到位。
 
-Xbot 不读取 Alicia 的迟滞阈值；A 键有效边沿、RB 运动已使能、夹爪反馈新鲜且服务就绪时切换上一次已接受的目标。首次反馈按开闭角中点初始化二值指令，目标拒绝时保持旧指令。请求接受后等待 action 结果，再释放忙碌门控；停止时会尝试取消已保存的 goal。
+## 硬件与仿真
 
-## 启动开关和数据
+真机需填写 `cell.gripper_port`。Alicia Home 还需传 `enable_gripper:=true`，与 YAML 开关一致；例如在[真机 Home 命令](workflow.md#alicia-真机)中增加：
 
-`gripper.enabled` 控制执行；Alicia Home 的 `enable_gripper` CLI 仅覆盖阶段 1，阶段 2 仍读取 YAML，应保持一致。Alicia 关节阻抗 mock 只包含六轴，不加载夹爪；前向位置 mock 在开关开启时可加载夹爪。Xbot 使用组合模型，按开关加载夹爪控制器；未加载时外形/TF 仍存在。
+```bash
+ros2 launch ur_teleop home.launch.py \
+  config_file:=/ros2_ws/src/ur_teleop/config/alicia_teleop.yaml \
+  sim:=false controller:=joint_impedance enable_gripper:=true \
+  gripper_port:=/dev/ttyUSB0 enable_ft300:=false
+```
 
-`recorder.record_action_gripper` 决定是否保存二值 cmd_gripper（开 0、闭 1），不保存夹爪实测 observation，也不把录制开关解释为硬件开关。详见[数据采集](data_recorder.md)。
+同时核对实际机器人 IP 和 Alicia 串口；未显式传入时使用安装配置的默认值。Xbot 直接按 YAML 开关启动夹爪。
+
+Alicia 关节阻抗 mock 仅包含 UR 六轴，应关闭夹爪；Xbot mock 可启用虚拟夹爪。无法开合时检查：
+
+```bash
+ros2 action list -t
+```
+
+确认配置的 Action 存在，并查看驱动和请求失败日志。

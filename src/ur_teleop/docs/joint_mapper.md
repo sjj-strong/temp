@@ -1,17 +1,24 @@
 # Alicia 关节映射
 
-实现：`ur_teleop/joint_mapper.py`，纯逻辑。`JointMapper(mapping_config, master_home, slave_home)` 使用会话实际捕获位置作为基准，按数组索引映射：
+主臂关节变化按比例和方向映射到 UR，基准为每次启动后实际捕获的双臂位置：
 
 ```text
-raw[i] = slave_home[i] + sign[i] × scale[i] × (master_q[i] − master_home[i])
-command[i] = clamp(raw[i], limits[ur_joint_order[i]][0] + margin,
-                          limits[ur_joint_order[i]][1] − margin)
+UR 目标 = 捕获的 UR 位置 + sign × scale × (主臂位置 − 捕获的主臂位置)
 ```
 
-构造参数中的 `safety` 包含 `limits` 和 `clamp_margin_rad`，由 teleop 的 `build_mapping_config()` 合并。margin 代码缺省为 0.1 rad。两侧顺序、sign、scale 和两个 Home 数组都须为六项；限位必须包含配置的从臂名称，否则构造抛 ValueError。`master_to_slave(master_q)` 也校验输入长度。
+## 参数
 
-名称列表用于描述顺序和查询限位，mapper 不按名称重新排列输入。当前 teleop 回调实际按 `ALICIA_JOINT_NAMES` 读取主臂、按 `UR_JOINT_NAMES` 读取从臂；输出消息仍使用 UR 标准顺序，因此不应仅修改 mapping 名称顺序来重排关节。
+在 `alicia_teleop.yaml` 中配置：
 
-`ur_joint_order`、`alicia_joint_order`、`get_master_home()` 和 `get_slave_home()` 返回副本；`num_joints` 为从臂数组长度。SessionOffset 复制实际位置但不校验长度，最终由 mapper 校验。
+| 参数 | 作用 |
+| --- | --- |
+| `mapping.sign` | 六个方向系数；1 同向、-1 反向 |
+| `mapping.scale` | 六个位移比例；例如 0.8 表示主臂转动 1 rad，对应 UR 转动 0.8 rad |
+| `mapping.alicia_joint_order` | 保持 Joint1 至 Joint6 顺序 |
+| `mapping.ur_joint_order` | 保持 shoulder_pan、shoulder_lift、elbow、wrist_1、wrist_2、wrist_3 顺序 |
+| `safety.limits` | 每个 UR 关节允许的最小/最大角度，rad |
+| `safety.clamp_margin_rad` | 限位内缩余量，rad |
 
-mapper 只做静态仿射变换和数值截断，不做速度限制、滤波或物理合理性检测。Ruckig 平滑仅在所选路径启用时存在；关节阻抗关闭 Ruckig 后由控制器处理其内部参考和力矩限制。参数见[Alicia 配置](alicia_teleop_config.md)，单元用例见 `tests/test_joint_mapper.py`。
+以上数组均须为六项。映射按数组索引对应，修改名称顺序不会自动重排输入。目标超出限位时截断到内缩后的范围。
+
+映射本身不限制速度；平滑设置见[Ruckig](ruckig_node.md)。运行命令见[完整流程](workflow.md#4-遥操作)，参数修改后重启遥操作。

@@ -20,17 +20,11 @@ source /ros2_ws/install/setup.bash
 
 完整的硬件、相机调试、teleop 测试到 record 采集步骤见[完整流程](workflow.md)，控制器参数见[控制器说明](controllers.md)。
 
-## Alicia 启动
+## 机器人启动
 
-```bash
-# 终端 1：当前 Alicia 配置选择关节阻抗；UR 仿真，Alicia 仍是真实主臂
-ros2 launch ur_teleop home.launch.py sim:=true controller:=joint_impedance
+Alicia、Xbot 的仿真和真机 Home、遥操作及录制命令统一见[完整流程](workflow.md#3-回-home)。两个阶段必须使用同一配置文件。Alicia Home 的 `controller` 与 YAML `teleop.controller` 保持一致。
 
-# 终端 2：Home 到位后启动，进入 ARMED 后按 Enter
-ros2 launch ur_teleop teleop.launch.py mode:=teleop
-```
-
-使用自定义配置时，两个阶段传入同一 `config_file:=/绝对路径/配置.yaml`。
+## 启动参数
 
 | 参数 | 适用入口 | 说明 |
 | --- | --- | --- |
@@ -46,21 +40,13 @@ ros2 launch ur_teleop teleop.launch.py mode:=teleop
 
 Alicia Home 的参数默认值来自安装目录的 `alicia_teleop.yaml`；自定义 `config_file` 不会替换这些默认值，必要时显式传入对应参数。teleop 阶段按所选配置读取默认值。Xbot Home 直接读取所选配置，不使用上述 Alicia 专属参数覆盖。
 
-## Alicia 控制器选择
+## Alicia 控制路径
 
-`teleop.controller: forward_position` 使用 Ruckig 平滑目标后发送至 `/forward_position_controller/commands`。
+`forward_position` 通过 Ruckig 向前向位置控制器发送目标；`joint_impedance` 通过关节阻抗控制器执行，可用 YAML `ruckig.enabled` 选择平滑或直接发布。
 
-设置为 `joint_impedance` 时，应确保 Home 的 `controller` 与 YAML 一致；自定义配置或覆盖时显式传 `controller:=joint_impedance`。轨迹控制器先使用 position 接口回 Home，遥操作再严格切换到 effort 阻抗接口：
+修改平滑开关推荐使用 YAML 并重启遥操作。launch 的 `use_ruckig` 仅控制节点是否启动，未覆盖目标发布路径；与 YAML 不一致会导致指令无法到达或重复发布。
 
-```bash
-ros2 launch ur_teleop home.launch.py sim:=true controller:=joint_impedance
-# Home 到位后，在另一终端执行
-ros2 launch ur_teleop teleop.launch.py mode:=teleop
-```
-
-该仿真分支使用仅含 UR 六轴的 mock，建议在临时配置关闭 `gripper.enabled` 并在 Home 传 `enable_gripper:=false`。完整示例见[流程](workflow.md)。Ruckig 向 `/joint_impedance_controller/target_joint_state` 发布目标；关闭 `ruckig.enabled` 时由遥操作直接发送。
-
-本文未执行真实机器人运动验证，完整 Home/遥操作示例只用于 mock，真机测试仍仅允许 wrist_3_joint。真机连接的代码分支需配置正确的 IP、串口、Home 与 `sim: false`，确认控制器支持所需接口后再运行。运行期间不得由其他节点向同一运动控制器发送指令。Home 失败应检查实际关节值与 `home.slave`，不要用跳过验证代替故障处理。
+Home 完成后其一次性节点退出，硬件控制栈继续运行。运行中保持 Home 终端开启，同一控制器只保留一个指令源。
 
 ## 相机
 
@@ -76,6 +62,9 @@ front:
   height: 480
   fps: 30
   fourcc: MJPG
+  resize: true
+  resize_width: 320
+  resize_height: 240
 
 wrist:
   type: realsense
@@ -98,8 +87,6 @@ ros2 launch ur_teleop camera.launch.py \
 - `type` 为 `usb` 或 `realsense`。USB 的 `device` 填设备路径或端口索引，优先使用稳定的 `/dev/v4l/by-path`；RealSense 的 `serial_no` 必须加引号，各设备独立启动，不固定相机型号或数量。
 - `enabled` 默认 `true`，关闭后不启动也不加入预览。`visualize` 默认 `false`，仅开启时加入拼图；没有相机需要预览时，不启动拼图节点或 rqt。
 - 宽高和帧率必须为正整数，默认 640×480、30 FPS。USB 可配置 `fourcc`、`publish_compressed`、`compressed_quality`、`auto_exposure`、`exposure_time_absolute` 和 `frame_id`；RealSense 用 `enable_color`、`enable_depth` 控制图像流。
-- 原有按类别开关及序列号的命令行参数已移除；入口仅使用 `config_file`，每台相机的参数在文件内修改。已有旧配置须按上例迁移。
+- 相机入口仅使用 `config_file`；每台相机的参数在文件中修改。
 - 预览话题自动从选中的相机生成，无需单独维护话题列表；拼接结果为 `/camera_mosaic/image_raw`。预览使用彩色图像，RealSense 需要开启 `enable_color`。
 - 每台相机的 `resize` 控制保存时是否缩放，`resize_width`、`resize_height` 设置保存尺寸；`width`、`height` 是采集尺寸。`alicia_teleop.yaml` / `xbot_teleop.yaml` 的 `recorder.cameras` 只按名称选择录制相机，尺寸和话题自动从同一相机文件读取，见[录制配置](data_recorder.md)。
-
-修改 Ruckig 路径应使用 YAML `ruckig.enabled` 并重启阶段 2。`use_ruckig:=false` 配合仍启用的 YAML 会令 teleop 继续发向缺失的 Ruckig 节点；反向不一致可能产生直接输出与 Ruckig 双发布，不应作为推荐命令。Home cell 由 launch 启动后，Home 节点退出不会自动关闭 cell。

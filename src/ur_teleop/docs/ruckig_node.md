@@ -1,19 +1,34 @@
-# Ruckig 在线平滑
+# Ruckig 关节平滑
 
-实现：`ur_teleop/ruckig_node.py`。订阅 `/ruckig/target_joint_positions` 六维关节目标，使用 UR `/joint_states` 初始化在线轨迹生成器，再按 `teleop.controller` 发布：
+Ruckig 对 Alicia 的六关节目标施加速度、加速度和加加速度限制。正常使用由 `teleop.launch.py` 自动启动，无需单独运行；仿真和真机用法一致，见[使用流程](workflow.md)。Xbot 不使用 Ruckig。
 
-| 控制器选择 | 话题 | 类型 |
-| --- | --- | --- |
-| `forward_position` | `/forward_position_controller/commands` | Float64MultiArray |
-| `joint_impedance` | `/joint_impedance_controller/target_joint_state` | JointState，六关节名称和 position |
+## 配置
 
-ROS 参数 `control_hz` 的节点缺省是 **100 Hz**。`teleop.launch.py` 则显式传入 `ruckig_control_hz`，为空时读取 YAML `ruckig.control_hz`，该 launch 兜底为 **500 Hz**；当前 Alicia 配置也为 500 Hz。独立 `ros2 run` 不会自动采用 YAML 中的 control_hz，需显式传参数。
+```yaml
+ruckig:
+  enabled: true
+  control_hz: 500.0
+  max_velocity: [0.30, 0.30, 0.30, 0.30, 0.30, 0.30]
+  max_acceleration: [0.80, 0.80, 0.80, 0.80, 0.80, 0.80]
+  max_jerk: [4.0, 4.0, 4.0, 4.0, 4.0, 4.0]
+```
 
-初始化前须六个 UR 关节都收到过反馈；位置和速度来自实测值，初始目标设为当前位置。初始化后每 tick 都执行 `otg.update()`，发布输出再 `out.pass_to_input(inp)`，不等待 teleop ACTIVE 信号。实测初速度可能非零，不能保证启动后绝对没有运动。后续反馈缓存更新，但正常 OTG 的当前状态沿用前一步输出，而非每步重新覆盖实测值。
+限速数组按 UR 六关节顺序填写，单位分别为 rad/s、rad/s²、rad/s³。示例值需按实际任务调整。
 
-目标长度不为 6 或含 NaN/Inf 时拒绝；Ruckig 结果不为 Working/Finished 时记录 error 并跳过本周期。六维限速数组从 YAML 读取，缺失或长度不为 6 时回退 `[0.30]×6` rad/s、`[0.80]×6` rad/s² 和 `[4.0]×6` rad/s³。配置加载失败也回退前向位置和代码限速值；不可把 fallback 当作成功加载原配置。
+- `joint_impedance` 可用 `enabled: false` 改为直接发布目标。
+- `forward_position` 始终使用 Ruckig。
+- 修改后重启遥操作。推荐通过 YAML 设置启用状态；launch 的 `use_ruckig` 只控制节点启动，不能同步修改遥操作发布路径。
 
-正常使用是在 Home 完成后启动 teleop，步骤见[完整流程](workflow.md)。独立运行的参数写法为：
+## 输出与注意事项
+
+| 控制器 | 输出话题 |
+| --- | --- |
+| forward_position | `/forward_position_controller/commands` |
+| joint_impedance | `/joint_impedance_controller/target_joint_state` |
+
+收到完整 UR 反馈后，节点以当前位置初始化并持续输出；不等待遥操作使能，也不监听软件停止。已有目标会继续平滑执行。同一输出话题只保留一个目标发布器。
+
+需要独立运行时，先启动并确认对应硬件和控制器，停止其他 Ruckig 发布器，然后执行（仿真/真机通用）：
 
 ```bash
 ros2 run ur_teleop ruckig_node --ros-args \
@@ -21,6 +36,4 @@ ros2 run ur_teleop ruckig_node --ros-args \
   -p control_hz:=500.0
 ```
 
-同一输出话题只运行一个发布器。关节阻抗的 `ruckig.enabled: false` 让 teleop 直接发布，此时不要另起 Ruckig。前向位置在 teleop 代码中始终走 Ruckig。`cell.launch.py` 没有 `ruckig` 启动参数。
-
-节点不订阅 `/teleop/e_stop`，上游暂停不会取消既有目标。依赖为 Python `ruckig` 库；离线逻辑测试位于 `tests/test_ruckig_node.py`。
+独立入口的频率默认 100 Hz，需显式传 `control_hz`；通过遥操作 launch 启动时读取 YAML 频率。初始化失败时检查完整六关节反馈；目标无效时检查六项数组和有限数值。

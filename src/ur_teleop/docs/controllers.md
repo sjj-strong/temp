@@ -1,6 +1,6 @@
 # 遥操作使用的控制器
 
-本包编排既有控制器，不实现阻抗计算。两种输入源都先由 `scaled_joint_trajectory_controller` 完成 Home，再进入对应遥操作控制器。
+本包按输入源选择控制器。两种输入源都先由 `scaled_joint_trajectory_controller` 完成 Home，再进入对应遥操作控制器。
 
 | 阶段/输入源 | 配置选择 | 控制器与接口 | 对应文档 |
 | --- | --- | --- | --- |
@@ -13,7 +13,7 @@
 
 Alicia 默认源码配置选择 `joint_impedance`。其 Home 命令应显式带 `controller:=joint_impedance`，确保 cell 与遥操作节点选择相同控制器。关节阻抗参数与接口见[关节阻抗文档](../../joint_impedance_controller/docs/README.md)。若改用前向位置，应同时修改 YAML 和 Home 命令的 `controller` 参数。
 
-Xbot 的 `xbot.controller_config_file` 是阻抗参数入口：手柄节点和录制器从原文件读取参考 link；Home 对 damping:null 计算 2√K 并写临时文件供 spawner 使用，显式阻尼时保持原文件。仿真应指向 `ur10e_xbot_sim_cartesian_impedance.yaml`，参考 link 为 `base_link`；真机应使用匹配实际硬件的配置，通常为 `base`。当前源码选择 `ur10e_cartesian_impedance_high.yaml`，不要把它直接用作 mock 参数。
+Xbot 的 `xbot.controller_config_file` 是阻抗参数入口：控制和录制共用其参考坐标系；`damping: null` 自动按 `2√K` 计算阻尼，显式填写则使用给定值。仿真应指向 `ur10e_xbot_sim_cartesian_impedance.yaml`，参考 link 为 `base_link`；真机应使用匹配实际硬件的配置，通常为 `base`。当前源码选择 `ur10e_cartesian_impedance_high.yaml`，不要把它直接用作 mock 参数。
 
 刚度、阻尼、误差/wrench/力矩限幅见[参数与安全](../../cartesian_impedance_controller/docs/04_参数与安全.md)；已有配置档位见[刚度阻尼三档配置](../../cartesian_impedance_controller/docs/07_刚度阻尼三档配置.md)。控制器参考 link 会决定目标转换与数据集 action 的坐标系。
 
@@ -27,4 +27,4 @@ ros2 control list_controllers -c /controller_manager
 ros2 topic echo --once /joint_states
 ```
 
-状态广播器应保持 active，轨迹与遥操作控制器按阶段切换。Xbot Home 阶段阻抗控制器应为 inactive。切换封装见[控制器切换](controller_switcher.md)，组合 mock 说明见[xbot_effort_mock](../../ur10e_robotiq_ft_description/docs/xbot_effort_mock.md)。`debug` 日志开关见[采集日志](data_recorder.md#采集日志与进度)。
+状态广播器应保持 active，轨迹与遥操作控制器按阶段切换。Xbot Home 阶段阻抗控制器应为 inactive。切换行为见[控制器切换](controller_switcher.md)，组合 mock 说明见[xbot_effort_mock](../../ur10e_robotiq_ft_description/docs/xbot_effort_mock.md)。`debug` 日志开关见[采集日志](data_recorder.md#采集日志与进度)。

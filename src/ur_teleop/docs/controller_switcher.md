@@ -1,11 +1,22 @@
-# 控制器异步切换
+# 控制器自动切换
 
-实现：`ur_teleop/controller_switcher.py`。构造 `ControllerSwitcher(node, timeout_s=10.0)` 建立 `/controller_manager/list_controllers`、`load_controller`、`switch_controller` 三个客户端。
+正常使用由遥操作自动切换控制器，无需手动调用服务。启动命令见[完整流程](workflow.md)。
 
-`services_ready()` 只检查三服务发现状态。`list_controllers()`、`load_controller(name)`、`switch(activate, deactivate)` 都调用 `call_async` 并返回 future；对应客户端未就绪时返回 None。模块不 spin 执行器，调用者自行推进回调和轮询 future。
+| 输入源 | Home 控制器 | 遥操作控制器 | 切换时机 |
+| --- | --- | --- | --- |
+| Alicia | scaled_joint_trajectory_controller | forward_position_controller 或 joint_impedance_controller | teleop 按 Enter，record 首次开始录制 |
+| Xbot | scaled_joint_trajectory_controller | cartesian_impedance_controller | Home 和反馈满足条件后自动切换 |
 
-`switch()` 使用 STRICT，并复制 activate/deactivate 名称数组。它不自动加载控制器、不决定冲突控制器、不重试，也不把构造的 timeout_s 写进 SwitchController 请求；这些逻辑由 Alicia 或 Xbot 调用者负责。
+Alicia 切换失败会重新查询并重试，累计五次失败后回到等待使能状态；加载失败同样等待重新使能。Xbot 切换失败或超时会锁定遥操作，需排查后重启。
 
-`list_result(future)` 在 None、未完成或空结果时返回 `{}`，否则返回名称到状态的字典。`switch_ok(future)` 同样在无有效结果时返回 False，完成时读取 `.ok`。future 自身包含异常或取消时，`.result()` 可能抛异常，调用侧必须捕获。
+## 查看状态
 
-`wait_for_services(timeout_s=None)` 是阻塞 API，逐个以 0.5 秒等待服务，三个客户端共享一个 deadline；缺省使用构造时 timeout_s。它不能放进控制定时器回调中。Alicia 的重查/加载/五次切换重试见[遥操作节点](teleop_node.md)，Xbot 自动接管和控制器状态确认见[手柄说明](xbot_control.md)。
+仿真与真机均可运行：
+
+```bash
+ros2 control list_controllers -c /controller_manager
+```
+
+Home 阶段轨迹控制器应为 `active`；遥操作阶段所选控制器应为 `active`，冲突控制器应为 `inactive`。
+
+服务找不到时确认 Home 终端仍运行、各终端 ROS 域一致。切换失败时核对硬件支持的命令接口与[控制器配置](controllers.md)，并停止重复的控制进程。
