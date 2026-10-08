@@ -1,155 +1,195 @@
-# 真实环境远程评估
+# 真机远程推理使用指南
 
-使用 HTTP 传输原始观测和完整物理量 Action Chunk。服务器运行 LeRobot，本地主机连接现有 ROS 2 相机和阻抗控制器。真机笛卡尔运动测试禁止运行；运动验证使用 Mock 或仿真。
+服务器执行 LeRobot 模型推理，主机采集原始观测并将相对位姿动作发送给现有笛卡尔阻抗控制器。运行顺序：**准备配置 → 启动推理服务与 SSH 隧道 → 启动硬件和相机 → 只读检查 → 执行动作 → 停止**。
 
-## Python 环境
+> 当前工作区禁止真机笛卡尔运动测试。本文说明完整部署及操作方式；动作执行步骤须在允许该操作的运行环境中使用。只读模式不会发送目标，但硬件启动入口本身会激活阻抗控制器。
 
-所有 Python 依赖统一由 `uv` 管理在 `/opt/lerobot_venv`，不创建项目或临时虚拟环境：
+## 1. 准备环境与模型
+
+两端均部署本项目，以下约定目录为 `/ros2_ws/src/real_world_evaluation`。所有 Python 依赖通过 `uv` 安装到已有的 `/opt/lerobot_venv`。
+
+**服务器：**安装与训练一致的 LeRobot、对应 policy 依赖，以及支持 RTX 4090 的 PyTorch CUDA 环境。
 
 ```bash
+cd /ros2_ws/src/real_world_evaluation
 uv pip install --python /opt/lerobot_venv/bin/python -r requirements-server.txt
-/opt/lerobot_venv/bin/python -m pytest tests -q
+/opt/lerobot_venv/bin/python -c 'import torch; print(torch.cuda.is_available())'
 ```
 
-主机仅安装 `requirements-client.txt` 即可；服务器额外使用与训练一致的 LeRobot 及 policy 依赖。ROS Python 包来自系统 ROS 安装，通过 source 环境使用。
+最后一条应输出 `True`。将实际训练得到的完整 `pretrained_model/` 目录和训练数据的完整 `meta/` 目录复制到服务器；无需复制训练图像和视频。权重目录必须包含模型配置、权重、前后处理配置及其统计状态文件。
 
-## 通信协议
-
-`Observation` 包含 `step_id`、具名原始数值 `values`、相机键到 PNG/Base64 的 `images`、`reference_frame`、`tcp_link`、可选 `wrench_frame` 和 `instruction`。图像保持采集分辨率及像素，声明 `rgb8` 或 `bgr8`。
-
-`ActionChunk` 为 `step_id` 和非空 `[T,D]` 的 `actions`，仅接受六维 rel pose 或附带夹爪的七维动作。NaN/Inf、非矩形及其他维度拒绝执行。
-
-本机 ROS 的 `launch_testing` 插件与共享环境 pytest 不兼容，本项目测试命令使用 `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 /opt/lerobot_venv/bin/python -m pytest tests -q`，不修改共享插件。协议测试当前 8 项通过。
-
-## 服务端与权重验证
-
-进入 `/ros2_ws/src/real_world_evaluation` 后，首次离线生成测试权重：
+**主机：**已安装并构建 UR 驱动、`cartesian_impedance_controller`、组合机器人描述包、相机驱动，以及需要使用的夹爪驱动。
 
 ```bash
-HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 /opt/lerobot_venv/bin/python tests/smoke_checkpoint.py
+cd /ros2_ws/src/real_world_evaluation
+uv pip install --python /opt/lerobot_venv/bin/python -r requirements-client.txt
+```
+
+所有操作 ROS 的主机终端先执行：
+
+```bash
+source /opt/ros/jazzy/setup.bash
+source /ros2_ws/install/setup.bash
+```
+
+主机各终端使用同一个 ROS 域。下面的 IP、SSH 用户、串口、相机名称和模型路径均需按现场替换。
+
+## 2. 配置服务器和主机
+
+### 服务器：`configs/server.yaml`
+
+```yaml
+checkpoint_path: /data/checkpoints/task/pretrained_model
+dataset_root: /data/datasets/task  # 此目录下包含完整 meta/。
+device: cuda
+reference_frame: base
+tcp_link: tool0
+wrench_frame: null
+host: 127.0.0.1
+port: 8000
+```
+
+- Policy 类型及维度从 checkpoint 自动识别；状态字段顺序来自训练元信息。
+- `reference_frame`、`tcp_link` 必须同时符合训练定义和控制器设置。本文独立硬件入口默认使用 `base/tool0`，不能将 `base_link` 与 `base` 混用。
+- 模型使用力观测时，将 `wrench_frame` 改为训练所用、且与力话题 `header.frame_id` 一致的坐标系；不使用力观测时保留 `null`。
+- 当前支持六维 rel pose，或附带夹爪的七维动作。单观测、无时序集成且支持直接完整 chunk 推理的策略才能启动；依赖观测历史或内部队列的策略会被拒绝，当前仓库的 Diffusion 属于后者。
+
+### 主机：`configs/client.yaml`
+
+保留现有参数，先修改以下内容：
+
+```yaml
+mode: ros
+read_only: true
+server_url: http://127.0.0.1:8000
+instruction: 实际任务指令
+cameras:
+  observation.images.front: /camera/usb_front/color/image_raw
+gripper:
+  enabled: true  # 七维动作启用；六维动作可关闭。
+  max_effort: 50.0
+```
+
+| 参数 | 设置依据 |
+| --- | --- |
+| `action_hz` | 与训练动作的时间尺度一致；不是底层阻抗控制频率 |
+| `execute_steps` | 每次执行 chunk 的前多少步，再重新采集和推理 |
+| `max_steps` | 本次最多执行的动作总数 |
+| `request_timeout_s` | HTTP 连接、读写等阶段的超时，单位秒 |
+| `data_timeout_s` | ROS 消息允许的最大年龄，单位秒 |
+| `startup_timeout_s` | 初始化后等待必要观测就绪的时限，单位秒 |
+| `controller` | 默认 `/cartesian_impedance_controller` |
+| `joint_topic` | 默认 `/joint_states`，仅在模型需要关节观测时使用 |
+| `wrench_topic` | 默认 UR 内置力话题 `/force_torque_sensor_broadcaster/ft_data` |
+
+`cameras` 的键必须与模型图像特征名一致，值为本地原始图像话题。实际图像尺寸必须与模型输入一致；`ur_teleop/config/camera.yaml` 的 `resize` 只控制录制保存尺寸，不会改变原始图像话题。训练时若使用了保存缩放，不能直接发送不同尺寸的原始图像；当前服务不会自动猜测缩放方式。
+
+夹爪接口固定为 `/robotiq_gripper_controller/gripper_cmd`，驱动关节固定为 `robotiq_85_left_knuckle_joint`，打开/闭合目标固定为 `0.0/0.4 rad`，不提供配置覆盖。
+
+## 3. 启动推理服务和隧道
+
+**服务器终端：**
+
+```bash
+cd /ros2_ws/src/real_world_evaluation
 /opt/lerobot_venv/bin/python -m server --config configs/server.yaml
 ```
 
-脚本创建 16 帧 RGB 图像、具名 TCP 状态、七维相对动作，训练 ACT 一步；禁用预训练视觉权重下载、Hub 上传及 WandB。产物写在被 Git 忽略的 `artifacts/`，已有训练输出不覆盖。数据已存在时复用；需要再次训练请先自行更换或备份输出目录。一步训练只验证链路，不具备控制质量。
+等待模型加载完成，出现监听 `127.0.0.1:8000` 的提示，保持终端运行。
 
-实际生成的目录：
-
-```text
-artifacts/act/checkpoints/000001/
-├── pretrained_model/
-│   ├── config.json
-│   ├── model.safetensors
-│   ├── train_config.json
-│   ├── policy_preprocessor.json
-│   ├── policy_postprocessor.json
-│   ├── policy_preprocessor_step_3_normalizer_processor.safetensors
-│   └── policy_postprocessor_step_0_unnormalizer_processor.safetensors
-└── training_state/
-    ├── optimizer_param_groups.json
-    ├── optimizer_state.safetensors
-    ├── rng_state.safetensors
-    └── training_step.json
-```
-
-服务器从 `config.json` 自动识别 policy，再调用 LeRobot 工厂及 checkpoint 处理器，不硬编码 ACT。`checkpoint_path` 指向 `pretrained_model`；`dataset_root` 指向训练数据目录，只需完整 `meta/`，不传输视频/帧文件。省略 `dataset_root` 时读取 `train_config.json` 中记录的路径。路径相对于启动工作目录；迁移服务器时需修改路径。
-
-输入维度来自 checkpoint，状态排列和动作字段来自训练元信息。元信息不能只用维度替代。当前协议提供 `observation.state` 和具名 RGB 图像；图像必须与训练原始输入尺寸一致，服务器完成 RGB/CHW/float 转换，训练处理器与 policy 完成其余处理，不自行猜测缩放方式。
-
-`GET /health` 返回就绪状态、policy 类型、字段、相机 CHW 尺寸、坐标系及训练 FPS。`POST /infer` 返回完整、恰好反归一化一次的 chunk。六维动作单位为米、弧度；第七维是夹爪开合值。服务器串行接受推理，繁忙返回 409，非法观测返回 422，模型错误返回 500。客户端不重试。
-
-### Policy 兼容边界
-
-自动识别类型不等于所有模型均支持同一种观测调用：本版仅接受单观测快照、无 temporal ensemble，且 `predict_action_chunk` 可直接接受已预处理 batch 的策略。启动时以模拟观测探测并复位策略和处理器，探测失败则不监听端口。多帧历史和依赖私有观测队列的策略不猜测、不伪造历史、不用重复 `select_action` 拼装动作。
-
-已验证 ACT 完整 4 步输出，即使 checkpoint 的 `n_action_steps=2` 也不截断。第二策略 Diffusion 的配置识别和权重重载通过；本仓库其直接 chunk 接口读取内部观测队列，因此启动探测明确拒绝，不宣称支持 Diffusion 实际 rollout。
-
-验证环境：LeRobot 源码提交 `1396b9f`、PyTorch `2.10.0+cpu`。服务器与模型测试 4 项通过，协议测试 8 项通过。测试全程使用 `/opt/lerobot_venv`；CPU 验证不代表 RTX 4090 性能测试。
-
-## 主机与 UR 环境
-
-另一个终端进入项目目录后运行：
+**主机隧道终端：**
 
 ```bash
+ssh -N -o ExitOnForwardFailure=yes \
+  -L 8000:127.0.0.1:8000 用户名@10.5.174.93
+```
+
+保持此终端运行。在另一主机终端检查：
+
+```bash
+curl --fail http://127.0.0.1:8000/health
+```
+
+应返回 `ready: true`。核对 `state_names`、`cameras`、`action_names`、参考坐标系、TCP 和训练 `fps`，再完成主机配置。
+
+## 4. 启动机械臂、夹爪和相机
+
+停止其他 UR 驱动实例、遥操作节点、键盘控制工具及目标发布程序，避免重复启动和同时控制。示教器中的 External Control 程序应配置为连接本地主机，按现场流程完成机器人上电和驱动连接。
+
+**主机硬件终端：**以下使用 UR 内置力反馈，不连接 FT300。
+
+```bash
+ros2 launch cartesian_impedance_controller standalone_real.launch.py \
+  robot_ip:=169.254.138.15 \
+  use_gripper:=true gripper_com_port:=/dev/ttyUSB0 \
+  use_ft300:=false launch_rviz:=false
+```
+
+不使用夹爪时改为 `use_gripper:=false`。按照驱动提示在示教器运行 External Control，保持硬件终端运行。
+
+此入口复用 `ur10e_robotiq_ft_description/real_bringup.launch.py`，启动 UR 驱动和可选夹爪，并激活笛卡尔阻抗控制器；初始目标为当前实测位姿，不执行 Home。若训练使用 FT300，需启用真实传感器并单独确认对应 broadcaster 已发布力话题，再修改 `wrench_topic/wrench_frame`；仅打开 `use_ft300` 不代表力话题已就绪。
+
+**主机相机终端：**先在 `ur_teleop/config/camera.yaml` 中配置实际设备、分辨率和帧率，只启用需要的相机，然后运行：
+
+```bash
+ros2 launch ur_teleop camera.launch.py \
+  config_file:=/ros2_ws/src/ur_teleop/config/camera.yaml
+```
+
+此入口复用 USB 的 `data_collection/opencv_camera_node` 或 RealSense 的 `realsense2_camera_node`。保持相机终端运行；不要另开占用同一设备的采集程序。
+
+## 5. 检查硬件与只读观测
+
+**主机检查终端：**
+
+```bash
+ros2 control list_controllers -c /controller_manager
+ros2 topic echo /cartesian_impedance_controller/current_pose --once
+ros2 topic hz /camera/usb_front/color/image_raw
+```
+
+确认 `cartesian_impedance_controller` 为 `active`，位姿坐标系符合配置，相机持续发布；`topic hz` 检查后按 Ctrl-C 退出。启用夹爪时再检查：
+
+```bash
+ros2 control list_controllers -c /robotiq_controller_manager
+ros2 action list -t
+```
+
+应有 active 的夹爪控制器及 `/robotiq_gripper_controller/gripper_cmd`。模型需要力观测时执行：
+
+```bash
+ros2 topic echo /force_torque_sensor_broadcaster/ft_data --once
+```
+
+核对力消息坐标系，不满足训练定义时先处理配置或传感器问题。
+
+保持 `mode: ros`、`read_only: true`，执行：
+
+```bash
+cd /ros2_ws/src/real_world_evaluation
 /opt/lerobot_venv/bin/python -m rollout --config configs/client.yaml
 ```
 
-默认 `mode: mock`，不导入 ROS，不访问机器人；使用上面生成的 ACT 样本，可完成 10 步、每次执行 2 步的 HTTP 闭环。`max_steps` 是总执行动作数，`execute_steps` 是每次执行的前缀长度。每个动作至少留出 `1/action_hz` 的时间；调用过慢时不追赶补发，最后一步也等待一个周期再采集。同步 HTTP 延迟会降低平均动作频率。
+显示“只读观测成功”后正常退出，表示所需观测已就绪。此模式会检查 `/health`，但不会调用 `/infer`、发布位姿或操作夹爪。
 
-`ur_env.py` 将 ROS 消息、资源管理和执行作为同一个环境职责，提供 `observe/step/hold/close`。约 250 行，已检查职责，没有为减少行数额外引入 manager 或抽象基类。
+## 6. 执行推理与停止
 
-### ROS 接口
+在允许真机动作执行的运行环境中，将 `client.yaml` 的 `read_only` 改为 `false`，确认任务指令、动作频率、执行步数和夹爪开关后，重新运行上述 rollout 命令。
 
-先按现有工作流启动控制器和相机，source ROS 环境，再使用同一 `/opt/lerobot_venv/bin/python`：
+程序每轮采集观测，由服务器完成预处理、推理和反归一化，返回完整 chunk。主机执行前 `execute_steps` 步，其余丢弃；每一步按最新实测 TCP 合成绝对目标，再重新采集。同步推理等待会降低整体平均动作频率。
 
-```bash
-source /opt/ros/jazzy/setup.bash
-source /ros2_ws/install/setup.bash
-/opt/lerobot_venv/bin/python -m rollout --config configs/client.yaml
-```
+达到 `max_steps` 自动退出；按 Ctrl-C 可提前结束。退出时尝试以新鲜实测位姿保持并取消夹爪请求。确认机器人处于可控状态后，按现场停机流程停止硬件，再关闭相机、SSH 隧道和服务器。
 
-将配置改为 `mode: ros`，保留 `read_only: true` 时只获取一次观测并退出，不发布位姿或夹爪目标。相机映射的键必须与 `/health` 完全一致，值是原始图像话题。数值字段使用训练元信息的名称：`joint_position.<关节名>`、`joint_velocity.<关节名>`、`joint_effort.<关节名>`、`tcp_ee_x...tcp_ee_qw`、`force.x...torque.z`。不存在或过期的必要字段导致失败，不填零。
+**退出 rollout 或停止发布目标不等于硬件急停。** 控制器可能继续保持上一目标；反馈失效时保持请求也可能失败。需要立即停止机器人时使用现场硬件停止措施。
 
-启动读取控制器 `base_frame`、`tip_frame`、`tf_prefix` 参数，与训练配置比较；每条位姿还检查 `header.frame_id`。力数据保持消息原始坐标系，检查 `wrench_frame`。接收时间和消息时间戳都必须新鲜，主机及 ROS 时钟必须一致。当前支持 `rgb8/bgr8` 原始图像，正确忽略行尾填充字节。
+## 常见问题
 
-仅在仿真运动验证时设置 `read_only: false`。七维动作还需 `gripper.enabled: true` 和可用夹爪 action 服务；六维动作不操作夹爪。夹爪按 0.5 阈值开合，同状态不重复发送；Action 地址、驱动关节、打开 0.0 rad、闭合 0.4 rad 固定在 `ur_env.py`，不支持 YAML 覆盖；配置仅保留夹爪启用开关和力度。ROS executor 持续更新消息，HTTP 和动作前缀执行仍为同步流程。
-
-末端目标按 `p_target=p_current+Δp` 和 `q_target=rotvec(Δr)×q_current` 计算，每一步使用最新实测 pose。旋转向量位于参考坐标系，不能逐项相加欧拉角，也不能累计上一目标。客户端不会 Home、切换控制器或启动硬件。
-
-异常或正常结束都尝试保持并关闭资源。保持只依赖新鲜 TCP，相机失效不会阻止保持；TCP 过期时停止发布并报告保持失败。现有阻抗控制器没有命令超时自动停止功能，仍可能保持上一目标；这不等于硬件急停。并发操纵同一控制器的遥操作程序必须先停止。
-
-## 远程部署
-
-服务器准备与训练一致的 LeRobot 环境和本项目文件，全部 Python 依赖使用 `/opt/lerobot_venv`，通过 `uv pip install --python /opt/lerobot_venv/bin/python ...` 管理。复制 `pretrained_model` 及训练数据的 `meta`，配置服务器上的路径和 `device: cuda`。服务器仍只监听 `127.0.0.1:8000`。
-
-主机手工建立隧道（替换 SSH 用户名）：
-
-```bash
-ssh -N -o ExitOnForwardFailure=yes -L 8000:127.0.0.1:8000 用户名@10.5.174.93
-```
-
-主机 `server_url` 保持 `http://127.0.0.1:8000`。隧道断开或请求超时即终止，不重试。服务器不会调用任何机器人接口。SSH 隧道和现有相机、控制器进程之外，新增业务进程只有 `server` 和 `rollout` 两个。
-
-## 测试分层
-
-```bash
-# 无 ROS、无实际权重：协议与 Mock 执行。
-PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 /opt/lerobot_venv/bin/python -m pytest tests/test_protocol.py tests/test_rollout.py -q
-# 权重已生成：实际模型、反归一化和 HTTP。
-HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 /opt/lerobot_venv/bin/python -m pytest tests/test_server.py -q
-# ROS 消息模拟器，DDS 域固定 231；观测/位姿使用 /rwe_test，夹爪使用固定 Action 地址，不加载硬件。
-PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 /opt/lerobot_venv/bin/python -m pytest tests/test_ur_env.py -q
-```
-
-ROS 测试检查图像颜色和步长、原始数值读取、逐步使用反馈、夹爪去重、相机故障时保持、过期反馈拒绝、只读模式与 TCP 不匹配拒绝。它验证消息接口，不替代真实阻抗控制动力学验证。本次未对真实机械臂下发任何命令。
-
-## 本次验证记录（2026-10-09）
-
-- 协议与 Mock rollout：21 项通过。
-- 实际 checkpoint、反归一化、HTTP 与第二策略加载：4 项通过。
-- 隔离 ROS 模拟接口：2 项通过。
-- 两个真实 Python 入口分别启动，`GET /health` 和 5 次 `POST /infer` 均返回 200；Mock 共执行 10 步后正常退出，验证用服务器随后关闭。
-- 没有访问 `10.5.174.93`，没有进行 RTX 4090 性能测试、完整阻抗动力学仿真或真机运动。远程主机 SSH 用户、实际模型路径和训练坐标系仍需部署时填写。
-
-上述 Python 运行与依赖安装均使用 `/opt/lerobot_venv`。最初尝试创建的临时测试环境已停用，不作为本项目运行环境。
-
-## 硬件启动与包复用
-
-`real_world_evaluation` 不自动启动硬件，也不调用 launch 或遥操作脚本。它通过 ROS 话题和 Action 复用已有运行中的接口。
-
-| 功能 | 现有入口 | 作用 |
-| --- | --- | --- |
-| UR、组合描述、笛卡尔阻抗 | `cartesian_impedance_controller/launch/standalone_real.launch.py` | 包含 `ur10e_robotiq_ft_description/launch/real_bringup.launch.py`，启动驱动并加载、激活阻抗控制器，可选择夹爪及 FT300 |
-| 相机 | `ur_teleop/launch/camera.launch.py` | 读取 `ur_teleop/config/camera.yaml`，启动 `data_collection/opencv_camera_node` 或 `realsense2_camera/realsense2_camera_node` |
-| 已有 Xbot 硬件流程 | `ur_teleop/launch/home.launch.py` → `xbot_cell.launch.py` | 包含 Home 动作，且笛卡尔控制器初始为 inactive；不能当作独立推理的一键启动入口 |
-
-相机启动命令：
-
-```bash
-source /opt/ros/jazzy/setup.bash
-source /ros2_ws/install/setup.bash
-ros2 launch ur_teleop camera.launch.py config_file:=/ros2_ws/src/ur_teleop/config/camera.yaml
-```
-
-UR 独立入口的参数包括必填 `robot_ip`，以及 `use_gripper`、`use_ft300`、`gripper_com_port`、`ft_sensor_ftdi_id`。这是已有硬件入口说明，不是本次执行记录；本次不运行真机启动、Home 或笛卡尔运动测试。运行 rollout 前要求阻抗控制器已激活、反馈有效，且没有其他目标发布者。
-
-完整顺序为：启动现有硬件/相机 → 服务器加载 checkpoint 并完成探测 → 建立 SSH 隧道 → 主机读取 `/health` 并初始化环境 → 采集原始观测 → `/infer` 预处理、完整 chunk 推理及反归一化 → 主机执行指定前缀，每步从最新 pose 合成目标 → 重新采集。正常结束或异常退出时尝试保持并释放连接。`mode: mock` 不访问硬件；`mode: ros, read_only: true` 只读取一次观测即退出，不进入推理执行循环。
+| 现象 | 检查项 |
+| --- | --- |
+| `/health` 无法访问 | 服务是否已完成加载、SSH 隧道是否成功、本地 8000 端口是否被占用 |
+| 模型启动失败 | checkpoint 与处理器是否完整、LeRobot 版本和依赖是否匹配、CUDA 是否可用、策略是否满足当前接口要求 |
+| 相机键或尺寸不符 | 比较 `/health`、`client.yaml` 与实际原始图像；录制 resize 不会缩放发布话题 |
+| 状态缺失或数据过期 | 控制器是否 active、消息是否持续发布、话题和消息时间戳是否正确 |
+| 基座、TCP 或力坐标系不符 | 核对训练定义、服务器配置与实际控制器/传感器，勿仅改字符串绕过检查 |
+| 七维动作无法初始化 | 同时启用硬件夹爪和 `gripper.enabled`，确认固定 Action 可用 |
+| 运行超时或推理失败 | 程序会停止后续动作且不重试；排除故障并确认机器人状态后重新启动 |
