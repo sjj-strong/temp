@@ -233,3 +233,31 @@ def test_existing_dataset_uses_hyphenated_timestamp(monkeypatch, root):
     assert calls[1]['root'] == (Path(root + '-2026-10-08-22-30-15-123456') if root else None)
     assert node._dataset is dataset
     assert node._rec == dict(repo_id='user/test', root=root)
+
+
+@pytest.mark.parametrize('resize', [True, False, None])
+def test_camera_saved_size(monkeypatch, resize):
+    """真实缩放后的缓存图像与数据集尺寸一致；关闭或省略时保留原图。"""
+    pytest.importorskip('rclpy')
+    import sys
+    import threading
+    from ur_teleop.data_recorder import DataRecorderNode
+    image = np.full((480, 640, 3), 123, dtype=np.uint8)
+    monkeypatch.setitem(sys.modules, 'cv_bridge', SimpleNamespace(
+        CvBridge=lambda: SimpleNamespace(imgmsg_to_cv2=lambda *a, **kw: image)))
+    camera = dict(width=320, height=240) if resize else dict(width=640, height=480)
+    if resize is not None:
+        camera['resize'] = resize
+    node = object.__new__(DataRecorderNode)
+    node._cameras = {'front': camera}
+    node._lock = threading.Lock()
+    node._camera_frames, node._camera_at = {}, {}
+    node._camera_cb('front', object())
+    saved = node._camera_frames['front']
+    shape = FrameBuilder(dict(cameras={'front': camera}), {}).features()[0][
+        'observation.images.front']['shape']
+    assert saved.shape == shape
+    assert saved.dtype == np.uint8
+    assert np.all(saved == 123)
+    if not resize:
+        assert saved is image

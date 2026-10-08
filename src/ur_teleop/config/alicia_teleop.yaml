@@ -86,6 +86,11 @@ recorder:
   ee_pose_parent_frame: base_link
   ee_pose_child_frame: tool0     # tool0 在 bare（real）与组合（sim）URDF 中都存在；
                                  # gripper_tcp 只在组合模型里，real 下查不到 → NaN
-  cameras: {}                    # 仅定义数据集图像；发布与预览见 camera.yaml，示例见 docs/data_recorder.md。
+  cameras: {}                    # 保存相机配置；取消下面示例的注释时删掉 {}。
+  #   front:
+  #     topic: /camera/usb_front/color/image_raw
+  #     resize: true               # false 或省略：保留原图，宽高填写原图尺寸。
+  #     width: 320                 # resize 开启时的保存宽度。
+  #     height: 240                # resize 开启时的保存高度。
   task: teleoperation
   min_frames_per_episode: 2

@@ -52,9 +52,12 @@ recorder:
       enabled: true
       topic: /camera/usb_front/color/image_raw
       image_key: front
-      height: 480
-      width: 640
+      resize: true
+      height: 240
+      width: 320
 ```
+
+相机保存尺寸在遥操作配置的 `recorder.cameras` 中设置（Alicia：`alicia_teleop.yaml`，Xbot：`xbot_teleop.yaml`）。`resize: true` 在录制器接收图像后用 OpenCV 缩放到 `width × height`，图像和视频保存使用同一尺寸。`resize: false` 或省略则保留收到的原图，此时 `width`、`height` 应填写原图尺寸。缩放开启时宽高必须为正整数，省略宽高默认 640 × 480。改变保存尺寸后使用新数据集，避免与已有数据集的特征尺寸冲突。
 
 录制开始和写帧时只要求**启用**的字段有新鲜数据；任一启用字段缺失、非有限或超过 `data_timeout_s` 时跳过整帧，不写缺键或 NaN。手柄就绪心跳与位姿 action 始终是必要条件。Alicia 的 observation 不再附加夹爪实测状态；关节 action 可通过同一个开关附加夹爪指令。
 

@@ -14,6 +14,14 @@ def validate_recorder(rec):
     """在连接机器人或创建数据集前报告类型和范围错误。"""
     if not isinstance(rec, dict):
         raise ValueError('recorder 必须为映射')
+    for name, camera in rec.get('cameras', {}).items():
+        if not isinstance(camera, dict) or not isinstance(camera.get('resize', False), bool):
+            raise ValueError(f'recorder.cameras.{name}.resize 必须为布尔值')
+        if camera.get('enabled', True) and camera.get('resize', False):
+            for key, default in (('width', 640), ('height', 480)):
+                value = camera.get(key, default)
+                if type(value) is not int or value <= 0:
+                    raise ValueError(f'recorder.cameras.{name}.{key} 必须为正整数')
     integer_fields = dict(num_episodes=(0, 0), fps=(50, 1), min_frames_per_episode=(2, 1),
                           image_writer_processes=(0, 0), image_writer_threads=(2, 0),
                           batch_encoding_size=(1, 1), metadata_buffer_size=(10, 1),

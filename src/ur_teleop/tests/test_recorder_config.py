@@ -85,3 +85,10 @@ def test_unlimited_and_save_failure_do_not_finish(monkeypatch):
     with pytest.raises(RuntimeError):
         node._save_episode()
     assert node._episode_count == 101 and not node._finish_requested
+
+
+@pytest.mark.parametrize('camera', [dict(resize='false'), dict(resize=True, width=0),
+                                    dict(resize=True, height=-1), dict(resize=True, width=1.5)])
+def test_invalid_camera_resize(camera):
+    with pytest.raises(ValueError, match='recorder.cameras.front'):
+        validate_recorder(dict(cameras={'front': camera}))

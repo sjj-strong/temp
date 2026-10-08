@@ -195,6 +195,10 @@ class DataRecorderNode(Node):
         try:
             from cv_bridge import CvBridge
             img = CvBridge().imgmsg_to_cv2(msg, desired_encoding="rgb8")
+            camera = self._cameras[cam_name]
+            if camera.get('resize', False):
+                import cv2
+                img = cv2.resize(img, (camera.get('width', 640), camera.get('height', 480)))
             with self._lock:
                 self._camera_frames[cam_name] = img
                 self._camera_at[cam_name] = time.monotonic()
