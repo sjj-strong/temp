@@ -251,3 +251,5 @@ ros2 control list_controllers -c /controller_manager
 ```
 
 停用时控制器会写入零力矩。若上述切换失败或机器人未进入预期安全状态，应使用示教器急停/保护停止处置，不要继续发送 ROS 控制命令。
+
+通过 `ur_teleop` 启动时，`damping: null` 会在传给 spawner 前转换为逐轴 `D_i = 2√K_i`（等效质量／惯量归一为 1）。显式六维阻尼数组优先，保持原值。直接使用其他启动文件时仍需提供数值数组，ROS 参数文件不能直接解析 null。

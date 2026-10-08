@@ -32,7 +32,7 @@
       - wrist_2_joint
       - wrist_3_joint
     stiffness: [80.0, 80.0, 60.0, 20.0, 15.0, 10.0]
-    damping: [18.0, 18.0, 14.0, 5.0, 4.0, 3.0]
+    damping: null  # ur_teleop 启动时按 D_i = 2√K_i 自动计算；显式数组优先。
     max_torque: [40.0, 40.0, 30.0, 12.0, 10.0, 8.0]
     max_torque_rate: [100.0, 100.0, 80.0, 40.0, 30.0, 20.0]
     max_position_error: [0.5, 0.5, 0.5, 0.5, 0.5, 0.5]

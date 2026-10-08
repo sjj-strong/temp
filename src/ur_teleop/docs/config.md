@@ -152,3 +152,7 @@ gripper_value_to_position(value: float, gripper_type: str = "50mm") -> float
 - 最小合法配置加载（`test_load_minimal_valid_config`）。
 - 错误路径：缺顶层键（match `mode`）、文件不存在（`not found`）、非法 mode（`mode must be`）、home 长度不足（`home`）、缺 `mapping.alicia_joint_order`、缺 `safety.limits` 某关节（match 关节名）。
 - 单位换算：50mm 双向 4 点（0→1000、全行程→0、半行程→500）与 100mm 行程 0.05。
+
+## 阻抗阻尼自动计算
+
+Alicia 的关节阻抗参数文件和 Xbot 的 `xbot.controller_config_file` 均支持 `damping: null`，启动时逐轴计算 `D_i = 2√K_i`，等效质量／惯量取 1。显式阻尼数组优先并原样使用；只在空值时生成临时数值参数文件，不修改源文件。默认关节阻抗配置和 Xbot 高刚度配置使用自动计算。

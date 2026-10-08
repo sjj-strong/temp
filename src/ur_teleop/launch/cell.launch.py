@@ -9,12 +9,14 @@ import os
 import yaml
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction
 from launch.conditions import IfCondition, UnlessCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import Command, FindExecutable, LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
+
+from ur_teleop.impedance_config import resolve_damping
 
 
 def _yaml_default(config_file: str, *path: str, fallback: str):
@@ -220,14 +222,13 @@ def generate_launch_description():
         ),
         # 阻抗控制器在 home 阶段仅加载为 inactive；teleop_node 收到 enable 后再与
         # trajectory controller 严格切换，避免 home 轨迹与 effort 接口冲突。
-        Node(
-            package="controller_manager",
-            executable="spawner",
+        OpaqueFunction(
+            function=lambda context: [Node(
+                package="controller_manager", executable="spawner",
+                arguments=["joint_impedance_controller", "-c", "/controller_manager",
+                           "--param-file", resolve_damping(impedance_config), "--inactive"],
+            )],
             condition=IfCondition(uses_joint_impedance),
-            arguments=[
-                "joint_impedance_controller", "-c", "/controller_manager",
-                "--param-file", impedance_config, "--inactive",
-            ],
         ),
         # Sim 模式：将 parallel_gripper_action_controller spawn 到 UR 的
         # controller_manager，驱动 mock_components/GenericSystem 暴露的

@@ -11,6 +11,7 @@ from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 
 from ur_teleop.config import load_config
+from ur_teleop.impedance_config import resolve_damping
 
 
 def _build_cell(context):
@@ -20,7 +21,7 @@ def _build_cell(context):
         raise RuntimeError("xbot_cell 只接受 Xbot 配置文件")
     use_gripper = cfg.get("gripper", {}).get("enabled", True)
     use_ft300 = cfg.get("cell", {}).get("ft300_enabled", True)
-    cart_config = cfg["xbot"]["controller_config_file"]
+    cart_config = resolve_damping(cfg["xbot"]["controller_config_file"])
 
     if cfg["sim"]:
         model = os.path.join(
