@@ -4,7 +4,7 @@
 
 | 文档 | 内容 |
 | --- | --- |
-| [采集前相机检查](camera_inspector.md) | 型号、端口、实时预览与原生参数调节、YAML 参数生成 |
+| [Camera setup](camera_inspector.md) | PySide6 + PyQtGraph live preview, camera controls and YAML fields |
 | [启动与相机](launch.md) | 两阶段启动、配置选择、相机发布 |
 | [Xbot 手柄](xbot_control.md) | 校准、按键、base/TCP 切换、安全限制与测试 |
 | [Xbot 配置参数](xbot_teleop_config.md) | `xbot_teleop.yaml` 每个参数的作用、单位与实际生效条件 |

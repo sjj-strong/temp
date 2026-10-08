@@ -1,4 +1,4 @@
-"""相机检查逻辑测试，不访问实际相机或机器人。"""
+"""Camera inspection logic tests without accessing physical cameras or robots."""
 import pytest
 import yaml
 from ur_teleop.camera_inspector import parse_controls, snippet
@@ -55,3 +55,41 @@ def test_unsupported_model_and_invalid_name():
         snippet(dict(kind='realsense', model='L515', serial='123'), 640, 480, 30, 'MJPG', 'unused')
     with pytest.raises(ValueError):
         snippet(dict(kind='usb', path='/dev/video0'), 640, 480, 30, 'MJPG', 'bad/name')
+
+
+def test_discovery_filters_metadata_and_uses_sdk_serial(tmp_path, monkeypatch):
+    """USB descriptors and the SDK can report different RealSense serials."""
+    import sys
+    from pathlib import Path
+    from types import SimpleNamespace
+    from ur_teleop import camera_inspector as inspector
+
+    nodes = tmp_path / 'video4linux'
+    nodes.mkdir()
+    for prefix, model, serial, indexes in [('usb', 'USB Camera', 'same', [0, 1]),
+                                          ('rs', 'Intel RealSense Depth Camera 455', 'descriptor', [0, 1])]:
+        parent = tmp_path / prefix
+        parent.mkdir()
+        for key, value in [('product', model), ('serial', serial), ('idVendor', '8086')]:
+            (parent / key).write_text(value)
+        interface = parent / 'interface'
+        interface.mkdir()
+        for index in indexes:
+            node = nodes / f'video{index + (4 if prefix == "rs" else 0)}'
+            node.mkdir()
+            (node / 'device').symlink_to(interface, target_is_directory=True)
+            (node / 'index').write_text(str(index))
+    real_path = Path
+    monkeypatch.setattr(inspector, 'Path', lambda path: nodes if path == '/sys/class/video4linux'
+                        else real_path(path))
+    info = SimpleNamespace(name='name', serial_number='serial', physical_port='port')
+    values = dict(name='RealSense D455', serial='sdk_serial', port=str(tmp_path / 'rs' / 'interface'))
+    device = SimpleNamespace(get_info=lambda field: values[field])
+    sdk = SimpleNamespace(camera_info=info,
+                          context=lambda: SimpleNamespace(query_devices=lambda: [device]))
+    monkeypatch.setitem(sys.modules, 'pyrealsense2', sdk)
+    devices, _ = inspector.discover()
+    assert len(devices) == 2
+    assert devices[0]['device'] == '/dev/video0'
+    assert devices[1]['serial'] == 'sdk_serial'
+    assert devices[1]['nodes'] == ['/dev/video4', '/dev/video5']

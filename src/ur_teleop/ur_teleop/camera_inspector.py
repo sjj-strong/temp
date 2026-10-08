@@ -1,6 +1,5 @@
-"""采集前相机检查、实时预览和原生调参；不启动机器人或 ROS。"""
+"""Camera inspection, live preview and native controls before dataset collection."""
 import argparse
-import base64
 import json
 import re
 import shutil
@@ -10,9 +9,9 @@ from pathlib import Path
 
 
 def v4l(device, *args):
-    """保留驱动错误，禁止把设置失败报告为成功。"""
+    """Keep driver errors visible when a control cannot be applied."""
     if not shutil.which('v4l2-ctl'):
-        raise RuntimeError('需要安装 v4l-utils 才能查询格式和调节 USB 参数')
+        raise RuntimeError('Install v4l-utils to query formats and adjust USB camera controls.')
     result = subprocess.run(['v4l2-ctl', '-d', device, *args],
                             capture_output=True, text=True, timeout=5)
     if result.returncode:
@@ -21,7 +20,7 @@ def v4l(device, *args):
 
 
 def parse_controls(output):
-    """解析可写数值控制和菜单，取值范围来自实际设备。"""
+    """Parse writable numeric controls and menus from the device."""
     controls = []
     active = None
     for line in output.splitlines():
@@ -44,7 +43,7 @@ def parse_controls(output):
 
 
 def discover():
-    """使用系统设备信息和可选 SDK，避免把 RealSense 子节点当作多台相机。"""
+    """Discover video nodes and group RealSense nodes by serial number."""
     devices, warnings, realsense = [], [], {}
     for node in sorted(Path('/sys/class/video4linux').glob('video*')):
         device = '/dev/' + node.name
@@ -60,6 +59,9 @@ def discover():
             entry['nodes'].append(device)
             entry['accessible'] |= Path(device).exists()
             continue
+        # Metadata nodes are not separate cameras.
+        if (node / 'index').exists() and (node / 'index').read_text().strip() != '0':
+            continue
         paths = [str(p) for p in Path('/dev/v4l/by-path').glob('*') if str(p.resolve()) == device]
         ids = [str(p) for p in Path('/dev/v4l/by-id').glob('*') if str(p.resolve()) == device]
         devices.append(dict(kind='usb', model=model, serial=serial, device=device,
@@ -69,29 +71,33 @@ def discover():
         import pyrealsense2 as rs
         for dev in rs.context().query_devices():
             serial = dev.get_info(rs.camera_info.serial_number)
+            sdk_port = dev.get_info(rs.camera_info.physical_port)
+            fallback = next((key for key, entry in realsense.items()
+                             if key == serial or sdk_port.startswith(entry['port'] + '/')), None)
+            nodes = realsense.pop(fallback)['nodes'] if fallback else []
+            # The SDK serial is the identifier accepted by RealSense pipelines.
             realsense[serial] = dict(kind='realsense', model=dev.get_info(rs.camera_info.name),
-                                    serial=serial, port=dev.get_info(rs.camera_info.physical_port),
-                                    nodes=realsense.get(serial, {}).get('nodes', []), accessible=True)
+                                    serial=serial, port=sdk_port, nodes=nodes, accessible=True)
     except ImportError:
-        warnings.append('未安装 pyrealsense2：可从系统信息读取序列号，SDK 预览不可用。')
+        warnings.append('pyrealsense2 is missing. Serial information is available; RealSense preview is unavailable.')
     except RuntimeError as exc:
-        warnings.append('RealSense SDK 枚举失败：' + str(exc))
+        warnings.append('RealSense SDK discovery failed: ' + str(exc))
     devices.extend(realsense.values())
     if not devices:
-        warnings.append('未发现相机，请检查 USB 连接、容器设备映射和权限。')
+        warnings.append('No cameras found. Check USB connections, device mapping and permissions.')
     elif not any(d['accessible'] for d in devices):
-        warnings.append('系统能识别相机，但容器未暴露视频节点；当前只能查询，不能预览。')
+        warnings.append('Cameras are detected but video nodes are unavailable inside the container. Preview is unavailable.')
     if any(d['kind'] == 'usb' and d['path'] == d['device'] for d in devices):
-        warnings.append('没有 /dev/v4l/by-path 稳定路径，视频节点可能随插拔改变。')
+        warnings.append('Stable /dev/v4l/by-path links are missing. Video node numbers may change.')
     return devices, warnings
 
 
 def snippet(device, width, height, fps, fourcc, name):
-    """只生成现有 YAML 支持的字段，不擅自添加曝光等无效字段。"""
+    """Generate only fields supported by the existing YAML configurations."""
     import yaml
     if device['kind'] == 'usb':
         if not re.fullmatch(r'[A-Za-z][A-Za-z0-9_]*', name):
-            raise ValueError('配置名称应以英文字母开头，只使用字母、数字和下划线')
+            raise ValueError('Name must start with a letter and contain only letters, numbers and underscores.')
         return yaml.safe_dump({'opencv_cameras': [dict(
             name=name, enabled=True, device=device['path'], topic=f'/camera/{name}/color/image_raw',
             frame_id=f'{name}_color_optical_frame', width=width, height=height, fps=fps,
@@ -103,7 +109,7 @@ def snippet(device, width, height, fps, fourcc, name):
     elif 'd455' in model or 'camera 455' in model:
         key = 'd455_serial'
     else:
-        raise ValueError('现有启动配置仅支持 D435 系列与 D455，此型号不能直接映射')
+        raise ValueError('The existing launch configuration supports only D435-series and D455 cameras.')
     return yaml.safe_dump({'cameras': {'realsense': dict(
         enabled=True, **{key: device['serial']}, enable_d435i=key == 'd435i_serial',
         enable_color=True, enable_depth=False, color_profile=f'{width},{height},{fps}',
@@ -111,7 +117,7 @@ def snippet(device, width, height, fps, fourcc, name):
 
 
 class Stream:
-    """后台取帧，主线程只绘图；取帧结束后释放设备。"""
+    """Capture in a worker thread and release the device when capture ends."""
     def __init__(self, device, width, height, fps, fourcc):
         import cv2
         self.cv2 = cv2
@@ -124,10 +130,10 @@ class Stream:
         try:
             if device['kind'] == 'usb':
                 if not Path(device['path']).exists():
-                    raise RuntimeError('容器内缺少视频节点，请先映射设备后再预览')
+                    raise RuntimeError('Video node is missing. Map the device into the container before previewing.')
                 self.cap = cv2.VideoCapture(device['path'], cv2.CAP_V4L2)
                 if not self.cap.isOpened():
-                    raise RuntimeError('无法打开节点：可能是元数据节点、权限不足或设备已占用')
+                    raise RuntimeError('Cannot open video node. It may be a metadata node, inaccessible or busy.')
                 self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*fourcc))
                 for prop, value in [(cv2.CAP_PROP_FRAME_WIDTH, width),
                                     (cv2.CAP_PROP_FRAME_HEIGHT, height), (cv2.CAP_PROP_FPS, fps)]:
@@ -148,6 +154,7 @@ class Stream:
                 config.enable_device(device['serial'])
                 config.enable_stream(rs.stream.color, width, height, rs.format.bgr8, fps)
                 profile = self.pipeline.start(config)
+                self.actual = (width, height, fps, 'BGR8')
                 self.sensor = profile.get_device().first_color_sensor()
                 for option in self.sensor.get_supported_options():
                     if self.sensor.is_option_read_only(option):
@@ -174,7 +181,7 @@ class Stream:
                 if self.cap is not None:
                     ok, frame = self.cap.read()
                     if not ok:
-                        raise RuntimeError('取帧失败：检查设备断开、占用或格式支持情况')
+                        raise RuntimeError('Frame capture failed. Check connection, device access and supported formats.')
                 else:
                     import numpy as np
                     color = self.pipeline.wait_for_frames(1500).get_color_frame()
@@ -194,7 +201,7 @@ class Stream:
         self.stop.set()
         self.thread.join(timeout=2)
         if self.thread.is_alive():
-            raise RuntimeError('设备读取仍未退出，请等待设备响应后重试')
+            raise RuntimeError('Capture has not stopped yet. Wait for the device to respond and retry.')
 
     def set_control(self, device, control, value):
         if self.cap is not None:
@@ -204,184 +211,249 @@ class Stream:
         return f"{control['name']}: {self.sensor.get_option(control['option'])}"
 
 
-def gui(devices, warnings):
-    import tkinter as tk
-    from tkinter import ttk, messagebox
-    root = tk.Tk()
-    root.title('采集前相机检查与实时调参')
-    root.geometry('1200x850')
-    stream = current = image = None
-    choice = ttk.Combobox(root, state='readonly', width=100)
-    choice.pack(fill='x', padx=8, pady=8)
-    info = tk.Text(root, height=6)
-    info.pack(fill='x')
-    status = tk.StringVar(value='；'.join(warnings))
-    ttk.Label(root, textvariable=status, wraplength=1150).pack(fill='x')
-    inputs = ttk.Frame(root)
-    inputs.pack(fill='x')
-    fields = {}
-    for key, label, default in [('name', '配置名称', 'usb_front'), ('width', '宽', '640'),
-                                ('height', '高', '480'), ('fps', '帧率', '30'), ('fourcc', 'USB 格式', 'MJPG')]:
-        ttk.Label(inputs, text=label).pack(side='left')
-        fields[key] = tk.StringVar(value=default)
-        ttk.Entry(inputs, textvariable=fields[key], width=12).pack(side='left')
-    buttons = ttk.Frame(root)
-    buttons.pack(fill='x')
-    middle = ttk.Frame(root)
-    middle.pack(fill='both', expand=True)
-    preview = ttk.Label(middle, text='实时预览（可逐台切换检查）')
-    preview.pack(side='left', fill='both', expand=True)
-    controls = tk.Listbox(middle, width=38, exportselection=False)
-    controls.pack(side='right', fill='y')
-    control_bar = ttk.Frame(root)
-    control_bar.pack(fill='x')
-    control_value = tk.DoubleVar()
-    slider = tk.Scale(control_bar, orient='horizontal', variable=control_value, length=650)
-    slider.pack(side='left')
-    menu_text = tk.StringVar()
-    ttk.Label(root, textvariable=menu_text, wraplength=1150).pack(fill='x')
-    output = tk.Text(root, height=10)
-    output.pack(fill='x')
+def create_window(devices, warnings):
+    """Build a minimal desktop window; keep Qt optional for --list."""
+    from PySide6 import QtCore, QtWidgets
+    import pyqtgraph as pg
+    import numpy as np
 
-    def selected():
-        if choice.current() < 0:
-            raise ValueError('请先选择相机')
-        return devices[choice.current()]
+    class CameraWindow(QtWidgets.QWidget):
+        def __init__(self):
+            super().__init__()
+            self.devices = devices
+            self.stream = None
+            self.current = None
+            self.last_frame = None
+            self.setWindowTitle('Camera Setup')
+            self.resize(1100, 780)
+            layout = QtWidgets.QVBoxLayout(self)
+            row = QtWidgets.QHBoxLayout()
+            self.choice = QtWidgets.QComboBox()
+            row.addWidget(self.choice, 1)
+            refresh = QtWidgets.QPushButton('Refresh Devices')
+            refresh.clicked.connect(lambda: self.safe(self.refresh))
+            row.addWidget(refresh)
+            layout.addLayout(row)
+            self.info = QtWidgets.QLabel()
+            self.info.setWordWrap(True)
+            self.info.setTextInteractionFlags(QtCore.Qt.TextInteractionFlag.TextSelectableByMouse)
+            layout.addWidget(self.info)
+            row = QtWidgets.QHBoxLayout()
+            self.name = QtWidgets.QLineEdit('usb_front')
+            self.name.setMaximumWidth(120)
+            row.addWidget(QtWidgets.QLabel('Name'))
+            row.addWidget(self.name)
+            self.profile = []
+            for label, default in [('Width', 640), ('Height', 480), ('FPS', 30)]:
+                field = QtWidgets.QSpinBox()
+                field.setRange(1, 16384 if label != 'FPS' else 240)
+                field.setValue(default)
+                row.addWidget(QtWidgets.QLabel(label))
+                row.addWidget(field)
+                self.profile.append(field)
+            self.fourcc = QtWidgets.QComboBox()
+            self.fourcc.setEditable(True)
+            self.fourcc.addItems(['MJPG', 'YUYV'])
+            row.addWidget(QtWidgets.QLabel('USB Format'))
+            row.addWidget(self.fourcc)
+            layout.addLayout(row)
+            row = QtWidgets.QHBoxLayout()
+            for label, action in [('Start / Restart', self.start), ('Stop', self.stop),
+                                  ('Supported Formats', self.formats), ('YAML Parameters', self.generate)]:
+                button = QtWidgets.QPushButton(label)
+                button.clicked.connect(lambda checked=False, action=action: self.safe(action))
+                row.addWidget(button)
+            layout.addLayout(row)
+            row = QtWidgets.QHBoxLayout()
+            self.canvas = pg.GraphicsLayoutWidget()
+            self.view = self.canvas.addViewBox(lockAspect=True, enableMenu=False)
+            self.view.invertY(True)
+            self.view.setMouseEnabled(x=False, y=False)
+            self.image = pg.ImageItem(axisOrder='row-major')
+            self.view.addItem(self.image)
+            row.addWidget(self.canvas, 3)
+            panel = QtWidgets.QVBoxLayout()
+            panel.addWidget(QtWidgets.QLabel('Camera Controls'))
+            self.controls = QtWidgets.QListWidget()
+            self.controls.currentRowChanged.connect(self.select_control)
+            panel.addWidget(self.controls)
+            self.value = QtWidgets.QDoubleSpinBox()
+            self.value.setDecimals(4)
+            self.value.setKeyboardTracking(False)
+            self.value.editingFinished.connect(lambda: self.safe(self.apply))
+            self.menu = QtWidgets.QComboBox()
+            self.menu.activated.connect(lambda _: self.safe(self.apply))
+            panel.addWidget(self.value)
+            panel.addWidget(self.menu)
+            hint = QtWidgets.QLabel('Change a value and press Enter.\nDisable auto exposure / white balance\nbefore changing manual values.')
+            hint.setWordWrap(True)
+            panel.addWidget(hint)
+            row.addLayout(panel, 1)
+            layout.addLayout(row, 1)
+            self.output = QtWidgets.QPlainTextEdit()
+            self.output.setReadOnly(True)
+            self.output.setMaximumHeight(170)
+            layout.addWidget(self.output)
+            self.status = QtWidgets.QLabel('; '.join(warnings))
+            self.status.setWordWrap(True)
+            layout.addWidget(self.status)
+            self.choice.currentIndexChanged.connect(lambda _: self.safe(self.change_device))
+            self.timer = QtCore.QTimer(self)
+            self.timer.timeout.connect(self.tick)
+            self.timer.start(33)
+            self.populate()
 
-    def values():
-        width, height, fps = [int(fields[k].get()) for k in ('width', 'height', 'fps')]
-        fourcc = fields['fourcc'].get()
-        if min(width, height, fps) <= 0 or len(fourcc) != 4:
-            raise ValueError('宽、高、帧率必须为正整数，USB 格式必须为四个字符')
-        return width, height, fps, fourcc
-
-    def guarded(action):
-        def callback(*args):
+        def safe(self, action):
             try:
-                action(*args)
+                action()
             except Exception as exc:
-                messagebox.showerror('相机操作失败', str(exc))
-        return callback
+                self.status.setText(str(exc))
 
-    def stop():
-        nonlocal stream, current
-        if stream:
-            stream.close()
-        stream = current = None
-        controls.delete(0, 'end')
-        preview.configure(image='', text='预览已关闭')
+        def selected(self):
+            index = self.choice.currentIndex()
+            if index < 0:
+                raise ValueError('Select a camera first.')
+            return self.devices[index]
 
-    def show_info(*_):
-        info.delete('1.0', 'end')
-        info.insert('end', json.dumps(selected(), ensure_ascii=False, indent=2))
+        def populate(self):
+            self.choice.blockSignals(True)
+            self.choice.clear()
+            for device in self.devices:
+                self.choice.addItem(f"{device['model']} | {device.get('device', device.get('serial'))}")
+            self.choice.blockSignals(False)
+            self.value.setEnabled(False)
+            self.menu.hide()
+            if self.devices:
+                self.change_device()
+            else:
+                self.info.setText('No cameras found.')
 
-    def refresh():
-        nonlocal devices
-        stop()
-        devices, notes = discover()
-        choice['values'] = [f"{d['model']} | {d.get('device', d.get('serial'))}" for d in devices]
-        if devices:
-            choice.current(0)
-            show_info()
-        else:
-            choice.set('')
-            info.delete('1.0', 'end')
-        status.set('；'.join(notes) or '已刷新设备列表')
+        def change_device(self):
+            self.stop()
+            device = self.selected()
+            self.info.setText(json.dumps(device, ensure_ascii=True))
+            self.name.setEnabled(device['kind'] == 'usb')
+            self.fourcc.setEnabled(device['kind'] == 'usb')
 
-    def start():
-        nonlocal stream, current
-        stop()
-        device = selected()
-        stream = Stream(device, *values())
-        current = device
-        for ctrl in stream.controls:
-            controls.insert('end', ctrl['name'])
-        status.set(f'设备实际宽、高、帧率、格式：{stream.actual}；{stream.error}')
+        def refresh(self):
+            self.stop()
+            self.devices, notes = discover()
+            self.populate()
+            self.status.setText('; '.join(notes) or 'Device list refreshed.')
 
-    def select_control(*_):
-        if not stream or not controls.curselection():
-            return
-        ctrl = stream.controls[controls.curselection()[0]]
-        slider.configure(from_=ctrl['min'], to=ctrl['max'], resolution=ctrl['step'] or 1)
-        control_value.set(ctrl['value'])
-        menu_text.set('菜单值：' + str(ctrl['menu']) if ctrl['menu'] else
-                      '先关闭自动曝光/自动白平衡，再调手动值；单位由驱动定义。')
+        def settings(self):
+            fourcc = self.fourcc.currentText()
+            if len(fourcc) != 4:
+                raise ValueError('USB format must contain four characters.')
+            return (*[field.value() for field in self.profile], fourcc)
 
-    def apply():
-        if not stream or not controls.curselection():
-            raise ValueError('请打开预览并选择要调节的参数')
-        ctrl = stream.controls[controls.curselection()[0]]
-        value = control_value.get()
-        if ctrl['menu'] and int(value) not in ctrl['menu']:
-            raise ValueError('请选择菜单中存在的数值')
-        status.set('设备回读：' + stream.set_control(current, ctrl, value))
-        ctrl['value'] = value
+        def start(self):
+            self.stop()
+            device = self.selected()
+            self.stream = Stream(device, *self.settings())
+            self.current = device
+            self.controls.addItems([control['name'] for control in self.stream.controls])
+            self.status.setText(f'Actual width, height, FPS, format: {self.stream.actual}')
+            if self.stream.controls:
+                self.controls.setCurrentRow(0)
 
-    def generate():
-        device = selected()
-        width, height, fps, fourcc = values()
-        if stream and current == device:
-            width, height, fps, fourcc = stream.actual
-            fps = int(round(fps))
-            if min(width, height, fps) <= 0:
-                raise ValueError('驱动未返回有效配置，请关闭预览后按已验证的参数生成')
-        text = snippet(device, width, height, fps, fourcc, fields['name'].get())
-        output.delete('1.0', 'end')
-        output.insert('end', text)
-        status.set('已生成配置片段；替换对应条目。曝光等调参值不属于这两个 YAML 的现有字段。')
+        def stop(self):
+            if self.stream:
+                self.stream.close()
+            self.stream = self.current = self.last_frame = None
+            self.controls.clear()
+            self.value.setEnabled(False)
+            self.image.clear()
 
-    def formats():
-        device = selected()
-        if device['kind'] == 'usb':
-            text = v4l(device['device'], '--list-formats-ext')
-        else:
-            import pyrealsense2 as rs
-            dev = next(d for d in rs.context().query_devices()
-                       if d.get_info(rs.camera_info.serial_number) == device['serial'])
-            text = '\n'.join(str(p) for s in dev.query_sensors() for p in s.get_stream_profiles())
-        output.delete('1.0', 'end')
-        output.insert('end', text)
+        def select_control(self, index):
+            if not self.stream or index < 0:
+                return
+            control = self.stream.controls[index]
+            self.value.blockSignals(True)
+            self.value.setDecimals(4 if control['kind'] == 'float' else 0)
+            self.value.setRange(control['min'], control['max'])
+            self.value.setSingleStep(control['step'] or 1)
+            self.value.setValue(control['value'])
+            self.value.blockSignals(False)
+            self.value.setEnabled(True)
+            self.value.setVisible(not bool(control['menu']))
+            self.menu.clear()
+            for value, label in control['menu'].items():
+                self.menu.addItem(f'{value}: {label}', value)
+            self.menu.setCurrentIndex(self.menu.findData(int(control['value'])))
+            self.menu.setVisible(bool(control['menu']))
 
-    def copy():
-        root.clipboard_clear()
-        root.clipboard_append(output.get('1.0', 'end-1c'))
-        status.set('已复制下方文本')
+        def apply(self):
+            index = self.controls.currentRow()
+            if not self.stream or index < 0:
+                return
+            control = self.stream.controls[index]
+            value = self.menu.currentData() if control['menu'] else self.value.value()
+            if value is None:
+                raise ValueError('Select a supported menu value.')
+            self.status.setText('Device readback: ' + self.stream.set_control(self.current, control, value))
+            control['value'] = value
 
-    def tick():
-        nonlocal image
-        if stream:
-            if stream.frame is not None:
-                frame = stream.frame
-                h, w = frame.shape[:2]
-                scale = min(760/w, 380/h)
-                frame = stream.cv2.resize(frame, (int(w*scale), int(h*scale)))
-                ok, png = stream.cv2.imencode('.png', frame)
-                if ok:
-                    image = tk.PhotoImage(data=base64.b64encode(png).decode())
-                    preview.configure(image=image, text='')
-            if stream.error:
-                status.set(stream.error)
-        root.after(50, tick)
+        def tick(self):
+            if not self.stream:
+                return
+            frame = self.stream.frame
+            if frame is not None and frame is not self.last_frame:
+                self.last_frame = frame
+                # Fixed display levels preserve visible changes in camera brightness.
+                self.image.setImage(np.ascontiguousarray(frame[:, :, ::-1]),
+                                    autoLevels=False, levels=(0, 255))
+                self.view.setRange(xRange=(0, frame.shape[1]), yRange=(0, frame.shape[0]), padding=0)
+            if self.stream.error:
+                self.status.setText(self.stream.error)
 
-    for label, action in [('刷新设备', refresh), ('打开/重启预览', start), ('关闭预览', stop),
-                          ('支持的格式', formats), ('生成 YAML 参数', generate), ('复制文本', copy)]:
-        ttk.Button(buttons, text=label, command=guarded(action)).pack(side='left')
-    ttk.Button(control_bar, text='应用参数（实时生效）', command=guarded(apply)).pack(side='left')
-    choice.bind('<<ComboboxSelected>>', guarded(show_info))
-    controls.bind('<<ListboxSelect>>', guarded(select_control))
+        def generate(self):
+            device = self.selected()
+            width, height, fps, fourcc = self.settings()
+            if self.stream and self.current == device:
+                width, height, fps, fourcc = self.stream.actual
+                fps = int(round(fps))
+                if min(width, height, fps) <= 0:
+                    raise ValueError('The driver did not return a valid profile.')
+            self.output.setPlainText(snippet(device, width, height, fps, fourcc, self.name.text()))
+            self.status.setText('Copy the YAML fields into the matching configuration. Camera controls are session settings.')
 
-    def close():
-        stop()
-        root.destroy()
-    root.protocol('WM_DELETE_WINDOW', guarded(close))
-    refresh()
-    tick()
-    root.mainloop()
+        def formats(self):
+            device = self.selected()
+            if device['kind'] == 'usb':
+                text = v4l(device['device'], '--list-formats-ext')
+            else:
+                import pyrealsense2 as rs
+                dev = next(d for d in rs.context().query_devices()
+                           if d.get_info(rs.camera_info.serial_number) == device['serial'])
+                text = '\n'.join(str(p) for sensor in dev.query_sensors() for p in sensor.get_stream_profiles())
+            self.output.setPlainText(text)
+
+        def closeEvent(self, event):
+            try:
+                self.stop()
+            except Exception as exc:
+                self.status.setText(str(exc))
+                event.ignore()
+                return
+            self.timer.stop()
+            event.accept()
+
+    return CameraWindow()
+
+
+def gui(devices, warnings):
+    from PySide6 import QtWidgets
+    import pyqtgraph as pg
+    app = pg.mkQApp('Camera Setup')
+    window = create_window(devices, warnings)
+    window.show()
+    return app.exec()
 
 
 def main():
-    parser = argparse.ArgumentParser(description='相机型号/端口检查、实时预览调参与配置片段生成')
-    parser.add_argument('--list', action='store_true', help='只打印设备信息，不打开界面')
+    parser = argparse.ArgumentParser(description='Camera model and port inspection, live preview, controls and YAML fields.')
+    parser.add_argument('--list', action='store_true', help='Print device information without opening the interface.')
     args = parser.parse_args()
     devices, warnings = discover()
     if args.list:

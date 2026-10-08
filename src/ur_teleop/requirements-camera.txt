@@ -1,0 +1,6 @@
+PySide6-Essentials>=6.6,<7
+pyqtgraph>=0.13,<0.15
+numpy
+PyYAML
+opencv-python-headless
+pyrealsense2

@@ -22,7 +22,6 @@
   <exec_depend>data_collection</exec_depend>
   <exec_depend>rqt_image_view</exec_depend>
   <!-- 独立相机检查工具；RealSense Python SDK 为可选依赖。 -->
-  <exec_depend>python3-tk</exec_depend>
   <exec_depend>python3-opencv</exec_depend>
   <exec_depend>v4l-utils</exec_depend>
   <exec_depend>joint_impedance_controller</exec_depend>
