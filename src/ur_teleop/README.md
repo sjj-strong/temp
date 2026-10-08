@@ -72,7 +72,6 @@ source /opt/lerobot_venv/bin/activate
 | `recorder.fps`                                                                | 录制帧率（默认 50）                                                                                                                  |
 | `recorder.robot_type`                                                         | lerobot 数据集 robot 类型                                                                                                            |
 | `recorder.use_videos`                                                         | 相机是否以 video 编码（true）或逐帧 image（false）                                                                                   |
-| `recorder.ee_pose_source`                                                     | EE 位姿来源：`tf` \| `topic`(/tcp_pose) \| `none`；配合 `ee_pose_topic` / `ee_pose_parent_frame` / `ee_pose_child_frame` |
 | `recorder.cameras`                                                            | 相机映射`{"wrist": {topic, image_key, height, width}, ...}`                                                                        |
 | `recorder.task`                                                               | lerobot 任务名（默认`teleoperation`）                                                                                              |
 | `recorder.min_frames_per_episode`                                             | 低于此帧数的短 episode 自动丢弃                                                                                                      |

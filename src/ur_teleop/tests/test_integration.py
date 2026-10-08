@@ -82,7 +82,6 @@ recorder:
   fps: 50
   robot_type: ur10e_alicia_teleop
   use_videos: false
-  ee_pose_source: none
   cameras: {}
   min_frames_per_episode: 2
 """

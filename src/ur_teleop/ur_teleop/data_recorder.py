@@ -53,8 +53,6 @@ class DataRecorderNode(Node):
         self._wrench = None
         self._wrench_reference_link = None
         self._teleop_cmd = None
-        self._ur_ee_pose = None
-        self._ee_at = -float('inf')
         self._camera_frames = {}
         self._enable_sent = False
         self._ee_warned = False
@@ -88,17 +86,11 @@ class DataRecorderNode(Node):
                          else '/force_torque_sensor_broadcaster/ft_data')
                 self.create_subscription(WrenchStamped, topic, self._wrench_cb, 10)
 
-        self._ee_source = (self._rec.get("ee_pose_source", "tf")
-                           if not self._xbot or flags['tcp_pose'] else 'none')
-        if self._ee_source == "tf":
+        if not self._xbot or flags['tcp_pose']:
             from tf2_ros.buffer import Buffer
             from tf2_ros.transform_listener import TransformListener
             self._tf_buffer = Buffer()
             self._tf_listener = TransformListener(self._tf_buffer, self)
-        elif self._ee_source == "topic":
-            from geometry_msgs.msg import PoseStamped
-            self.create_subscription(PoseStamped, self._rec.get("ee_pose_topic", "/tcp_pose"),
-                                     self._tcp_cb, 10)
 
         for cam_name, cam_cfg in self._cameras.items():
             topic = cam_cfg.get("topic", "")
@@ -190,17 +182,6 @@ class DataRecorderNode(Node):
             self._teleop_cmd = list(msg.data) if msg.data else None
             self._cmd_at = time.monotonic()
 
-    def _tcp_cb(self, msg):
-        p = msg.pose
-        values = [p.position.x, p.position.y, p.position.z,
-                  p.orientation.x, p.orientation.y, p.orientation.z, p.orientation.w]
-        if self._xbot and (msg.header.frame_id != self._reference_link or
-                           not all(math.isfinite(value) for value in values)):
-            return
-        with self._lock:
-            self._ur_ee_pose = values
-            self._ee_at = time.monotonic()
-
     def _camera_cb(self, cam_name: str, msg: RosImage):
         try:
             from cv_bridge import CvBridge
@@ -212,14 +193,7 @@ class DataRecorderNode(Node):
             pass
 
     def _get_ee_pose(self):
-        """7 维 [x,y,z,qx,qy,qz,qw] 或 None（source=none 恒 None → NaN 段）。"""
-        if self._ee_source == "topic":
-            with self._lock:
-                if self._xbot and time.monotonic() - self._ee_at >= self._data_timeout:
-                    return None
-                return list(self._ur_ee_pose) if self._ur_ee_pose else None
-        if self._ee_source == "none":
-            return None
+        """从 TF 获取 7 维 [x,y,z,qx,qy,qz,qw]，不可用时返回 None。"""
         try:
             import rclpy.time
             t = self._tf_buffer.lookup_transform(
@@ -324,7 +298,7 @@ class DataRecorderNode(Node):
         ee = self._get_ee_pose() if need_tcp else None
         if self._xbot and need_tcp and ee is None:
             return
-        if ee is None and not self._ee_warned and self._ee_source != "none":
+        if need_tcp and ee is None and not self._ee_warned:
             self._ee_warned = True
             self.get_logger().warn("EE 位姿查询失败，该段以 NaN 记录（仅警告一次）")
         frame = self._builder.build(ur, ee, cmd,

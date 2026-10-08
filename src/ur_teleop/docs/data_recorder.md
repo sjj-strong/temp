@@ -31,7 +31,7 @@ Xbot 的下列开关相互独立。启用的数值字段按表格顺序拼接为
 | `record_tcp_pose` | 配置的 TCP link 相对控制器参考 link 的 xyz+xyzw | 7 |
 | `record_wrench` | 原始 `force.xyz, torque.xyz` | 6 |
 
-启用 TCP 时，还保存 `observation.tcp_reference_link` 和 `observation.tcp_link`。`ee_pose_child_frame` 指定 TCP link；Xbot 的父 link 自动采用控制器参考 link。`ee_pose_source` 可选 `tf` 或 `topic`，关闭 TCP 观测时也可设 `none`。
+启用 TCP 时，还保存 `observation.tcp_reference_link` 和 `observation.tcp_link`。`ee_pose_child_frame` 指定 TCP link；Xbot 的父 link 自动采用控制器参考 link。末端位姿固定从 TF 获取，无需配置来源或位姿话题；Xbot 的 `record_tcp_pose: false` 关闭位姿录制及 TF 监听。
 
 启用力数据时，`cell.ft300_enabled: true` 订阅 `/robotiq_force_torque_sensor_broadcaster/wrench`；设为 `false` 则订阅 UR 内置传感器 `/force_torque_sensor_broadcaster/ft_data`。数值保持消息原始坐标，不做变换；`observation.wrench_reference_link` 保存该消息的 `header.frame_id`。FT300 在组合 URDF 的 ros2_control 硬件接口中运行，组合启动仅额外加载 broadcaster，不启动争用串口的独立驱动。仿真录制如无力话题，应将 `record_wrench` 设为 `false`。
 

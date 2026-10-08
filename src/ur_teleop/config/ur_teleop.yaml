@@ -67,8 +67,6 @@ recorder:
   fps: 60
   robot_type: ur10e_alicia_teleop
   use_videos: true
-  ee_pose_source: tf             # tf | topic(/tcp_pose_broadcaster/pose) | none
-  ee_pose_topic: /tcp_pose_broadcaster/pose
   ee_pose_parent_frame: base_link
   ee_pose_child_frame: tool0     # tool0 在 bare（real）与组合（sim）URDF 中都存在；
                                  # gripper_tcp 只在组合模型里，real 下查不到 → NaN

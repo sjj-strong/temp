@@ -80,8 +80,6 @@ def load_config(path: str | Path) -> dict[str, Any]:
                     'record_joint_effort', 'record_tcp_pose', 'record_wrench'):
             if key in rec and not isinstance(rec[key], bool):
                 raise ConfigError(f'recorder.{key} 必须为布尔值')
-        if rec.get('record_tcp_pose', True) and rec.get('ee_pose_source', 'tf') == 'none':
-            raise ConfigError('保存 TCP 位姿时 ee_pose_source 不能为 none')
         for name, camera in rec.get('cameras', {}).items():
             if not isinstance(camera, dict) or not isinstance(camera.get('enabled', True), bool):
                 raise ConfigError(f'recorder.cameras.{name}.enabled 必须为布尔值')

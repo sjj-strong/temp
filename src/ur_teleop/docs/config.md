@@ -131,8 +131,6 @@ gripper_value_to_position(value: float, gripper_type: str = "50mm") -> float
 | `fps`                    | int   | `50`                  | 录制帧率                                         | data_recorder.py:34                            |
 | `robot_type`             | str   | `ur10e_alicia_teleop` | LeRobot 机器人类型                               | data_recorder.py:135                           |
 | `use_videos`             | bool  | `true`                | 图像特征 dtype：`video`/`image`              | FrameBuilder`features`                       |
-| `ee_pose_source`         | str   | `tf`                  | `tf` / `topic(/tcp_pose)` / `none`         | data_recorder.py:54                            |
-| `ee_pose_topic`          | str   | `/tcp_pose`           | topic 模式订阅位姿话题                           | data_recorder.py:62                            |
 | `ee_pose_parent_frame`   | str   | `base_link`           | tf 查询父系                                      | data_recorder.py:117                           |
 | `ee_pose_child_frame`    | str   | `gripper_tcp`         | tf 查询子系                                      | data_recorder.py:118                           |
 | `cameras`                | dict  | `{}`                  | `{"wrist": {topic, image_key, height, width}}` | FrameBuilder、data_recorder 图像订阅           |

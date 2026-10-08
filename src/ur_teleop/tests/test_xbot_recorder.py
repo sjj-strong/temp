@@ -56,7 +56,7 @@ def test_episode_events_and_stale_gate(monkeypatch, mode):
     node._missing_cam_warned = set()
     node._lock = threading.Lock()
     node._builder = FrameBuilder(node._rec, {})
-    node._ee_source, node._ee_warned = 'tf', False
+    node._ee_warned = False
     node._enable_sent = False
     saved, frames, finished = [], [], []
     node._dataset = SimpleNamespace(add_frame=frames.append,
@@ -154,3 +154,35 @@ def test_only_enabled_observations_gate_recording():
     assert not node._xbot_data_ready()
     node._joint_velocity_at = now
     assert node._xbot_data_ready()
+
+
+@pytest.mark.parametrize('xbot', [False, True])
+def test_tcp_pose_comes_from_tf(xbot):
+    """两种输入源均查询配置坐标系的 TF，不订阅位姿话题。"""
+    pytest.importorskip('rclpy')
+    from ur_teleop.data_recorder import DataRecorderNode
+    from rclpy.time import Time
+    from rclpy.clock import ClockType
+    node = object.__new__(DataRecorderNode)
+    node._xbot = xbot
+    node._rec = {'ee_pose_parent_frame': 'base_link'}
+    node._reference_link = 'base'
+    node._tcp_link = 'tool0'
+    node._data_timeout = .5
+    node.get_clock = lambda: SimpleNamespace(now=lambda: Time(seconds=10., clock_type=ClockType.ROS_TIME))
+    transform = SimpleNamespace(
+        header=SimpleNamespace(stamp=Time(seconds=10.).to_msg()),
+        transform=SimpleNamespace(translation=SimpleNamespace(x=.1, y=.2, z=.3),
+                                  rotation=SimpleNamespace(x=0., y=0., z=0., w=1.)))
+    calls = []
+
+    def lookup(parent, child, stamp, timeout):
+        calls.append((parent, child))
+        return transform
+
+    node._tf_buffer = SimpleNamespace(lookup_transform=lookup)
+    assert node._get_ee_pose() == [.1, .2, .3, 0., 0., 0., 1.]
+    assert calls == [('base' if xbot else 'base_link', 'tool0')]
+    if xbot:
+        node.get_clock = lambda: SimpleNamespace(now=lambda: Time(seconds=11., clock_type=ClockType.ROS_TIME))
+        assert node._get_ee_pose() is None

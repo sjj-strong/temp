@@ -67,7 +67,6 @@ recorder:
   record_tcp_pose: true
   record_wrench: true            # FT300 启用时取外部传感器，否则取 UR 内置传感器。
   data_timeout_s: 0.5
-  ee_pose_source: tf
   ee_pose_parent_frame: base_link # Xbot 实际按控制器参考 link 自动选择；此项保留兼容 Alicia。
   ee_pose_child_frame: tool0     # observation 的 TCP link。
   use_videos: true
