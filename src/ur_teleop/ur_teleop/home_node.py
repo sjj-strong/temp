@@ -19,6 +19,8 @@ from rclpy.executors import SingleThreadedExecutor
 from sensor_msgs.msg import JointState
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 
+from ur_teleop.keyboard import KeyboardReader
+
 from ur_teleop.config import (
     ALICIA_JOINT_NAMES,
     GRIPPER_JOINT,
@@ -34,6 +36,8 @@ class HomeNode(rclpy.node.Node):
         self.declare_parameter("config_file", default_config_path())
         cfg = load_config(self.get_parameter("config_file").value)
         self._source = cfg["teleop"].get("control_source", "alicia")
+        self.declare_parameter("sim", cfg["sim"])
+        self._sim = self.get_parameter("sim").value
         home = cfg["home"]
         self._master_home = list(home["master"]) if self._source == "alicia" else []
         self._slave_home = list(home["slave"])
@@ -51,6 +55,24 @@ class HomeNode(rclpy.node.Node):
             self, FollowJointTrajectory, "/scaled_joint_trajectory_controller/follow_joint_trajectory"
         )
         self._cell_ready_since: float | None = None
+
+    def wait_for_external_control(self, executor) -> bool:
+        """真机回 Home 前提示并等待回车，两种输入源共用。"""
+        if self._sim:
+            return True
+        self.get_logger().info(
+            "请在示教器上点击启动“外部控制（External Control）”程序，"
+            "完成后按回车，才会开始回到 Home 位置。"
+        )
+        keyboard = KeyboardReader()
+        try:
+            while rclpy.ok():
+                executor.spin_once(timeout_sec=0.1)
+                if keyboard.read_key() == "enter":
+                    return True
+            return False
+        finally:
+            keyboard._restore_terminal()
 
     def _joint_cb(self, msg: JointState):
         # 双臂各自发布 /joint_states（UR cell 与 alicia_d_driver 交织在同一话题），
@@ -164,6 +186,8 @@ def main():
     executor.add_node(node)
     rc = 0
     try:
+        if not node.wait_for_external_control(executor):
+            return 1
         node.get_logger().info(
             "等待 UR cell 就绪（/joint_states + trajectory action server 稳定）..."
         )

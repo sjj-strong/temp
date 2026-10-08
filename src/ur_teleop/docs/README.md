@@ -31,3 +31,7 @@ PYTHONPATH=/ros2_ws/src/ur_teleop:$PYTHONPATH \
 ```
 
 默认不执行原有 `integration` 测试，Xbot mock 测试需按[手柄文档](xbot_control.md#测试)单独启用。测试不得连接真机。
+
+## 真机回 Home 前确认
+
+Alicia 与 Xbot 共用 `home.launch.py` 的确认流程：控制栈启动后，终端提示在示教器点击启动“外部控制（External Control）”程序；完成后按回车，再等待状态与轨迹控制器就绪并回 Home。等待确认期间不发送 Home 指令。仿真不等待人工确认。Alicia 的 `sim` 启动参数覆盖同样生效。

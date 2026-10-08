@@ -53,6 +53,18 @@ def _start_cell(context, pkg_share):
     )]
 
 
+def _start_home(context):
+    """真机确认按实际启动模式判断，支持 Alicia 的 sim 参数覆盖。"""
+    config_path = LaunchConfiguration("config_file").perform(context)
+    cfg = load_config(config_path)
+    sim = (cfg["sim"] if cfg["teleop"].get("control_source") == "xbot" else
+           LaunchConfiguration("sim").perform(context).lower() == "true")
+    return [Node(
+        package="ur_teleop", executable="home_node", output="screen",
+        parameters=[{"config_file": config_path, "sim": sim}],
+    )]
+
+
 def generate_launch_description():
     pkg_share = get_package_share_directory("ur_teleop")
     config_file = os.path.join(pkg_share, "config", "ur_teleop.yaml")
@@ -90,8 +102,5 @@ def generate_launch_description():
                                                          fallback="forward_position"),
                               choices=["forward_position", "joint_impedance"]),
         OpaqueFunction(function=_start_cell, args=[pkg_share]),
-        Node(
-            package="ur_teleop", executable="home_node",
-            parameters=[{"config_file": LaunchConfiguration("config_file")}],
-        ),
+        OpaqueFunction(function=_start_home),
     ])
