@@ -77,7 +77,7 @@ def test_joy_switch_motion_and_fault(tmp_path):
         run(.3)
         assert any(c[0] > 0 for c in commands)
         axes[1] = 0.
-        desired_gripper = 0. if node.gripper_state > .4 else 1.
+        desired_gripper = 1. - node.gripper_command
         buttons[2] = 1
         run(1.)
         assert node.gripper_command == desired_gripper, (node.gripper_state, node.gripper_pending,

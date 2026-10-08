@@ -6,7 +6,7 @@ CFG = {
     "enabled": True,
     "action_server": "/robotiq_gripper_controller/gripper_cmd",
     "open_pos_rad": 0.0,
-    "close_pos_rad": 0.79,
+    "close_pos_rad": 0.4,
     "close_threshold_m": 0.0125,
     "open_threshold_m": 0.005,
     "max_effort": 50.0,
@@ -23,7 +23,7 @@ def test_open_to_closed_transition():
     g = GripperController(CFG)
     assert g.update(0.0) == GripperTarget.OPEN
     assert g.update(0.03) == GripperTarget.CLOSED
-    assert g.get_knuckle_command(GripperTarget.CLOSED) == pytest.approx(0.79)
+    assert g.get_knuckle_command(GripperTarget.CLOSED) == pytest.approx(0.4)
     assert g.get_knuckle_command(GripperTarget.OPEN) == pytest.approx(0.0)
     assert g.get_gripper_command_signal(GripperTarget.CLOSED) == 1.0
     assert g.get_gripper_command_signal(GripperTarget.OPEN) == 0.0

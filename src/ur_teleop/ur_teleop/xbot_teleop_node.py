@@ -132,7 +132,10 @@ class XbotTeleopNode(Node):
             self.gripper_state = values[UR_GRIPPER_JOINT]
             self.gripper_at = time.monotonic()
             if not self.gripper_initialized:
-                self.gripper_command = float(self.gripper_state > .4)
+                grip = self.cfg.get('gripper', {})
+                midpoint = (float(grip.get('open_pos_rad', 0.)) +
+                            float(grip.get('close_pos_rad', .4))) / 2.
+                self.gripper_command = float(self.gripper_state >= midpoint)
                 self.gripper_initialized = True
 
     def on_estop(self, msg):
@@ -199,11 +202,12 @@ class XbotTeleopNode(Node):
                 self.gripper_state is None or time.monotonic() - self.gripper_at > self.x['tcp_timeout_s'] or
                 not self.gripper.server_is_ready()):
             return
-        desired = 0. if self.gripper_state > .4 else 1.
+        # 按已接受的开合目标切换，夹持物体时无需等待实测位置越过阈值。
+        desired = 1. - self.gripper_command
         self.get_logger().info(f'夹爪请求: 实测={self.gripper_state:.3f}, 目标={desired}')
         goal = ParallelGripperCommand.Goal()
         goal.command.name = [UR_GRIPPER_JOINT]
-        goal.command.position = [float(grip.get('close_pos_rad', .79) if desired else grip.get('open_pos_rad', 0.))]
+        goal.command.position = [float(grip.get('close_pos_rad', .4) if desired else grip.get('open_pos_rad', 0.))]
         goal.command.effort = [float(grip.get('max_effort', 50.))]
         self.gripper_pending = True
         future = self.gripper.send_goal_async(goal)

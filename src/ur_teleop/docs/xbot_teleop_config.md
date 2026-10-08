@@ -57,7 +57,7 @@
 | `gripper.close_threshold_m` | `0.0125`                                  | Alicia 夹爪迟滞控制使用的闭合阈值，单位米；**Xbot 分支当前不读取**。                 |
 | `gripper.open_threshold_m`  | `0.005`                                   | Alicia 夹爪迟滞控制使用的张开阈值，单位米；**Xbot 分支当前不读取**。                 |
 | `gripper.open_pos_rad`      | `0.0`                                     | Xbot 发送夹爪打开目标时的关节角，单位 rad。                                                |
-| `gripper.close_pos_rad`     | `0.79`                                    | Xbot 发送夹爪闭合目标时的关节角，单位 rad。                                                |
+| `gripper.close_pos_rad`     | `0.4`                                    | Xbot 发送夹爪闭合目标时的关节角，单位 rad。                                                |
 | `gripper.max_effort`        | `50.0`                                    | Xbot 夹爪 action 的最大 effort 命令值；实际单位与限制由夹爪控制器定义。                    |
 
 ## 数据录制
@@ -82,6 +82,6 @@
 | `recorder.cameras` | `{}` | 每台相机独立配置 `enabled`、`topic`、`image_key`、`height`、`width`；未启用的相机不进入数据集。 |
 | `recorder.task`                   | `xbot_teleoperation`    | 写入每帧的任务标签。                                                                                                                                             |
 | `recorder.min_frames_per_episode` | `2`                     | 保存 episode 所需的最少有效帧数；不足时自动丢弃。                                                                                                                |
-| `recorder.state_threshold_rad`    | `0.4`                   | 录制夹爪 observation 时，将实测夹爪关节角大于此值判为闭合`1`，否则为张开 `0`。                                                                               |
+| `recorder.state_threshold_rad`    | `0.2`                   | 录制夹爪 observation 时，将实测夹爪关节角大于此值判为闭合`1`，否则为张开 `0`。                                                                               |
 
 无夹爪时设置 `recorder.record_ur_gripper: false` 和 `recorder.record_action_gripper: false`。各观测开关及 FT300／UR 内置力数据来源见[数据采集](data_recorder.md)。

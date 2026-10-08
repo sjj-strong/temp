@@ -1,8 +1,4 @@
-"""Robotiq 2F-85 gripper control — hysteresis-based binary FSM.
-
-Pure logic — no rclpy imports. Maps Alicia gripper position (meters, 0=open)
-to a binary target; Robotiq knuckle command is rad (0=open, 0.79=closed).
-"""
+"""夹爪开合状态机：Alicia 输入单位为米，输出打开 0、闭合 0.4 弧度。"""
 
 from enum import Enum
 
@@ -14,7 +10,7 @@ class GripperTarget(Enum):
 
 
 class GripperController:
-    """Binary FSM with hysteresis; update() returns UNKNOWN while target is unchanged."""
+    """带迟滞的开合状态机，目标未变化时返回 UNKNOWN。"""
 
     def __init__(self, gripper_config: dict):
         self.enabled = bool(gripper_config.get("enabled", False))
@@ -22,7 +18,7 @@ class GripperController:
             gripper_config.get("action_server", "/robotiq_gripper_controller/gripper_cmd")
         )
         self._open_pos = float(gripper_config.get("open_pos_rad", 0.0))
-        self._close_pos = float(gripper_config.get("close_pos_rad", 0.79))
+        self._close_pos = float(gripper_config.get("close_pos_rad", 0.4))
         self._close_threshold = float(gripper_config.get("close_threshold_m", 0.0125))
         self._open_threshold = float(gripper_config.get("open_threshold_m", 0.005))
         self._max_effort = float(gripper_config.get("max_effort", 50.0))
@@ -45,7 +41,7 @@ class GripperController:
         return self._current
 
     def update(self, alicia_gripper_m: float) -> GripperTarget:
-        """Return OPEN/CLOSED on target change, UNKNOWN while in deadband/unchanged."""
+        """仅在开合状态变化时返回目标，死区或未变化时返回 UNKNOWN。"""
         if not self.enabled:
             return GripperTarget.UNKNOWN
         if alicia_gripper_m > self._close_threshold:

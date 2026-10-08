@@ -4,7 +4,7 @@
 
 ## 概述
 
-GripperController 是"目标决策"层：只根据主臂夹爪实时位置输出 `OPEN`/`CLOSED`/`UNKNOWN` 三态，不做任何 ROS 通信。执行层在 teleop_node：`_gripper_tick`（10 Hz）轮询 `update()`，目标变化时经 `ParallelGripperCommand` action 下发。夹爪单位约定：**Alicia 侧是位置（米，0=开）**，**Robotiq 侧是 knuckle 指令（弧度，0=开，0.79=闭）**，换算在本模块完成（`open_pos_rad`/`close_pos_rad` 参数化，见下）。
+GripperController 是"目标决策"层：只根据主臂夹爪实时位置输出 `OPEN`/`CLOSED`/`UNKNOWN` 三态，不做任何 ROS 通信。执行层在 teleop_node：`_gripper_tick`（10 Hz）轮询 `update()`，目标变化时经 `ParallelGripperCommand` action 下发。夹爪单位约定：**Alicia 侧是位置（米，0=开）**，**Robotiq 侧是 knuckle 指令（弧度，0=开，0.4=闭）**，换算在本模块完成（`open_pos_rad`/`close_pos_rad` 参数化，见下）。
 
 ## 公开接口
 
@@ -25,7 +25,7 @@ UNKNOWN = 2   # 无变化/未启用/未知
 | `enabled` | bool | `false` | 开关；关闭时 `update()` 恒 UNKNOWN |
 | `action_server` | str | `/robotiq_gripper_controller/gripper_cmd` | action server 名（节点用） |
 | `open_pos_rad` | float | `0.0` | 张开 knuckle 指令（rad） |
-| `close_pos_rad` | float | `0.79` | 闭合 knuckle 指令（rad） |
+| `close_pos_rad` | float | `0.4` | 闭合 knuckle 指令（rad） |
 | `close_threshold_m` | float | `0.0125` | 判 CLOSED 的阈值（Alicia 侧，m） |
 | `open_threshold_m` | float | `0.005` | 判 OPEN 的阈值（Alicia 侧，m） |
 | `max_effort` | float | `50.0` | 目标 effort |
@@ -85,7 +85,11 @@ teleop_node.py:321-342，10 Hz（`gripper.fsm_rate_hz`，默认 10.0，仅 enabl
 ## 测试覆盖（tests/test_gripper_controller.py）
 
 - `test_disabled_by_config`：未启用 → 恒 UNKNOWN。
-- `test_open_to_closed_transition`：0.0 → OPEN、0.03 → CLOSED；knuckle 指令 0.79/0.0、信号 1.0/0.0 双出口。
+- `test_open_to_closed_transition`：0.0 → OPEN、0.03 → CLOSED；knuckle 指令 0.4/0.0、信号 1.0/0.0 双出口。
 - `test_hysteresis_deadband_keeps_previous_target`：0.03→CLOSED 后，0.010（死区）→ UNKNOWN 且保持；0.004 越过 open 阈值 → OPEN；回 0.010 → 保持 OPEN；0.02 → CLOSED。
 - `test_current_target_follows_updates`：`current_target` 跟随。
 - `test_knuckle_default_safe_open`：UNKNOWN → 0.0（张开）。
+
+## Alicia 与 Xbot 统一开合目标
+
+默认仅发送打开 `0.0 rad` 和闭合 `0.4 rad` 两个目标，动作信号仍为打开 `0`、闭合 `1`。Alicia 保留主臂输入迟滞以防抖，只在开合状态变化时发送目标。Xbot 每次 A 键有效按下，切换上一次已接受的目标，不要求实测位置大于 `0.4`；目标拒绝时保持原目标。首次收到反馈时按两个目标的中点初始化状态。录制实测状态的默认阈值同步调整为 `0.2 rad`。

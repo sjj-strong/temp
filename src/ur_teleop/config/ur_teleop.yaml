@@ -58,7 +58,7 @@ gripper:
   close_threshold_m: 0.0125
   open_threshold_m: 0.005
   open_pos_rad: 0.0
-  close_pos_rad: 0.79
+  close_pos_rad: 0.4
   max_effort: 50.0
 recorder:
   repo_id: my_user/ur_teleop
@@ -74,4 +74,4 @@ recorder:
   cameras: {}                    # 仅定义数据集图像；发布与预览见 camera.yaml，示例见 docs/data_recorder.md。
   task: teleoperation
   min_frames_per_episode: 2
-  state_threshold_rad: 0.4       # robotiq 夹爪 rad → 0/1 state 阈值
+  state_threshold_rad: 0.2       # robotiq 夹爪 rad → 0/1 state 阈值
