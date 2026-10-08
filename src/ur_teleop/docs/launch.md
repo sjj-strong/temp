@@ -62,15 +62,40 @@ ros2 launch ur_teleop teleop.launch.py mode:=teleop
 
 ## 相机
 
-相机由 `camera.launch.py` 单独启动，不包含在 Home 或 teleop 中，也不启动机器人。两种遥操作共用 `config/camera.yaml`，其中 `cameras.realsense.enabled`、`cameras.opencv.enabled` 选择发布源：
+相机由 `camera.launch.py` 单独启动，不包含在 Home 或 teleop 中，也不启动机器人。两种遥操作共用 `config/camera.yaml`，顶层每个键就是自定义相机名，无需 `cameras` 包装层：
+
+```yaml
+front:
+  type: usb
+  enabled: true
+  visualize: true
+  device: /dev/video0
+  width: 640
+  height: 480
+  fps: 30
+  fourcc: MJPG
+
+wrist:
+  type: realsense
+  enabled: true
+  visualize: false
+  serial_no: "001234567890"
+  enable_color: true
+  enable_depth: false
+  width: 640
+  height: 480
+  fps: 30
+```
 
 ```bash
 ros2 launch ur_teleop camera.launch.py \
   config_file:=/ros2_ws/src/ur_teleop/config/camera.yaml
 ```
 
-- RealSense 使用 `data_collection/launch/dual_realsense.launch.py`，设置位于 `cameras.realsense`。
-- 相机配置统一使用 `camera.yaml`：`cameras` 定义 RealSense、USB 和预览的开关，顶层 `opencv_cameras` 列表定义 USB 设备、话题、分辨率、帧率及压缩参数。USB 启动入口直接读取同一个文件，不再使用 `opencv_cameras.yaml` 或 `opencv_camera_config` 参数。自定义配置也通过 `config_file` 一次传入。
-- `alicia_teleop.yaml` / `xbot_teleop.yaml` 的 `recorder.cameras` 只选择数据集保存的图像，见[录制配置](data_recorder.md)。
-- `cameras.visualization.topics` 定义预览话题，拼接结果为 `/camera_mosaic/image_raw`，由 rqt 显示。
-- 命令行 `launch_realsense`、`launch_opencv_cameras`、`launch_image_viewers` 等参数可覆盖相机配置。
+- 名称必须以字母开头，仅包含字母、数字和下划线；默认彩色话题为 `/camera/<名称>/color/image_raw`，可用该相机的 `topic` 覆盖。
+- `type` 为 `usb` 或 `realsense`。USB 的 `device` 填设备路径或端口索引，优先使用稳定的 `/dev/v4l/by-path`；RealSense 的 `serial_no` 必须加引号，各设备独立启动，不固定相机型号或数量。
+- `enabled` 默认 `true`，关闭后不启动也不加入预览。`visualize` 默认 `false`，仅开启时加入拼图；没有相机需要预览时，不启动拼图节点或 rqt。
+- 宽高和帧率必须为正整数，默认 640×480、30 FPS。USB 可配置 `fourcc`、`publish_compressed`、`compressed_quality`、`auto_exposure`、`exposure_time_absolute` 和 `frame_id`；RealSense 用 `enable_color`、`enable_depth` 控制图像流。
+- 原有按类别开关及序列号的命令行参数已移除；入口仅使用 `config_file`，每台相机的参数在文件内修改。已有旧配置须按上例迁移。
+- 预览话题自动从选中的相机生成，无需单独维护话题列表；拼接结果为 `/camera_mosaic/image_raw`。预览使用彩色图像，RealSense 需要开启 `enable_color`。
+- `alicia_teleop.yaml` / `xbot_teleop.yaml` 的 `recorder.cameras` 选择保存的图像及缩放尺寸，录制话题应与发布话题一致，见[录制配置](data_recorder.md)。

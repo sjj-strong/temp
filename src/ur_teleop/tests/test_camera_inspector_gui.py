@@ -93,3 +93,18 @@ def test_yaml_uses_active_profile_and_errors_are_visible(window):
     window.safe(window.start)
     assert window.stream is None
     assert window.status.text() == 'USB format must contain four characters.'
+
+
+def test_realsense_name_is_editable_and_exported(window):
+    """RealSense 与 USB 均通过 Name 字段自定义配置名称。"""
+    import yaml
+    window.devices.append(dict(kind='realsense', model='RealSense D455', serial='00123'))
+    window.populate()
+    window.choice.setCurrentIndex(2)
+    assert window.name.isEnabled()
+    window.name.setText('wrist')
+    window.generate()
+    config = yaml.safe_load(window.output.toPlainText())
+    assert list(config) == ['wrist']
+    assert config['wrist']['type'] == 'realsense'
+    assert config['wrist']['serial_no'] == '00123'

@@ -20,6 +20,7 @@
   <depend>trajectory_msgs</depend>
   <depend>cv_bridge</depend>
   <exec_depend>data_collection</exec_depend>
+  <exec_depend>realsense2_camera</exec_depend>
   <exec_depend>rqt_image_view</exec_depend>
   <!-- 独立相机检查工具；RealSense Python SDK 为可选依赖。 -->
   <exec_depend>python3-opencv</exec_depend>

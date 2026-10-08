@@ -31,7 +31,7 @@ Xbot 首次使用先标定并运行[独立手柄测试](xbot_joy_test.md)。Alic
 python3 /ros2_ws/src/ur_teleop/ur_teleop/camera_inspector.py
 ```
 
-逐台确认型号、稳定设备路径、分辨率、帧率和曝光效果，将界面生成的字段合并到 `config/camera.yaml`（RealSense 参数放在 `cameras.realsense`，USB 参数放在顶层 `opencv_cameras` 列表）。只有两台 USB 时禁用不存在的第三台。关闭调参预览，释放设备。
+逐台确认型号、稳定设备路径、分辨率、帧率和曝光效果，将界面生成的字段合并到 `config/camera.yaml`（顶层键为自定义相机名，每台相机独立填写 `type`、设备参数、`enabled` 和 `visualize`）。只有两台 USB 时禁用不存在的第三台。关闭调参预览，释放设备。
 
 新开相机终端，加载上述 ROS 环境后执行并保持运行：
 
@@ -40,7 +40,7 @@ ros2 launch ur_teleop camera.launch.py \
   config_file:=/ros2_ws/src/ur_teleop/config/camera.yaml
 ```
 
-在所选遥操作配置的 `recorder.cameras` 中启用需要保存的图像，并填写与发布器一致的 topic、宽和高。相机的发布/预览由 `camera.yaml` 管理，录制选项由 `recorder.cameras` 管理。曝光等调参值目前不会由这两个相机 YAML 自动加载，采集前重新确认图像效果。细节见[相机调试](camera_inspector.md)、[相机发布](launch.md#相机)与[数据字段](data_recorder.md)。
+在所选遥操作配置的 `recorder.cameras` 中启用需要保存的图像，并填写与发布器一致的 topic、宽和高。相机的发布/预览由 `camera.yaml` 管理，录制选项由 `recorder.cameras` 管理。USB 可通过各相机的 `auto_exposure` 和 `exposure_time_absolute` 设置曝光，其他调参值需在采集前重新确认。细节见[相机调试](camera_inspector.md)、[相机发布](launch.md#相机)与[数据字段](data_recorder.md)。
 
 ## 3. 生成本次 mock 配置
 

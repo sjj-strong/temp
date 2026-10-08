@@ -93,27 +93,18 @@ def discover():
 
 
 def snippet(device, width, height, fps, fourcc, name):
-    """Generate only fields supported by the existing YAML configurations."""
+    """生成以自定义相机名为顶层键的独立配置。"""
     import yaml
+    if not re.fullmatch(r'[A-Za-z][A-Za-z0-9_]*', name):
+        raise ValueError('Name must start with a letter and contain only letters, numbers and underscores.')
+    camera = dict(type=device['kind'], enabled=True, visualize=True)
     if device['kind'] == 'usb':
-        if not re.fullmatch(r'[A-Za-z][A-Za-z0-9_]*', name):
-            raise ValueError('Name must start with a letter and contain only letters, numbers and underscores.')
-        return yaml.safe_dump({'opencv_cameras': [dict(
-            name=name, enabled=True, device=device['path'], topic=f'/camera/{name}/color/image_raw',
-            frame_id=f'{name}_color_optical_frame', width=width, height=height, fps=fps,
-            fourcc=fourcc, publish_compressed=True, compressed_quality=90)]},
-            allow_unicode=True, sort_keys=False)
-    model = device['model'].lower()
-    if 'd435' in model or 'camera 435' in model:
-        key = 'd435i_serial'
-    elif 'd455' in model or 'camera 455' in model:
-        key = 'd455_serial'
+        camera.update(device=device['path'], fourcc=fourcc,
+                      publish_compressed=True, compressed_quality=90)
     else:
-        raise ValueError('The existing launch configuration supports only D435-series and D455 cameras.')
-    return yaml.safe_dump({'cameras': {'realsense': dict(
-        enabled=True, **{key: device['serial']}, enable_d435i=key == 'd435i_serial',
-        enable_color=True, enable_depth=False, color_profile=f'{width},{height},{fps}',
-        camera_namespace='camera')}}, allow_unicode=True, sort_keys=False)
+        camera.update(serial_no=device['serial'], enable_color=True, enable_depth=False)
+    camera.update(width=width, height=height, fps=fps)
+    return yaml.safe_dump({name: camera}, allow_unicode=True, sort_keys=False)
 
 
 class Stream:
@@ -332,7 +323,6 @@ def create_window(devices, warnings):
             self.stop()
             device = self.selected()
             self.info.setText(json.dumps(device, ensure_ascii=True))
-            self.name.setEnabled(device['kind'] == 'usb')
             self.fourcc.setEnabled(device['kind'] == 'usb')
 
         def refresh(self):

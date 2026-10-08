@@ -27,21 +27,20 @@ After rebuilding the package and sourcing the workspace, `ros2 run ur_teleop cam
 1. Select a camera. Its model, device path, physical port and serial number appear above the preview.
 2. Set Width, Height, FPS and USB Format. Click Start / Restart. Supported Formats shows the device's available profiles.
 3. Select a Camera Control. Change its numeric value and press Enter, or select a menu entry. The setting applies immediately and the status displays device readback. Disable automatic exposure or white balance before changing the corresponding manual values.
-4. Click YAML Parameters and copy the fields into the matching configuration. Use a unique Name for each USB camera.
+4. 点击 YAML Parameters，将生成的配置复制到 `camera.yaml`；USB 与 RealSense 均可通过 Name 自定义唯一相机名称。
 5. Click Stop or close the window before starting dataset collection.
 
 ## Configuration fields
 
-- USB 配置统一放在 `config/camera.yaml` 的顶层 `opencv_cameras` 列表。`device` 优先使用 `/dev/v4l/by-path`；宽高、帧率和 FourCC 采用实际采集参数。每台相机的 name、topic 和 frame_id 必须唯一，只有两台 USB 相机时禁用或删除第三项。
-- RealSense 配置放在同一文件的 `cameras.realsense` 中，填写检测到的序列号、启用开关和 color_profile；`cameras.visualization.topics` 填写实际图像话题。
-- 调参工具中的曝光、白平衡等原生控件设置只在当前采集会话生效；复制配置时仅写入驱动支持的字段。
-
-The existing RealSense launch always starts D455 and optionally starts D435i. A single D455 can use enable_d435i=false. A single D435i requires a separate launch change to disable the absent D455. Other RealSense models cannot map directly to the current launch configuration.
+- `config/camera.yaml` 的每个顶层键为自定义相机名。调参工具为 USB 和 RealSense 都使用 Name 字段生成对应的配置项，直接复制到该文件。
+- USB 使用 `type: usb`，`device` 优先填写 `/dev/v4l/by-path`；RealSense 使用 `type: realsense` 和加引号的 `serial_no`。各设备独立配置，不固定 D435i 或 D455 的组合。
+- `enabled` 控制是否发布，`visualize` 控制是否加入预览；默认图像话题为 `/camera/<名称>/color/image_raw`，无需额外配置全局话题列表。
+- 宽高和帧率填写实际采集参数；USB 的 FourCC 放在 `fourcc`。USB 曝光可通过 `auto_exposure` 和 `exposure_time_absolute` 配置，调参界面的其他控件设置仅在当前会话生效。
 
 One USB camera may have multiple video nodes; metadata nodes are excluded from the camera selector. RealSense nodes are grouped by serial number. Two USB cameras can share the same serial number; use their physical USB paths to distinguish them. If stable path links are missing, the displayed `/dev/videoN` fallback may change after reconnecting.
 
 ## Verification
 
-Logic tests cover native control parsing and configuration mapping. Qt tests use simulated frames and controls to verify RGB rendering, immediate control application, device switching and stream cleanup without connecting to cameras or robots. All 14 logic, Qt interface and launch regression tests passed. Live 640x480 previews were verified on both USB cameras and the RealSense D455. Brightness changes were accepted and read back on all three devices, then restored to their original values. The RealSense SDK serial is 311322303190; when USB descriptors differ, the SDK identifier takes priority for stream configuration.
+Logic tests cover native control parsing and configuration mapping. Qt tests use simulated frames and controls to verify RGB rendering, immediate control application, device switching and stream cleanup without connecting to cameras or robots. 本次逐相机配置修改的 27 项逻辑、界面及启动测试通过，测试使用模拟设备，不访问真实相机或机器人。 Live 640x480 previews were verified on both USB cameras and the RealSense D455. Brightness changes were accepted and read back on all three devices, then restored to their original values. The RealSense SDK serial is 311322303190; when USB descriptors differ, the SDK identifier takes priority for stream configuration.
 
 References: [PyQtGraph ImageItem](https://pyqtgraph.readthedocs.io/en/latest/api_reference/graphicsItems/imageitem.html), [Qt QTimer](https://doc.qt.io/qtforpython-6/PySide6/QtCore/QTimer.html).

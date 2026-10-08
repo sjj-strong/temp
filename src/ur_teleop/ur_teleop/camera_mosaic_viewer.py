@@ -26,7 +26,7 @@ class CameraMosaicViewer(Node):
             str(topic) for topic in self.get_parameter("topics").value if topic
         ]
         if not self._topics:
-            raise RuntimeError("未配置 cameras.visualization.topics")
+            raise RuntimeError("未配置用于拼接预览的图像话题")
         self._frames = {}
         self._lock = threading.Lock()
         self._publisher = self.create_publisher(Image, self._OUTPUT_TOPIC, 5)
