@@ -84,3 +84,5 @@
 仅通过 `recorder.record_action_gripper` 控制是否保存夹爪开合指令（打开 `0`、闭合 `1`）。各观测开关及 FT300／UR 内置力数据来源见[数据采集](data_recorder.md)。
 
 `recorder.record_tcp_pose` 控制是否保存 TCP 位姿；`record_wrench` 控制是否保存力／力矩。夹爪只保存指令，不保存实测开合 observation，也不依赖夹爪反馈进行录制。
+
+完整的 `recorder.num_episodes`、视频编码和数据集创建参数见[Record 配置参数](recorder_config.md)。

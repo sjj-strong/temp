@@ -2,6 +2,8 @@
 
 `ros2 launch ur_teleop teleop.launch.py config_file:=/ros2_ws/src/ur_teleop/config/xbot_teleop.yaml mode:=record` 启动手柄、遥操作和录制器。组合单元须先按[手柄启动说明](xbot_control.md)启动并完成 Home；相机先按[调试说明](camera_inspector.md)确认参数，再按[相机发布说明](launch.md#相机)单独启动。从硬件准备到先测试后采集的命令见[完整流程](workflow.md)。录制数据写入 `recorder.root`，不会自动上传。
 
+完整参数、LeRobot 创建选项和 `num_episodes` 用法见[Record 配置参数](recorder_config.md)。
+
 ## 数据集目录重名
 
 首次使用配置的 `recorder.root` 创建数据集；目录已存在时，新建带时间后缀的目录，不覆盖已有数据。后缀格式为 `年-月-日-时-分-秒-微秒`（`YYYY-MM-DD-HH-MM-SS-ffffff`），目录名和 `repo_id` 均以 `-` 连接。
@@ -17,7 +19,7 @@
 | 丢弃 | B | D |
 | 保存并结束录制 | View 长按 | Q |
 
-不足 `min_frames_per_episode` 帧时自动丢弃；保存或丢弃后可开始下一段。
+不足 `min_frames_per_episode` 帧时自动丢弃，不计入采集数量。`recorder.num_episodes: 0` 不限数量；设为正整数后，成功保存达到该数量会自动 finalize 并退出采集器。目标未达到时，保存或丢弃后可开始下一段。
 
 ## Xbot action
 

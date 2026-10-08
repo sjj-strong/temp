@@ -43,6 +43,12 @@ def load_config(path: str | Path) -> dict[str, Any]:
         raise ConfigError("debug 必须为布尔值")
     data.setdefault("debug", False)
 
+    from ur_teleop.recorder_config import validate_recorder
+    try:
+        validate_recorder(data.get("recorder", {}))
+    except ValueError as exc:
+        raise ConfigError(str(exc)) from exc
+
     source = data["teleop"].get("control_source", "alicia")
     if source not in ("alicia", "xbot"):
         raise ConfigError("teleop.control_source must be 'alicia' or 'xbot'")

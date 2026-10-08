@@ -54,6 +54,17 @@ gripper:
   max_effort: 50.0
 
 recorder:
+  num_episodes: 0               # 0：手动结束；正整数：保存够指定段数后自动结束。
+  tolerance_s: 0.0001           # LeRobot 时间戳容差，不是本包数据新鲜度阈值。
+  image_writer_processes: 0     # 异步图像写入进程数，0 使用线程。
+  image_writer_threads: 2       # 异步图像写入线程数。
+  video_backend: null           # 视频读取后端；null 由 LeRobot 自动选择。
+  batch_encoding_size: 1        # 每批编码的 episode 数，结束时刷新剩余片段。
+  vcodec: libsvtav1             # 视频编码器。
+  metadata_buffer_size: 10      # episode 元数据缓冲条数。
+  streaming_encoding: false     # true：采集期间实时编码视频。
+  encoder_queue_maxsize: 30     # 流式编码时每相机缓冲帧数。
+  encoder_threads: null         # 每编码器线程数；null 自动。
   repo_id: my_user/ur10e_xbot
   root: /ros2_ws/dataset/xbot
   fps: 20

@@ -155,3 +155,5 @@ gripper_value_to_position(value: float, gripper_type: str = "50mm") -> float
 ## 阻抗阻尼自动计算
 
 Alicia 的关节阻抗参数文件和 Xbot 的 `xbot.controller_config_file` 均支持 `damping: null`，启动时逐轴计算 `D_i = 2√K_i`，等效质量／惯量取 1。显式阻尼数组优先并原样使用；只在空值时生成临时数值参数文件，不修改源文件。默认关节阻抗配置和 Xbot 高刚度配置使用自动计算。
+
+`recorder` 的完整创建、保存与 episode 数量参数见[Record 配置参数](recorder_config.md)，两种输入源均在加载阶段验证参数类型与数值范围。

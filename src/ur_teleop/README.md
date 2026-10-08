@@ -20,6 +20,7 @@ ROS 2 Jazzy 遥操作与数据采集功能包：使用 **Alicia-D 主臂**或 **
 | [Xbot 手柄遥操作](docs/xbot_control.md) | 手柄标定、仿真/真机启动、按键、坐标系和故障处理 |
 | [独立手柄测试](docs/xbot_joy_test.md) | 不连接机器人，检查按键、运动方向和录制操作映射 |
 | [Xbot 配置参数](docs/xbot_teleop_config.md) | `xbot_teleop.yaml` 参数含义、单位和生效条件 |
+| [Record 配置参数](docs/recorder_config.md) | 目标 episode 数、全部 LeRobot 创建选项及数据字段开关 |
 | [数据采集](docs/data_recorder.md) | 开始/保存/丢弃 episode、数据字段、相机录制和 debug/tqdm 日志 |
 | [配置加载与校验](docs/config.md) | Alicia 配置、字段默认值、继承与加载规则 |
 | [数据流与架构](docs/pipeline.md) | Alicia 数据流及模块之间的关系 |

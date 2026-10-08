@@ -22,6 +22,7 @@ except ImportError:
 from ur_teleop.session_logging import debug_log, log_event, EpisodeProgress
 from ur_teleop.config import UR_JOINT_NAMES, default_config_path, load_config
 from ur_teleop.frame_builder import FrameBuilder
+from ur_teleop.recorder_config import dataset_create_options
 from ur_teleop.cartesian_action import action_label
 from ur_teleop.controller_frame import controller_base_frame
 from ur_teleop.keyboard import KeyboardReader
@@ -47,6 +48,8 @@ class DataRecorderNode(Node):
         if self._fps <= 0:
             raise ValueError("recorder.fps 必须为正数")
         self._min_frames = int(self._rec.get("min_frames_per_episode", 2))
+        self._num_episodes = self._rec.get("num_episodes", 0)
+        self._finish_requested = False
         self._cameras = {name: camera for name, camera in self._rec.get('cameras', {}).items()
                          if camera.get('enabled', True)}
         self._builder = FrameBuilder(self._rec, cfg.get("gripper", {}))
@@ -91,7 +94,7 @@ class DataRecorderNode(Node):
                          else '/force_torque_sensor_broadcaster/ft_data')
                 self.create_subscription(WrenchStamped, topic, self._wrench_cb, 10)
 
-        if not self._xbot or flags['tcp_pose']:
+        if (flags['tcp_pose'] if self._xbot else self._rec.get('record_ur_ee_pose', True)):
             from tf2_ros.buffer import Buffer
             from tf2_ros.transform_listener import TransformListener
             self._tf_buffer = Buffer()
@@ -226,9 +229,7 @@ class DataRecorderNode(Node):
         kwargs = dict(
             repo_id=repo_id, fps=self._fps, features=self._features, root=root,
             robot_type=self._rec.get("robot_type", "ur10e_alicia_teleop"),
-            use_videos=self._rec.get("use_videos", True),
-            image_writer_processes=self._rec.get("image_writer_processes", 0),
-            image_writer_threads=self._rec.get("image_writer_threads", 2),
+            **dataset_create_options(self._rec),
         )
         try:
             self._dataset = LeRobotDataset.create(**kwargs)
@@ -246,7 +247,7 @@ class DataRecorderNode(Node):
     # ---------- episode control ----------
 
     def _start_episode(self):
-        if self._recording:
+        if self._recording or getattr(self, "_finish_requested", False):
             return
         need_tcp = self._xbot and self._builder.observation_flags()['tcp_pose']
         if self._xbot and (not self._xbot_data_ready() or (need_tcp and self._get_ee_pose() is None)):
@@ -266,7 +267,7 @@ class DataRecorderNode(Node):
         self._frame_count = 0
         hint = 'Y=保存 B=丢弃 View长按=退出' if self._xbot else 'S=保存 D=丢弃 Q=退出'
         log_event(self, "keyboard", action="start", episode=self._episode_count + 1, message=hint)
-        self._progress = EpisodeProgress(self._episode_count + 1, self._fps)
+        self._progress = EpisodeProgress(self._episode_count + 1, self._fps, getattr(self, "_num_episodes", 0))
 
     def _save_episode(self):
         if not self._recording:
@@ -278,10 +279,15 @@ class DataRecorderNode(Node):
         else:
             self._dataset.save_episode()
             self._episode_count += 1
-            log_event(self, "keyboard", action="save", episode=self._episode_count, frames=self._frame_count)
+            log_event(self, "keyboard", action="save", episode=self._episode_count,
+                      frames=self._frame_count, target_episodes=getattr(self, "_num_episodes", 0))
         self._recording = False
-        self._close_progress()
         self._missing_cam_warned = set()
+        target = getattr(self, '_num_episodes', 0)
+        if target > 0 and self._episode_count >= target and not getattr(self, '_finish_requested', False):
+            self._finish_requested = True
+            self._finished_pub.publish(Bool(data=True))
+            log_event(self, 'collection_complete', episodes=self._episode_count, target_episodes=target)
 
     def _discard_episode(self):
         if not self._recording:
@@ -304,7 +310,8 @@ class DataRecorderNode(Node):
             wrench_link = self._wrench_reference_link
             cmd = list(self._teleop_cmd) if self._teleop_cmd else None
             cameras = dict(self._camera_frames)
-        need_tcp = not self._xbot or self._builder.observation_flags()['tcp_pose']
+        need_tcp = (self._builder.observation_flags()['tcp_pose'] if self._xbot else
+                    self._rec.get('record_ur_ee_pose', True))
         ee = self._get_ee_pose() if need_tcp else None
         if self._xbot and need_tcp and ee is None:
             return
@@ -387,6 +394,8 @@ def main():
                 node._discard_episode()
             elif key == "q":
                 log_event(node, "keyboard", action="quit", message="Q 按下，退出")
+                break
+            if node._finish_requested:
                 break
             if node._progress is not None:
                 node._progress.tick()

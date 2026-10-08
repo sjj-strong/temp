@@ -18,9 +18,10 @@ def debug_log(node, message, **options):
 
 class EpisodeProgress:
     """无固定时长的 episode 只显示真实帧数与每秒成功写入帧数。"""
-    def __init__(self, episode, fps):
+    def __init__(self, episode, fps, num_episodes=0):
         from tqdm import tqdm
-        self.bar = tqdm(total=None, desc=f'episode={episode}', unit='frame',
+        description = f'episode={episode}/{num_episodes}' if num_episodes else f'episode={episode}'
+        self.bar = tqdm(total=None, desc=description, unit='frame',
                         dynamic_ncols=True, mininterval=0.5,
                         bar_format='{desc} | frames={n} | elapsed={elapsed}{postfix}',
                         postfix=dict(collect_hz='0.0', target_hz=fps))

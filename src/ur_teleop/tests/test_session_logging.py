@@ -39,3 +39,11 @@ def test_progress_counts_only_success_and_measures_stalls(monkeypatch):
     finally:
         progress.close()
     assert progress.bar.disable
+
+
+def test_progress_shows_episode_target():
+    progress = module.EpisodeProgress(3, 20, num_episodes=50)
+    try:
+        assert progress.bar.desc == 'episode=3/50'
+    finally:
+        progress.close()
