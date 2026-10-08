@@ -1,0 +1,9 @@
+# 指向 LeRobot 保存的 pretrained_model；模型类型和维度自动读取。
+checkpoint_path: artifacts/act/checkpoints/000001/pretrained_model
+device: cpu  # 本机模拟验证；RTX 4090 配置 cuda。
+dataset_root: artifacts/dataset  # 迁移时只需复制训练数据的 meta 目录。
+reference_frame: base_link
+tcp_link: tool0
+wrench_frame: null
+host: 127.0.0.1
+port: 8000
