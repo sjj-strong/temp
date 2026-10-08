@@ -1,11 +1,13 @@
 # home_node（阶段 1：双臂回 home）
 
-> 路径：ur_teleop/home_node.py（197 行）
-> 职责：等 cell 就绪 → 发 UR home 轨迹 → 发布 Alicia home 指令 → 验证双臂到位 → 打印 HOME REACHED 并退出（一次性节点，exit 0/1）。
+> 路径：ur_teleop/home_node.py
+> 职责：真机提示示教器启动外部控制并等回车 → 等 cell 就绪 → 发 UR home 轨迹 → 发布 Alicia home 指令 → 验证双臂到位 → 打印 HOME REACHED 并退出（一次性节点，exit 0/1）。
 
 ## 概述
 
-home_node 是两阶段启动的阶段 1 编排节点。它完成三件事：
+home_node 是两阶段启动的阶段 1 编排节点。Alicia 和 Xbot 真机模式共用 `wait_for_external_control()`：先提示用户在示教器启动外部控制，等待启动终端的回车，打印“已收到回车确认”后才进入后续流程。使用 `/dev/tty` 读取回车，支持 `ros2 launch`；仿真跳过此确认。
+
+随后完成三件事：
 
 1. **等 cell 就绪**：`/joint_states`（双臂数据）与 `/scaled_joint_trajectory_controller/follow_joint_trajectory` action server 同时可用；
 2. **移动双臂到 home**：UR 走 trajectory action（`scaled_joint_trajectory_controller`），Alicia 走 `/joint_commands` 持续指令（含夹爪 0–1000 值）；
@@ -32,6 +34,7 @@ cell.launch.py 侧再补 `ur_type`（默认 `ur10e`）：sim 分支走 `ur_robot
 
 ```python
 main()
+ ├─ 真机提示启动 External Control 并等回车（Alicia/Xbot 共用，仿真跳过）
  ├─ 等 cell 就绪    ：30 s 轮询 cell_ready()（spin_once 0.5 s）→ 失败 exit 1
  ├─ send_ur_home_trajectory(executor)
  │     └─ 10 s 内等到 goal 被接受 → 等 result（move_timeout_s）→ 失败 exit 1

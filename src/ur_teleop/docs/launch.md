@@ -7,6 +7,8 @@ source /opt/ros/jazzy/setup.bash
 source /ros2_ws/install/setup.bash
 ```
 
+真机启动 `home.launch.py` 后，Alicia 和 Xbot 均先打印提示：请在示教器上启动“外部控制（External Control）”程序，完成后在启动终端按回车。未按回车时不会发送 Home 指令；收到回车后打印确认日志，再等待控制器就绪并执行 Home。仿真不需要示教器，跳过此确认。
+
 两种控制方式均先运行 `home.launch.py`，看到 `HOME REACHED` 后保持终端运行，再启动 `teleop.launch.py`。后者不启动机器人硬件。
 
 | 配置 `teleop.control_source` | Home 阶段 | 遥操作阶段 |

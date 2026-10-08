@@ -69,6 +69,7 @@ class HomeNode(rclpy.node.Node):
             while rclpy.ok():
                 executor.spin_once(timeout_sec=0.1)
                 if keyboard.read_key() == "enter":
+                    self.get_logger().info("已收到回车确认，等待控制器就绪后开始回 Home。")
                     return True
             return False
         finally:
