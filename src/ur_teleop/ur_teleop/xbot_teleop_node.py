@@ -6,6 +6,7 @@ from pathlib import Path
 import numpy as np
 import yaml
 import rclpy
+from ur_teleop.control_interface_logging import log_control_interface
 from rclpy.node import Node
 from rclpy.action import ActionClient
 from rclpy.time import Time
@@ -214,6 +215,9 @@ class XbotTeleopNode(Node):
         goal.command.effort = [float(grip.get('max_effort', 50.))]
         self.gripper_pending = True
         future = self.gripper.send_goal_async(goal)
+        log_control_interface(self, 'XbotTeleopNode.toggle_gripper → ActionClient.send_goal_async',
+                              grip.get('action_server', '/robotiq_gripper_controller/gripper_cmd'),
+                              'control_msgs/action/ParallelGripperCommand', 'robotiq_gripper_controller')
 
         def accepted(f):
             try:
@@ -407,6 +411,9 @@ class XbotTeleopNode(Node):
             (msg.pose.orientation.x, msg.pose.orientation.y,
              msg.pose.orientation.z, msg.pose.orientation.w) = map(float, p[3:])
             self.pose_pub.publish(msg)
+            log_control_interface(self, 'XbotTeleopNode.tick → Publisher.publish',
+                                  '/cartesian_impedance_controller/target_pose', 'geometry_msgs/msg/PoseStamped',
+                                  'cartesian_impedance_controller', self.pose_pub)
             published_target = True
             if actual is not None:
                 actual_controller = transform_pose(actual, target_transform)

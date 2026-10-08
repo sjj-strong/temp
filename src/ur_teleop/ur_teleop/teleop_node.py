@@ -10,6 +10,7 @@ import time
 from enum import Enum, auto
 
 import rclpy
+from ur_teleop.control_interface_logging import log_control_interface
 from control_msgs.action import ParallelGripperCommand
 from rclpy.action import ActionClient
 from rclpy.executors import SingleThreadedExecutor
@@ -377,6 +378,9 @@ class TeleopNode(Node):
         goal.command.position = [self._gripper.get_knuckle_command(target)]
         goal.command.effort = [self._gripper.max_effort]
         self._gripper_future = self._gripper_action.send_goal_async(goal)
+        log_control_interface(self, 'TeleopNode._gripper_tick → ActionClient.send_goal_async',
+                              self._gripper.action_server, 'control_msgs/action/ParallelGripperCommand',
+                              'robotiq_gripper_controller')
 
     # ---------- helpers ----------
 
@@ -386,16 +390,25 @@ class TeleopNode(Node):
             target = Float64MultiArray()
             target.data = list(cmd)
             self._ruckig_target_pub.publish(target)
+            log_control_interface(self, 'TeleopNode._publish_commands → Publisher.publish',
+                                  '/ruckig/target_joint_positions', 'std_msgs/msg/Float64MultiArray',
+                                  self._motion_ctrl, self._ruckig_target_pub)
         elif self._controller_kind == "joint_impedance":
             # 直接路径仍经过控制器的关节限位、参考速度、力矩及变化率保护。
             target = JointState()
             target.name = list(UR_JOINT_NAMES)
             target.position = list(cmd)
             self._direct_target_pub.publish(target)
+            log_control_interface(self, 'TeleopNode._publish_commands → Publisher.publish',
+                                  '/joint_impedance_controller/target_joint_state', 'sensor_msgs/msg/JointState',
+                                  self._motion_ctrl, self._direct_target_pub)
         else:
             target = Float64MultiArray()
             target.data = list(cmd)
             self._direct_target_pub.publish(target)
+            log_control_interface(self, 'TeleopNode._publish_commands → Publisher.publish',
+                                  '/forward_position_controller/commands', 'std_msgs/msg/Float64MultiArray',
+                                  self._motion_ctrl, self._direct_target_pub)
         tcmd = Float64MultiArray()
         tcmd.data = list(cmd) + [self._gripper.get_gripper_command_signal(self._gripper.current_target)]
         self._cmd_pub.publish(tcmd)

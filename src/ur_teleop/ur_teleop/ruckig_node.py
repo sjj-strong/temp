@@ -3,6 +3,7 @@
 import numpy as np
 
 import rclpy
+from ur_teleop.control_interface_logging import log_control_interface
 from rclpy.node import Node
 
 from sensor_msgs.msg import JointState
@@ -384,6 +385,13 @@ class RuckigNode(Node):
             command.data = positions
 
         self.command_pub.publish(command)
+        impedance = self.controller_kind == 'joint_impedance'
+        log_control_interface(self, 'RuckigNode.control_loop → Publisher.publish',
+                              '/joint_impedance_controller/target_joint_state' if impedance
+                              else '/forward_position_controller/commands',
+                              'sensor_msgs/msg/JointState' if impedance else 'std_msgs/msg/Float64MultiArray',
+                              'joint_impedance_controller' if impedance else 'forward_position_controller',
+                              self.command_pub)
 
         # ------------------------------------------------------------
         # 5. Critical:
