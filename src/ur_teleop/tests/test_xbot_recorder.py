@@ -196,3 +196,40 @@ def test_tcp_pose_comes_from_tf(xbot):
     if xbot:
         node.get_clock = lambda: SimpleNamespace(now=lambda: Time(seconds=11., clock_type=ClockType.ROS_TIME))
         assert node._get_ee_pose() is None
+
+
+@pytest.mark.parametrize('root', [None, '/tmp/example-dataset'])
+def test_existing_dataset_uses_hyphenated_timestamp(monkeypatch, root):
+    """仅模拟创建过程，不创建真实数据集目录。"""
+    import datetime
+    from pathlib import Path
+    from ur_teleop import data_recorder as module
+
+    class FixedDateTime(datetime.datetime):
+        @classmethod
+        def now(cls):
+            return cls(2026, 10, 8, 22, 30, 15, 123456)
+
+    monkeypatch.setattr(datetime, 'datetime', FixedDateTime)
+    calls = []
+    dataset = object()
+
+    def create(**kwargs):
+        calls.append(kwargs)
+        if len(calls) == 1:
+            raise FileExistsError('模拟数据集目录已存在')
+        return dataset
+
+    monkeypatch.setattr(module, 'LeRobotDataset', SimpleNamespace(create=create))
+    node = object.__new__(module.DataRecorderNode)
+    node._dataset = None
+    node._rec = dict(repo_id='user/test', root=root)
+    node._fps = 20
+    node._features = {}
+    node.get_logger = lambda: SimpleNamespace(warn=lambda *args: None)
+    node._init_dataset()
+    assert calls[0]['repo_id'] == 'user/test'
+    assert calls[1]['repo_id'] == 'user/test-2026-10-08-22-30-15-123456'
+    assert calls[1]['root'] == (Path(root + '-2026-10-08-22-30-15-123456') if root else None)
+    assert node._dataset is dataset
+    assert node._rec == dict(repo_id='user/test', root=root)

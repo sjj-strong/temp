@@ -235,11 +235,11 @@ class DataRecorderNode(Node):
             debug_log(self, f"创建数据集: {repo_id}")
         except FileExistsError:
             import datetime
-            suffix = datetime.datetime.now().strftime('%Y%m%d_%H%M%S_%f')
-            new_id = f"{repo_id}_{suffix}"
+            suffix = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S-%f')
+            new_id = f"{repo_id}-{suffix}"
             kwargs["repo_id"] = new_id
             if root is not None:
-                kwargs['root'] = root.with_name(root.name + '_' + suffix)
+                kwargs['root'] = root.with_name(root.name + '-' + suffix)
             self._dataset = LeRobotDataset.create(**kwargs)
             log_event(self, "warn", level="warn", message=f"数据集已存在，新建带时间戳: {new_id}")
 
