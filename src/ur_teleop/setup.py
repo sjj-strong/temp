@@ -48,6 +48,7 @@ setup(
             "data_recorder = ur_teleop.data_recorder:main",
             "ruckig_node = ur_teleop.ruckig_node:main",
             "camera_mosaic_viewer = ur_teleop.camera_mosaic_viewer:main",
+            "camera_inspector = ur_teleop.camera_inspector:main",
         ],
     },
 )
