@@ -15,7 +15,7 @@ colcon build --packages-select ur_teleop --symlink-install
 source /ros2_ws/install/setup.bash
 ```
 
-每个 ROS 终端加载前述两个 setup，并使用相同 `ROS_DOMAIN_ID`。同一域只运行一套目标 UR 控制栈。完整 Home 会自行启动驱动，因此不要同时运行另一个独立 UR 驱动。
+每个 ROS 终端加载前述两个 setup 即可，普通调试无需额外设置 `ROS_DOMAIN_ID`；若环境已有该变量，各终端的值需一致。同一域只运行一套目标 UR 控制栈。完整 Home 会自行启动驱动，因此不要同时运行另一个独立 UR 驱动。
 
 ```bash
 ros2 pkg prefix ur_robot_driver

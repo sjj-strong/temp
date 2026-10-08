@@ -41,11 +41,7 @@ ros2 run ur_teleop xbot_calibrate
 在 `config/xbot_teleop.yaml` 中设置 `sim: true`。使用组合模型的 `xbot_effort_mock`，不连接 UR 真机；手柄仍使用真实设备。
 同时将 `xbot.controller_config_file` 指向 `cartesian_impedance_controller/config/ur10e_xbot_sim_cartesian_impedance.yaml`，其 `base_frame` 为 `base_link`。
 
-两个终端均加载上述 ROS 环境，并设置独立的仿真域，避免与真机的 `/robot_description`、`/controller_manager` 混用：
-
-```bash
-export ROS_DOMAIN_ID=225
-```
+两个终端均加载上述 ROS 环境即可，普通仿真调试无需额外设置 `ROS_DOMAIN_ID`。同一环境只运行一套目标 UR 控制栈。
 
 ```bash
 # 终端 1：模拟 UR 回 Home，到位后保持此终端运行
@@ -129,7 +125,7 @@ base 模式沿 `base_link` 轴运动，TCP 模式沿实测 `tool0` 局部轴运�
 
 ## 测试
 
-仅在 `sim: true` 的隔离域中运行。两个终端均设置 `ROS_DOMAIN_ID=225` 和相同的 `ROS_HOME`：
+以下是自动化 mock 集成测试，不是普通调试步骤。测试代码明确要求 `sim: true`、`ROS_DOMAIN_ID=225`，否则跳过；仅执行这些测试时，两个终端才需设置以下环境：
 
 ```bash
 export ROS_DOMAIN_ID=225

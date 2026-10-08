@@ -14,12 +14,11 @@ cd /ros2_ws
 colcon build --packages-select ur_teleop --symlink-install
 ```
 
-每个 ROS 终端均执行以下环境命令；相机发布也使用同一域：
+每个 ROS 终端均加载以下环境；普通调试无需额外设置 `ROS_DOMAIN_ID`，沿用当前环境即可：
 
 ```bash
 source /opt/ros/jazzy/setup.bash
 source /ros2_ws/install/setup.bash
-export ROS_DOMAIN_ID=225
 ```
 
 Xbot 首次使用先标定并运行[独立手柄测试](xbot_joy_test.md)。Alicia 核对串口、`home.master` 与关节映射。记录实际 UR 当前位置作为 `home.slave` 的只读工具见[读取初始位置](capture_slave_home.md)；它读取真机时需在实际硬件所在 ROS 域中单独运行。
