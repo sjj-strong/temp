@@ -32,6 +32,12 @@ Xbot 还需为仿真或真机选择对应阻抗参数文件，见[完整流程](
 
 真机启动后按提示在示教器运行 External Control，再在终端按 Enter。确认后会发送六轴 Home 轨迹；Alicia 在 UR 轨迹成功后使主臂回 Home。仿真跳过示教器确认。
 
+### 启动日志中的确认提示
+
+Home 订阅 `/io_and_status_controller/robot_program_running`，在连接状态变化时转述驱动状态，不解析英文日志。收到运行状态后显示 `UR 外部控制已连接（Ready to receive control commands）`；未收到或程序停止时显示等待连接。该提示只表示外部控制程序的状态，轨迹控制器与关节状态仍由后续流程检查。
+
+等待回车期间每 5 秒重复显示带分隔线的 `Home 等待确认` 提示，避免被启动日志刷走。Alicia、Xbot 共用此行为；仿真跳过确认。无需添加配置参数，驱动的错误与警告保持可见。收到回车后停止重复提示，按原流程等待控制器并执行 Home；只有 `HOME REACHED` 才表示 Home 成功，可以进入遥操作阶段。
+
 ## 参数
 
 | `home` 参数 | 作用 |

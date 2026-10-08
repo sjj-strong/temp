@@ -16,7 +16,9 @@ from control_msgs.action import FollowJointTrajectory
 from rclpy.action import ActionClient
 from rclpy.duration import Duration
 from rclpy.executors import SingleThreadedExecutor
+from rclpy.qos import DurabilityPolicy, QoSProfile
 from sensor_msgs.msg import JointState
+from std_msgs.msg import Bool
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 
 from ur_teleop.keyboard import KeyboardReader
@@ -55,19 +57,42 @@ class HomeNode(rclpy.node.Node):
             self, FollowJointTrajectory, "/scaled_joint_trajectory_controller/follow_joint_trajectory"
         )
         self._cell_ready_since: float | None = None
+        self._program_running = None
+        if not self._sim:
+            self._program_sub = self.create_subscription(
+                Bool, '/io_and_status_controller/robot_program_running',
+                self._program_cb,
+                QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL),
+            )
+
+    def _program_cb(self, message):
+        """转述驱动的 External Control 连接状态，不依赖日志文本。"""
+        self._program_running = message.data
+
+    def _confirmation_hint(self):
+        status = ('UR 外部控制已连接（Ready to receive control commands）' if self._program_running else
+                  '等待 UR 外部控制连接，请在示教器启动 External Control')
+        self.get_logger().info(
+            f'\n========== Home 等待确认 ==========\n{status}\n'
+            '在示教器启动外部控制后按回车，才会开始回到 Home 位置。\n'
+            '=================================='
+        )
 
     def wait_for_external_control(self, executor) -> bool:
         """真机回 Home 前提示并等待回车，两种输入源共用。"""
         if self._sim:
             return True
-        self.get_logger().info(
-            "请在示教器上点击启动“外部控制（External Control）”程序，"
-            "完成后按回车，才会开始回到 Home 位置。"
-        )
+        self._confirmation_hint()
+        last_hint = time.monotonic()
+        last_status = self._program_running
         keyboard = KeyboardReader()
         try:
             while rclpy.ok():
                 executor.spin_once(timeout_sec=0.1)
+                now = time.monotonic()
+                if self._program_running != last_status or now - last_hint >= 5.0:
+                    self._confirmation_hint()
+                    last_hint, last_status = now, self._program_running
                 if keyboard.read_key() == "enter":
                     self.get_logger().info("已收到回车确认，等待控制器就绪后开始回 Home。")
                     return True
