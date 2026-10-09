@@ -28,4 +28,4 @@
     max_wrench: [40.0, 40.0, 40.0, 4.0, 4.0, 4.0]
     max_torque: [60.0, 60.0, 60.0, 30.0, 30.0, 30.0]
     # 每个控制周期的一阶滤波系数；目标持续锁存，直到下一条目标覆盖。
-    reference_filter_alpha: 0.5
+    reference_filter_alpha: 1.0
