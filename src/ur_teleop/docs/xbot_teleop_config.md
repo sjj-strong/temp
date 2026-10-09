@@ -57,7 +57,7 @@
 | `gripper.close_threshold_m` | `0.0125` | Alicia 夹爪迟滞控制使用的闭合阈值，单位米；**Xbot 不使用，可省略**。 |
 | `gripper.open_threshold_m` | `0.005` | Alicia 夹爪迟滞控制使用的张开阈值，单位米；**Xbot 不使用，可省略**。 |
 | `gripper.open_pos_rad` | `0.0` | Xbot 发送夹爪打开目标时的关节角，单位 rad。 |
-| `gripper.close_pos_rad` | `0.4` | Xbot 发送夹爪闭合目标时的关节角，单位 rad。 |
+| `gripper.close_pos_rad` | `0.7929` | Xbot 发送夹爪闭合目标时的关节角，单位 rad。 |
 | `gripper.max_effort` | `50.0` | Xbot 夹爪 action 的最大 effort 命令值；实际单位与限制由夹爪控制器定义。 |
 
 ## 数据录制

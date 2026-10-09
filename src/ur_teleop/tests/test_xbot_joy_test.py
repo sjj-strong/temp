@@ -86,7 +86,7 @@ def test_missing_axes_and_illegal_axis_only_disable_affected_inputs():
     assert any('LX 运动输入不可用：输入值非法' in event for event in events)
     assert any('RY 运动输入不可用：映射超出' in event for event in events)
     assert any('切换夹爪（A）按下' in event for event in events)
-    assert '+X 平移' in monitor.snapshot(0.1, 0.25)
+    assert '-X 平移' in monitor.snapshot(0.1, 0.25)
     assert 'nan' not in monitor.snapshot(0.1, 0.25)
 
 
@@ -150,12 +150,12 @@ def test_motion_direction_deadzone_dominant_axis_precision_and_zero_event():
     monitor = diagnostics()
     monitor.receive(message(monitor, values={'lx': 0.5, 'ly': 1.0}), 0.0)
     snapshot = monitor.snapshot(0.1, 0.25)
-    assert '运动未使能' in snapshot and '+X 平移 强度=1.000' in snapshot
-    assert '+Y 平移' not in snapshot
+    assert '运动未使能' in snapshot and '-X 平移 强度=1.000' in snapshot
+    assert '-Y 平移' not in snapshot
     monitor.receive(message(monitor, ['rb', 'lb'], values={'ly': 1.0, 'rx': -1.0}), 0.11)
     snapshot = monitor.snapshot(0.12, 0.25)
     assert '运动已使能' in snapshot and '精细模式' in snapshot
-    assert '+X 平移 强度=0.250' in snapshot and '绕 -Y 旋转 强度=0.250' in snapshot
+    assert '-X 平移 强度=0.250' in snapshot and '绕 -Y 旋转 强度=0.250' in snapshot
     events = monitor.receive(message(monitor, values={'ly': 0.05}), 0.13)
     assert '动作预览：运动输入归零' in events
     assert monitor.receive(message(monitor), 0.14) == []
@@ -165,12 +165,12 @@ def test_free_left_stick_vector_limit_and_trigger_directions():
     monitor = diagnostics({'left_stick_xy_free': True})
     monitor.receive(message(monitor, ['rb'], values={'lx': 1.0, 'ly': 1.0, 'lt': -1.0}), 0.0)
     snapshot = monitor.snapshot(0.1, 0.25)
-    assert '+X 平移 强度=0.577' in snapshot
-    assert '+Y 平移 强度=0.577' in snapshot
-    assert '-Z 平移 强度=0.577' in snapshot
+    assert '-X 平移 强度=0.577' in snapshot
+    assert '-Y 平移 强度=0.577' in snapshot
+    assert '+Z 平移 强度=0.577' in snapshot
     monitor.receive(message(monitor, ['rb'], values={'rt': -1.0, 'yaw': -1.0}), 0.11)
     snapshot = monitor.snapshot(0.12, 0.25)
-    assert '+Z 平移 强度=1.000' in snapshot and '绕 -Z 旋转' in snapshot
+    assert '-Z 平移 强度=1.000' in snapshot and '绕 -Z 旋转' in snapshot
 
 
 def test_dpad_button_mapping():

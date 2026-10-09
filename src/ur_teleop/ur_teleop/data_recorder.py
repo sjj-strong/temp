@@ -88,6 +88,7 @@ class DataRecorderNode(Node):
                            if need_joints else None)
         self._cmd_sub = self.create_subscription(Float64MultiArray, "/teleop/commands", self._cmd_cb, 10)
         self._enable_pub = self.create_publisher(Bool, "/teleop/enable", 10)
+        self._episode_end_pub = self.create_publisher(Bool, '/teleop/episode_ended', 10)
         self._finished_pub = self.create_publisher(Bool, '/teleop/record_finished', 10)
         if self._xbot:
             self.create_subscription(String, '/teleop/record_event', self._event_cb, 10)
@@ -126,6 +127,10 @@ class DataRecorderNode(Node):
                 log_event(self, "error", level="error", message='录制操作队列已满，请等待当前操作完成')
 
     def _ready_cb(self, msg):
+        if getattr(self, '_await_home_pause', False):
+            if msg.data:
+                return
+            self._await_home_pause = False
         self._ready, self._ready_at = msg.data, time.monotonic()
 
     def _xbot_data_ready(self):
@@ -277,6 +282,12 @@ class DataRecorderNode(Node):
         log_event(self, "keyboard", action="start", episode=self._episode_count + 1, message=hint)
         self._progress = EpisodeProgress(self._episode_count + 1, self._fps, getattr(self, "_num_episodes", 0))
 
+    def _notify_episode_end(self):
+        if self._xbot:
+            self._ready = False
+            self._await_home_pause = True
+            self._episode_end_pub.publish(Bool(data=True))
+
     def _save_episode(self):
         if not self._recording:
             return
@@ -291,6 +302,7 @@ class DataRecorderNode(Node):
                       frames=self._frame_count, target_episodes=getattr(self, "_num_episodes", 0))
         self._recording = False
         self._missing_cam_warned = set()
+        self._notify_episode_end()
         target = getattr(self, '_num_episodes', 0)
         if target > 0 and self._episode_count >= target and not getattr(self, '_finish_requested', False):
             self._finish_requested = True
@@ -306,6 +318,7 @@ class DataRecorderNode(Node):
         self._recording = False
         self._close_progress()
         self._missing_cam_warned = set()
+        self._notify_episode_end()
 
     def _record_frame(self):
         if self._xbot and not self._xbot_data_ready():

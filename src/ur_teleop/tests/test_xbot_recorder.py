@@ -65,6 +65,7 @@ def test_episode_events_and_stale_gate(monkeypatch, mode):
         save_episode=lambda: (saved.append(list(frames)), frames.clear()),
         clear_episode_buffer=frames.clear, finalize=lambda: finished.append(True))
     node._finished_pub = SimpleNamespace(publish=lambda m: None)
+    node._episode_end_pub = SimpleNamespace(publish=lambda m: None)
     node._enable_pub = SimpleNamespace(publish=lambda m: pytest.fail('Xbot 不应等待或发布 Alicia enable'))
     log = _child_logger(SimpleNamespace(info=lambda *a: None, warn=lambda *a: None, error=lambda *a: None))
     monkeypatch.setattr(DataRecorderNode, 'get_logger', lambda self: log)
@@ -89,6 +90,8 @@ def test_episode_events_and_stale_gate(monkeypatch, mode):
     event('save')
     assert progress.bar.disable and node._progress is None
     assert len(saved) == 1 and not node._recording
+    node._ready_cb(SimpleNamespace(data=False))
+    node._ready_cb(SimpleNamespace(data=True))
     event('start')
     node._record_frame()
     event('discard')
@@ -97,6 +100,8 @@ def test_episode_events_and_stale_gate(monkeypatch, mode):
     event('start')
     assert not node._recording
     node._cmd_at = time.monotonic()
+    node._ready_cb(SimpleNamespace(data=False))
+    node._ready_cb(SimpleNamespace(data=True))
     event('start')
     node._record_frame()
     node._record_frame()

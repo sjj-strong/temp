@@ -62,8 +62,8 @@ Home 阶段使用轨迹控制器，笛卡尔阻抗控制器保持 inactive。tel
 
 | 输入 | 功能 |
 | --- | --- |
-| 左摇杆上 / 左 | +X / +Y 平移 |
-| RT / LT | +Z / -Z 平移 |
+| 左摇杆上 / 左 | -X / -Y 平移 |
+| RT / LT | -Z / +Z 平移 |
 | 右摇杆上 / 左 | 绕 +X / +Y 旋转 |
 | 十字键左 / 右 | 绕 +Z / -Z 旋转 |
 | RB | 按住允许更新目标，松开仍跟踪末次目标 |
@@ -102,3 +102,11 @@ base 模式沿 `base_link` 轴运动，TCP 模式沿实测 `tool0` 局部轴运�
 | 采集无法开始 | 查看[数据就绪条件](data_recorder.md#数据就绪条件) |
 
 首次[控制接口日志](control_interface_logging.md)不受 debug 开关影响；“已发布”只表示发送目标，不表示机器人已经到位。
+
+## 每段结束后回 Home
+
+record 模式保存或丢弃当前 episode 后，自动停用笛卡尔阻抗控制器、启用轨迹控制器，按 `home.slave` 执行六轴 Home。轨迹成功且反馈在容差内持续达到 `home.verify_duration_s` 后，切回阻抗控制器并以实际 TCP 重新设定保持目标。
+
+回程期间不响应手柄运动或新 episode。成功后先松开 RB，再按住 RB 操作；Menu 开始下一段。最终保存并结束采集也执行回 Home，请保持 Home 和遥操作终端运行到回程完成。没有正在录制的 episode 时，保存/丢弃不会触发运动。
+
+回程使用 `home.move_duration_s`、`move_timeout_s` 和 `at_home_tolerance_rad`。软件停止、切换失败、轨迹失败或超时会锁定遥操作，不自动切回阻抗；排查后重新启动。回程只移动 UR，不自动打开夹爪。

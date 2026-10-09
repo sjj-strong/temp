@@ -30,7 +30,7 @@ def test_base_tcp_direction(frame, expected):
     actual[5:] = np.sqrt(.5)
     axes['ly'] = axes['ry'] = 1.
     delta = core.step(actual, axes, buttons, .02, True)
-    np.testing.assert_allclose(delta[:3], np.array(expected) * .02, atol=1e-12)
+    np.testing.assert_allclose(delta[:3], -np.array(expected) * .02, atol=1e-12)
     np.testing.assert_allclose(delta[3:], np.array(expected) * .1, atol=1e-12)
 
 
@@ -41,7 +41,7 @@ def test_input_scale_and_fixed_dt():
     delta = core.step(actual, axes, buttons, .02, True)
     assert np.linalg.norm(delta[:3]) == pytest.approx(.005)
     assert delta[1] == 0.
-    assert delta[0] == pytest.approx(.005 / np.sqrt(2))
+    assert delta[0] == pytest.approx(-.005 / np.sqrt(2))
     buttons['lb'] = False
     assert np.linalg.norm(core.step(actual, axes, buttons, .02, True)[:3]) == pytest.approx(.02)
 
@@ -52,28 +52,28 @@ def test_uses_current_actual_and_holds_when_centered():
     core.step(actual, axes, buttons, .02, True)
     for _ in range(20):
         core.step(actual, axes, buttons, .02, True)
-    assert core.target[0] == pytest.approx(.02)
+    assert core.target[0] == pytest.approx(-.02)
     actual[0] = .1
     core.step(actual, axes, buttons, .02, True)
-    assert core.target[0] == pytest.approx(.12)
+    assert core.target[0] == pytest.approx(.08)
     axes['ly'] = 0.
     actual[0] = .15
     core.step(actual, axes, buttons, .02, True)
-    assert core.target[0] == pytest.approx(.12)
+    assert core.target[0] == pytest.approx(.08)
     buttons['rb'] = False
     core.step(actual, axes, buttons, .02, True)
-    assert core.target[0] == pytest.approx(.12)
+    assert core.target[0] == pytest.approx(.08)
 
 
 def test_moving_y_keeps_uncommanded_z_and_orientation_target():
     core, actual, axes, buttons = armed()
     axes['lx'] = 1.
     core.step(actual, axes, buttons, .02, True)
-    assert core.target[1] == pytest.approx(.02)
+    assert core.target[1] == pytest.approx(-.02)
     actual[:3] = [.03, .1, -.04]
     actual[3:] = [0., 0., np.sqrt(.5), np.sqrt(.5)]
     core.step(actual, axes, buttons, .02, True)
-    np.testing.assert_allclose(core.target[:3], [0., .12, 0.])
+    np.testing.assert_allclose(core.target[:3], [0., .08, 0.])
     np.testing.assert_allclose(core.target[3:], [0., 0., 0., 1.])
 
 
@@ -86,7 +86,7 @@ def test_moving_z_keeps_uncommanded_y_target():
     core.step(actual, axes, buttons, .02, True)
     actual[:3] = [.03, .08, .1]
     core.step(actual, axes, buttons, .02, True)
-    np.testing.assert_allclose(core.target[:3], [0., .02, .12])
+    np.testing.assert_allclose(core.target[:3], [0., -.02, .08])
 
 
 def test_rotation_only_keeps_position_target():

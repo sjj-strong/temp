@@ -38,6 +38,7 @@ def test_episode_target_counts_saved_only_and_finalizes(monkeypatch, source):
     from ur_teleop.data_recorder import DataRecorderNode
     node = object.__new__(DataRecorderNode)
     node._xbot = source == 'xbot'
+    node._episode_end_pub = SimpleNamespace(publish=lambda msg: None)
     node._num_episodes = 2
     node._finish_requested = False
     node._episode_count = 0
@@ -69,6 +70,7 @@ def test_episode_target_counts_saved_only_and_finalizes(monkeypatch, source):
 def test_unlimited_and_save_failure_do_not_finish(monkeypatch):
     from ur_teleop.data_recorder import DataRecorderNode
     node = object.__new__(DataRecorderNode)
+    node._xbot = False
     node._num_episodes = 0
     node._episode_count = 100
     node._finish_requested = False

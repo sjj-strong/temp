@@ -17,6 +17,7 @@ from sensor_msgs.msg import Joy, JointState
 from std_msgs.msg import Bool, String, Float64MultiArray, MultiArrayDimension
 from tf2_ros import Buffer, TransformListener, TransformException
 
+from ur_teleop.episode_home import EpisodeHome
 from ur_teleop.session_logging import debug_log, log_event
 from ur_teleop.config import load_config, default_config_path, UR_JOINT_NAMES, UR_GRIPPER_JOINT
 from ur_teleop.controller_switcher import ControllerSwitcher
@@ -106,6 +107,8 @@ class XbotTeleopNode(Node):
         grip = self.cfg.get('gripper', {})
         self.gripper = ActionClient(self, ParallelGripperCommand,
                                     grip.get('action_server', '/robotiq_gripper_controller/gripper_cmd'))
+        self.episode_home = EpisodeHome(self)
+        self.create_subscription(Bool, '/teleop/episode_ended', self.episode_home.request, 10)
         self.create_timer(1. / self.x['control_hz'], self.tick)
         log_event(self, 'control_frequency', command_hz=self.x['control_hz'])
         debug_log(self, 'Xbot 启动：反馈就绪且已到 Home 后自动切换阻抗；RB 仅用于运动使能')
@@ -138,7 +141,7 @@ class XbotTeleopNode(Node):
             if not self.gripper_initialized:
                 grip = self.cfg.get('gripper', {})
                 midpoint = (float(grip.get('open_pos_rad', 0.)) +
-                            float(grip.get('close_pos_rad', .4))) / 2.
+                            float(grip.get('close_pos_rad', .7929))) / 2.
                 self.gripper_command = float(self.gripper_state >= midpoint)
                 self.gripper_initialized = True
 
@@ -211,7 +214,7 @@ class XbotTeleopNode(Node):
         debug_log(self, f'夹爪请求: 实测={self.gripper_state:.3f}, 目标={desired}')
         goal = ParallelGripperCommand.Goal()
         goal.command.name = [UR_GRIPPER_JOINT]
-        goal.command.position = [float(grip.get('close_pos_rad', .4) if desired else grip.get('open_pos_rad', 0.))]
+        goal.command.position = [float(grip.get('close_pos_rad', .7929) if desired else grip.get('open_pos_rad', 0.))]
         goal.command.effort = [float(grip.get('max_effort', 50.))]
         self.gripper_pending = True
         future = self.gripper.send_goal_async(goal)
@@ -334,7 +337,7 @@ class XbotTeleopNode(Node):
             state = '运动使能'
         else:
             state = '等待RB'
-        translation = (self.axes['ly'], self.axes['lx'], self.axes['rt'] - self.axes['lt'])
+        translation = (-self.axes['ly'], -self.axes['lx'], self.axes['lt'] - self.axes['rt'])
         rotation = (self.axes['ry'], self.axes['rx'], self.axes['yaw'])
         debug_log(self, f'遥操作诊断 [{state}] 坐标系=base_link 模式={self.core.frame} '
             f'RB={int(self.buttons["rb"])} LB={int(self.buttons["lb"])} '
@@ -346,6 +349,9 @@ class XbotTeleopNode(Node):
             f'当前={pose_text(actual)} 目标={pose_text(target)} 位姿差={error}')
 
     def tick(self):
+        if hasattr(self, 'episode_home') and self.episode_home.tick():
+            self.ready_pub.publish(Bool(data=False))
+            return
         now = time.monotonic()
         elapsed_dt, self.previous_time = now - self.previous_time, now
         actual = self.actual_pose()

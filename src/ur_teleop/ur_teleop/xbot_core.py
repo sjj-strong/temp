@@ -147,7 +147,7 @@ class PoseIntegrator:
         else:
             lx, ly = dominant_axis(axes['lx'], axes['ly'])
         rx, ry = dominant_axis(axes['rx'], axes['ry'])
-        v = np.array([ly, lx, axes['rt'] - axes['lt']])
+        v = np.array([-ly, -lx, axes['lt'] - axes['rt']])
         w = np.array([ry, rx, axes['yaw']])
         scale = self.cfg['precision_scale'] if buttons['lb'] else 1.
         # 输入先归一化，再应用 LB 缩放；dt 为固定标称控制周期。

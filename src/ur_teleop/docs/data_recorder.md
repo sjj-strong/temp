@@ -25,6 +25,8 @@
 
 `record_ur_joints` 保存六关节实测位置，`record_ur_ee_pose` 保存 TCP 的 xyz+xyzw；两者均开启时 `observation.state` 为 13 维。`record_action_joints` 保存六关节目标，`record_action_gripper` 可在 action 末尾附加一个二值夹爪指令。
 
+Xbot 每段保存或丢弃完成后自动切轨迹控制器回 Home，再切回阻抗。回程期间不能开始下一段；最后一段也需等待回程完成后再关闭遥操作终端，详见[回 Home 操作](xbot_control.md#每段结束后回-home)。
+
 ## Xbot action
 
 `recorder.action_mode: abs` 保存手柄节点最终发布给阻抗控制器的绝对目标 `x,y,z,qx,qy,qz,qw`。`rel` 保存该目标相对**同一控制周期实测 TCP** 的 `dx,dy,dz,drx,dry,drz`；姿态增量是参考坐标系中的最短旋转向量，满足 `q_target = dq × q_actual`。工作空间裁剪发生在编码之前，因此 action 与最终下发目标一致。摇杆回中时仍保存保持目标；此时相对 action 可能非零。

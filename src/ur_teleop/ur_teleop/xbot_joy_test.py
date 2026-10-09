@@ -113,7 +113,7 @@ class JoyDiagnostics:
         if not self.config.get('left_stick_xy_free', False):
             lx, ly = dominant_axis(lx, ly)
         rx, ry = dominant_axis(self.axes.get('rx', 0.0), self.axes.get('ry', 0.0))
-        translation = (ly, lx, self.axes.get('rt', 0.0) - self.axes.get('lt', 0.0))
+        translation = (-ly, -lx, self.axes.get('lt', 0.0) - self.axes.get('rt', 0.0))
         rotation = (ry, rx, self.axes.get('yaw', 0.0))
         scale = self.config.get('precision_scale', 0.25) if self.buttons.get('lb') else 1.0
         # 与遥操作一致：先限制向量模长，再应用精细模式比例。

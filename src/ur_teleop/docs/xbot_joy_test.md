@@ -36,8 +36,8 @@ python3 /ros2_ws/src/ur_teleop/ur_teleop/xbot_joy_test.py
 | Menu | 开始录制，`action=start` |
 | Y / B | 保存 / 丢弃片段，`action=save` / `action=discard` |
 | View | 达到 `view_hold_s` 后显示一次结束录制，`action=finalize`；松开后可重新测试 |
-| 左摇杆 | 标定正方向对应 +X / +Y 平移 |
-| RT / LT | +Z / -Z 平移 |
+| 左摇杆 | 标定正方向对应 -X / -Y 平移 |
+| RT / LT | -Z / +Z 平移 |
 | 右摇杆 | 标定正方向对应绕 +X / +Y 旋转 |
 | 十字键 | 标定正方向对应绕 +Z 旋转 |
 

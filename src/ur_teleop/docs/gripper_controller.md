@@ -9,7 +9,7 @@
 | `enabled` | 是否启用夹爪 |
 | `action_server` | 夹爪 Action，通常为 `/robotiq_gripper_controller/gripper_cmd` |
 | `open_pos_rad` | 打开目标关节角，例如 0.0 rad |
-| `close_pos_rad` | 闭合目标关节角，例如 0.4 rad |
+| `close_pos_rad` | 闭合目标关节角；Xbot 的 Robotiq 2F-85 完全闭合为 0.7929 rad |
 | `max_effort` | 下发的最大 effort；含义和单位以夹爪控制器为准 |
 | `open_threshold_m` | Alicia 输入小于此值时打开，例如 0.005 m |
 | `close_threshold_m` | Alicia 输入大于此值时闭合，例如 0.0125 m |
@@ -43,3 +43,5 @@ ros2 action list -t
 ```
 
 确认配置的 Action 存在，并查看驱动和请求失败日志。
+
+完全闭合表示下发全行程目标；夹住物体时，夹爪可能因接触或 effort 限制提前停止，不能保证实际角度到达全闭值。

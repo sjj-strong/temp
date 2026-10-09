@@ -37,5 +37,5 @@ def test_toggle_uses_previous_target_when_feedback_below_point_four(accepted):
     if accepted:
         result.set_result(None)
         node.toggle_gripper()
-        assert list(goals[1].command.position) == [.4]
+        assert list(goals[1].command.position) == [.7929]
         assert node.gripper_command == 1.
