@@ -21,6 +21,7 @@
 #include <realtime_tools/realtime_publisher.hpp>
 
 #include "cartesian_impedance_controller/impedance_law.hpp"
+#include "cartesian_impedance_controller/debug_csv.hpp"
 #include "cartesian_impedance_controller/reference_limiter.hpp"
 
 namespace cartesian_impedance_controller
@@ -74,6 +75,9 @@ private:
   KDL::Jacobian jacobian_buffer_;
   Eigen::Matrix<double, 6, 1> cartesian_velocity_buffer_{ Eigen::Matrix<double, 6, 1>::Zero() };
   Eigen::Matrix<double, 6, 1> desired_torque_buffer_{ Eigen::Matrix<double, 6, 1>::Zero() };
+
+  std::unique_ptr<DebugCsv> debug_csv_;
+  rclcpp::TimerBase::SharedPtr debug_timer_;
 
   PoseReference reference_pose_;
   PoseReference reference_target_pose_;

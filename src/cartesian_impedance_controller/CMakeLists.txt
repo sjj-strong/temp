@@ -12,6 +12,7 @@ find_package(rclcpp REQUIRED)
 find_package(realtime_tools REQUIRED)
 
 add_library(${PROJECT_NAME} SHARED src/cartesian_impedance_controller.cpp)
+target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_17)
 target_include_directories(${PROJECT_NAME} PUBLIC include)
 ament_target_dependencies(${PROJECT_NAME}
   controller_interface geometry_msgs kdl_parser orocos_kdl pluginlib rclcpp realtime_tools)
@@ -24,6 +25,9 @@ ament_target_dependencies(move_base_xyz geometry_msgs rclcpp)
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
   find_package(ament_cmake_gmock REQUIRED)
+  ament_add_gtest(test_debug_csv test/test_debug_csv.cpp)
+  target_include_directories(test_debug_csv PRIVATE include)
+
   ament_add_gtest(test_reference_limiter test/test_reference_limiter.cpp)
   target_link_libraries(test_reference_limiter Eigen3::Eigen)
   target_include_directories(test_reference_limiter PRIVATE include)

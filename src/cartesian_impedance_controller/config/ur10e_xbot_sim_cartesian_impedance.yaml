@@ -1,5 +1,6 @@
 /**/cartesian_impedance_controller:
   ros__parameters:
+    save_debug_log: false  # true：以 5 Hz 保存计算数据 CSV，路径见启动提示。
     # XBot 仿真使用组合 URDF 的 base_link → tool0 运动学链。
     type: cartesian_impedance_controller/CartesianImpedanceController
     tf_prefix: ""

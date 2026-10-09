@@ -1,5 +1,6 @@
 /**/cartesian_impedance_controller:
   ros__parameters:
+    save_debug_log: false  # true：以 5 Hz 保存计算数据 CSV，路径见启动提示。
     # Jazzy spawner 从控制器自身参数块读取 type；普通节点名不会匹配
     # controller_manager 创建的控制器节点。
     type: cartesian_impedance_controller/CartesianImpedanceController

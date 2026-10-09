@@ -2,6 +2,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <chrono>
+#include <filesystem>
+#include <sstream>
 #include <stdexcept>
 
 #include <Eigen/Core>
@@ -86,6 +89,7 @@ controller_interface::CallbackReturn CartesianImpedanceController::on_init()
     node.declare_parameter("max_wrench", std::vector<double>{ 40.0, 40.0, 40.0, 4.0, 4.0, 4.0 });
     node.declare_parameter("max_torque", std::vector<double>{ 60.0, 60.0, 60.0, 30.0, 30.0, 30.0 });
     node.declare_parameter("reference_filter_alpha", 0.1);
+    node.declare_parameter("save_debug_log", false);
   } catch (const std::exception& exception) {
     RCLCPP_ERROR(get_node()->get_logger(), "Parameter initialization failed: %s", exception.what());
     return CallbackReturn::ERROR;
@@ -150,6 +154,35 @@ controller_interface::CallbackReturn CartesianImpedanceController::on_configure(
         std::bind(&CartesianImpedanceController::target_callback, this, std::placeholders::_1));
     current_pose_publisher_ = std::make_shared<realtime_tools::RealtimePublisher<geometry_msgs::msg::PoseStamped>>(
         node.create_publisher<geometry_msgs::msg::PoseStamped>("~/current_pose", rclcpp::SystemDefaultsQoS()));
+    debug_timer_.reset();
+    debug_csv_.reset();
+    if (node.get_parameter("save_debug_log").as_bool()) {
+      const std::filesystem::path directory("/ros2_ws/log/cartesian_impedance_controller");
+      std::filesystem::create_directories(directory);
+      const auto stamp = std::chrono::system_clock::now().time_since_epoch();
+      const auto filename = "debug-" + std::to_string(
+          std::chrono::duration_cast<std::chrono::nanoseconds>(stamp).count()) + ".csv";
+      const auto path = directory / filename;
+      std::ostringstream metadata;
+      metadata << "# frame=" << tf_prefix_ + base_frame_ << ",tip=" << tf_prefix_ + tip_frame_
+               << ",reference_filter_alpha=" << reference_filter_alpha_;
+      for (const auto& entry : { std::make_pair("stiffness", stiffness_), std::make_pair("damping", damping_),
+                                std::make_pair("max_pose_error", max_pose_error_),
+                                std::make_pair("max_wrench", max_wrench_), std::make_pair("max_torque", max_torque_) }) {
+        metadata << "\n# " << entry.first;
+        for (double value : entry.second) { metadata << ',' << value; }
+      }
+      debug_csv_ = std::make_unique<DebugCsv>(path.string(), metadata.str());
+      debug_timer_ = node.create_wall_timer(std::chrono::milliseconds(200), [this]() {
+        try {
+          debug_csv_->flush_latest();
+        } catch (const std::exception& exception) {
+          RCLCPP_ERROR(get_node()->get_logger(), "%s；停止保存调试日志", exception.what());
+          debug_timer_->cancel();
+        }
+      });
+      RCLCPP_WARN(node.get_logger(), "阻抗调试日志保存路径：%s（5 Hz）", path.c_str());
+    }
   } catch (const std::exception& exception) {
     RCLCPP_ERROR(get_node()->get_logger(), "Configuration failed: %s", exception.what());
     return CallbackReturn::ERROR;
@@ -301,7 +334,8 @@ controller_interface::return_type CartesianImpedanceController::update(const rcl
   Eigen::Isometry3d target_pose = Eigen::Isometry3d::Identity();
   target_pose.translation() = reference_pose_.position;
   target_pose.linear() = reference_pose_.orientation.toRotationMatrix();
-  Vector6 pose_error = cartesian_pose_error(current_pose, target_pose);
+  const Vector6 raw_pose_error = cartesian_pose_error(current_pose, target_pose);
+  Vector6 pose_error = raw_pose_error;
   for (std::size_t index = 0; index < pose_error.size(); ++index) {
     pose_error[index] = std::clamp(pose_error[index], -max_pose_error_[index], max_pose_error_[index]);
   }
@@ -314,9 +348,12 @@ controller_interface::return_type CartesianImpedanceController::update(const rcl
   for (std::size_t index = 0; index < measured_twist.size(); ++index) {
     measured_twist[index] = cartesian_velocity_buffer_(static_cast<Eigen::Index>(index));
   }
-  Vector6 task_wrench{};
+  Vector6 spring{}, damper{}, raw_task_wrench{}, task_wrench{};
   for (std::size_t index = 0; index < task_wrench.size(); ++index) {
-    const double raw_wrench = stiffness_[index] * pose_error[index] - damping_[index] * measured_twist[index];
+    spring[index] = stiffness_[index] * pose_error[index];
+    damper[index] = -damping_[index] * measured_twist[index];
+    const double raw_wrench = spring[index] + damper[index];
+    raw_task_wrench[index] = raw_wrench;
     task_wrench[index] = std::clamp(raw_wrench, -max_wrench_[index], max_wrench_[index]);
   }
   if (!finite_vector(task_wrench)) {
@@ -343,7 +380,35 @@ controller_interface::return_type CartesianImpedanceController::update(const rcl
   for (std::size_t index = 0; index < bounded_torque.size(); ++index) {
     bounded_torque[index] = std::clamp(desired_torque_array[index], -max_torque_[index], max_torque_[index]);
   }
-  if (!write_joint_torque(bounded_torque)) {
+  const bool write_ok = write_joint_torque(bounded_torque);
+  if (debug_csv_) {
+    DebugSample sample;
+    sample.time_ns = time.nanoseconds();
+    sample.target_sequence = last_target_sequence_;
+    const auto copy_pose = [](const PoseReference& pose) {
+      return std::array<double, 7>{ pose.position.x(), pose.position.y(), pose.position.z(),
+          pose.orientation.x(), pose.orientation.y(), pose.orientation.z(), pose.orientation.w() };
+    };
+    sample.current = copy_pose(pose_reference(current_pose));
+    sample.target = copy_pose(reference_target_pose_);
+    sample.reference = copy_pose(reference_pose_);
+    sample.error_raw = raw_pose_error;
+    sample.error = pose_error;
+    sample.twist = measured_twist;
+    sample.spring = spring;
+    sample.damper = damper;
+    sample.wrench_raw = raw_task_wrench;
+    sample.wrench = task_wrench;
+    for (std::size_t i = 0; i < 6; ++i) {
+      sample.coriolis[i] = coriolis_buffer_(i);
+      sample.torque_task[i] = desired_torque_array[i] - sample.coriolis[i];
+    }
+    sample.torque_raw = desired_torque_array;
+    sample.torque = bounded_torque;
+    sample.write_ok = write_ok;
+    debug_csv_->capture(sample);
+  }
+  if (!write_ok) {
     write_zero_torque();
     return controller_interface::return_type::ERROR;
   }
