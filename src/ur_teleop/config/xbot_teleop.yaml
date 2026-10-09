@@ -1,4 +1,4 @@
-debug: false            # true：显示调试诊断；false：仅操作、频率和采集进度
+debug: true            # true：显示调试诊断；false：仅操作、频率和采集进度
 # XBot 专用配置：不继承 alicia_teleop.yaml。
 # 修改本文件即可完成 XBot 的 Home、真机连接、遥操作和采集配置。
 mode: record
@@ -7,7 +7,7 @@ sim: false
 cell:
   ur_type: ur10e
   robot_ip: 169.254.138.15
-  gripper_port: /dev/ttyUSB0
+  gripper_port: /dev/ttyUSB1
   ftdi_id: ttyUSB2
   ft300_enabled: false           # false：保留模型与虚拟接口，不访问 FT300 串口。
   launch_rviz: true              # 仿真和真机 Home 均打开 RViz。
@@ -15,7 +15,7 @@ cell:
 # home_node 仅使用 slave；值按 UR_JOINT_NAMES 顺序：
 # shoulder_pan、shoulder_lift、elbow、wrist_1、wrist_2、wrist_3（单位 rad）。
 home:
-  slave: [1.537065029144287, -1.3990939271501084, 1.9127243200885218, -2.0777298412718714, -1.5744393507586878, -4.770853106175558]
+  slave: [2.1059043407440186, -1.7784296474852503, 2.2685564200030726, -2.078673025170797, -1.56279164949526, -2.5456200281726282]
   at_home_tolerance_rad: 0.1
   move_timeout_s: 60.0
   move_duration_s: 8.0
@@ -38,14 +38,14 @@ xbot:
   max_linear_speed_m_s: 1.0
   max_angular_speed_rad_s: 5.0
   # 相对于接管阻抗控制器后首条 current_pose 的 XYZ 半范围。
-  workspace_half_extent_m: [0.20, 0.20, 0.20]
+  workspace_half_extent_m: [0.80, 0.80, 0.80]
   precision_scale: 0.25
   deadzone: 0.08
   left_stick_xy_free: false  # false：左摇杆主轴过滤；true：允许 XY 同时输出。
   view_hold_s: 0.5
 
 gripper:
-  enabled: false                 # 同时关闭夹爪控制栈与手柄 A 键命令。
+  enabled: true                 # 同时关闭夹爪控制栈与手柄 A 键命令。
   action_server: /robotiq_gripper_controller/gripper_cmd
   close_threshold_m: 0.0125
   open_threshold_m: 0.005
@@ -54,10 +54,10 @@ gripper:
   max_effort: 50.0
 
 recorder:
-  num_episodes: 0               # 0：手动结束；正整数：保存够指定段数后自动结束。
+  num_episodes: 50               # 0：手动结束；正整数：保存够指定段数后自动结束。
   tolerance_s: 0.0001           # LeRobot 时间戳容差，不是本包数据新鲜度阈值。
   image_writer_processes: 0     # 异步图像写入进程数，0 使用线程。
-  image_writer_threads: 2       # 异步图像写入线程数。
+  image_writer_threads: 8       # 异步图像写入线程数。
   video_backend: null           # 视频读取后端；null 由 LeRobot 自动选择。
   batch_encoding_size: 1        # 每批编码的 episode 数，结束时刷新剩余片段。
   vcodec: libsvtav1             # 视频编码器。
@@ -66,18 +66,18 @@ recorder:
   encoder_queue_maxsize: 30     # 流式编码时每相机缓冲帧数。
   encoder_threads: null         # 每编码器线程数；null 自动。
   repo_id: my_user/ur10e_xbot
-  root: /ros2_ws/dataset/xbot
+  root: /ros2_ws/dataset/grasp_A
   fps: 20
   robot_type: ur10e_xbot_teleop
   action_space: cartesian_pose
-  action_mode: abs  # abs：最终目标 xyz+xyzw；rel：最终目标相对同周期实测 TCP 的 xyz+旋转向量。
+  action_mode: rel  # abs：最终目标 xyz+xyzw；rel：最终目标相对同周期实测 TCP 的 xyz+旋转向量。
   record_action_joints: true
   record_action_gripper: false    # 是否保存夹爪开合指令：打开 0，闭合 1。
   record_joint_position: true
-  record_joint_velocity: true
-  record_joint_effort: true      # /joint_states.effort；UR 上可能表示电机电流，非实测关节力矩。
+  record_joint_velocity: false
+  record_joint_effort: false      # /joint_states.effort；UR 上可能表示电机电流，非实测关节力矩。
   record_tcp_pose: true
-  record_wrench: true            # FT300 启用时取外部传感器，否则取 UR 内置传感器。
+  record_wrench: false            # FT300 启用时取外部传感器，否则取 UR 内置传感器。
   data_timeout_s: 0.5
   ee_pose_parent_frame: base_link # Xbot 实际按控制器参考 link 自动选择；此项保留兼容 Alicia。
   ee_pose_child_frame: tool0     # observation 的 TCP link。
@@ -85,5 +85,5 @@ recorder:
   cameras: {}                    # 选择 camera.yaml 中的相机；使用下面示例时删掉 {}。
   #   usb_front:
   #     enabled: true             # 尺寸、缩放和话题统一在 camera.yaml 设置。
-  task: xbot_teleoperation
+  task: grasp A
   min_frames_per_episode: 2

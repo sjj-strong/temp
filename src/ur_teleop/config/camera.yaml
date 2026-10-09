@@ -13,8 +13,8 @@ usb_front:
   height: 480
   fps: 30
   resize: false
-  resize_width: 320
-  resize_height: 240
+  resize_width: 224
+  resize_height: 224
   fourcc: MJPG
   publish_compressed: true
   compressed_quality: 90
@@ -27,8 +27,8 @@ usb_left:
   height: 480
   fps: 30
   resize: false
-  resize_width: 320
-  resize_height: 240
+  resize_width: 224
+  resize_height: 224
   fourcc: MJPG
   publish_compressed: true
   compressed_quality: 90
@@ -41,8 +41,8 @@ usb_right:
   height: 480
   fps: 30
   resize: false
-  resize_width: 320
-  resize_height: 240
+  resize_width: 224
+  resize_height: 224
   fourcc: MJPG
   publish_compressed: true
   compressed_quality: 90
@@ -57,8 +57,8 @@ d435i:
   height: 480
   fps: 30
   resize: false
-  resize_width: 320
-  resize_height: 240
+  resize_width: 224
+  resize_height: 224
 d455:
   type: realsense
   enabled: true
@@ -70,5 +70,5 @@ d455:
   height: 480
   fps: 30
   resize: false
-  resize_width: 320
-  resize_height: 240
+  resize_width: 224
+  resize_height: 224

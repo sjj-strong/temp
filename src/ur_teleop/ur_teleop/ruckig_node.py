@@ -3,7 +3,6 @@
 import numpy as np
 
 import rclpy
-from ur_teleop.control_interface_logging import log_control_interface
 from rclpy.node import Node
 
 from sensor_msgs.msg import JointState
@@ -12,6 +11,7 @@ from std_msgs.msg import Float64MultiArray
 from ruckig import Ruckig, InputParameter, OutputParameter, Result
 
 from ur_teleop.session_logging import debug_log, log_event
+from ur_teleop.control_interface_logging import log_control_interface
 from ur_teleop.config import default_config_path, load_config
 
 

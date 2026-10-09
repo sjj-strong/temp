@@ -10,7 +10,6 @@ import time
 from enum import Enum, auto
 
 import rclpy
-from ur_teleop.control_interface_logging import log_control_interface
 from control_msgs.action import ParallelGripperCommand
 from rclpy.action import ActionClient
 from rclpy.executors import SingleThreadedExecutor
@@ -19,6 +18,7 @@ from sensor_msgs.msg import JointState
 from std_msgs.msg import Bool, Float64MultiArray
 
 from ur_teleop.session_logging import debug_log, log_event
+from ur_teleop.control_interface_logging import log_control_interface
 from ur_teleop.config import (
     ALICIA_JOINT_NAMES,
     GRIPPER_JOINT,

@@ -21,10 +21,10 @@ source /ros2_ws/install/setup.bash
 
 本文直接使用源码配置路径，修改配置后重启对应进程即可，无需为配置修改重新构建。
 
-| 输入源 | 配置文件 | 启动前检查 |
-| --- | --- | --- |
+| 输入源 | 配置文件                                             | 启动前检查                                  |
+| ------ | ---------------------------------------------------- | ------------------------------------------- |
 | Alicia | `/ros2_ws/src/ur_teleop/config/alicia_teleop.yaml` | 主臂串口、双臂 Home、映射、控制器和夹爪开关 |
-| Xbot | `/ros2_ws/src/ur_teleop/config/xbot_teleop.yaml` | 手柄标定、UR Home、机器人 IP 和阻抗参数文件 |
+| Xbot   | `/ros2_ws/src/ur_teleop/config/xbot_teleop.yaml`   | 手柄标定、UR Home、机器人 IP 和阻抗参数文件 |
 
 设备地址与 Home 必须匹配实际设备。Xbot 先完成[标定与输入检查](xbot_control.md#配置与校准)。需要更新 UR Home 时使用[位置读取工具](capture_slave_home.md)。
 
@@ -33,6 +33,8 @@ source /ros2_ws/install/setup.bash
 先用[相机工具](camera_inspector.md)确认设备和采集模式，关闭调参预览，再运行：
 
 ```bash
+python3 /ros2_ws/src/ur_teleop/ur_teleop/camera_inspector.py
+
 ros2 launch ur_teleop camera.launch.py \
   config_file:=/ros2_ws/src/ur_teleop/config/camera.yaml
 ```
@@ -143,12 +145,12 @@ ros2 launch ur_teleop teleop.launch.py \
   config_file:=/ros2_ws/src/ur_teleop/config/xbot_teleop.yaml mode:=record
 ```
 
-| 操作 | Alicia | Xbot |
-| --- | --- | --- |
-| 开始一段 | Enter | Menu |
-| 保存 | S | Y |
-| 丢弃 | D | B |
-| 保存并结束 | Q | View 长按 |
+| 操作       | Alicia | Xbot      |
+| ---------- | ------ | --------- |
+| 开始一段   | Enter  | Menu      |
+| 保存       | S      | Y         |
+| 丢弃       | D      | B         |
+| 保存并结束 | Q      | View 长按 |
 
 修改 `recorder.root`、`task`、数据字段和相机选择后再采集。仿真无力数据时关闭 `record_wrench`。格式与参数见[数据采集](data_recorder.md)和[录制参数](recorder_config.md)。
 

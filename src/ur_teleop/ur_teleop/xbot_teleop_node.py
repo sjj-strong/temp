@@ -6,7 +6,6 @@ from pathlib import Path
 import numpy as np
 import yaml
 import rclpy
-from ur_teleop.control_interface_logging import log_control_interface
 from rclpy.node import Node
 from rclpy.action import ActionClient
 from rclpy.time import Time
@@ -19,6 +18,7 @@ from tf2_ros import Buffer, TransformListener, TransformException
 
 from ur_teleop.episode_home import EpisodeHome
 from ur_teleop.session_logging import debug_log, log_event
+from ur_teleop.control_interface_logging import log_control_interface
 from ur_teleop.config import load_config, default_config_path, UR_JOINT_NAMES, UR_GRIPPER_JOINT
 from ur_teleop.controller_switcher import ControllerSwitcher
 from ur_teleop.xbot_core import AXES, BUTTONS, JoyMapping, ButtonEvents, PoseIntegrator, orientation_distance
