@@ -86,31 +86,77 @@ gripper:
 
 夹爪接口固定为 `/robotiq_gripper_controller/gripper_cmd`，驱动关节固定为 `robotiq_85_left_knuckle_joint`，打开/闭合目标固定为 `0.0/0.4 rad`，不提供配置覆盖。
 
-## 3. 启动推理服务和隧道
+## 3. 启动服务并测试服务器连接
 
-**服务器终端：**
+连接测试在启动机器人之前完成。将以下 `用户名` 替换为服务器 SSH 账户；使用非默认 SSH 端口时，在所有 SSH 命令中补充 `-p 端口`。
+
+### 3.1 检查 SSH 登录
+
+在主机执行：
+
+```bash
+ssh -o ConnectTimeout=5 用户名@10.5.174.93 'hostname'
+```
+
+应输出服务器主机名并正常退出。首次连接需核对服务器指纹，并完成密码或密钥认证。连接超时先检查网络/VPN、IP 和 SSH 端口；`Permission denied` 表示需要检查账户或密钥。
+
+### 3.2 启动服务并检查服务器本机接口
+
+在服务器终端执行并保持运行：
 
 ```bash
 cd /ros2_ws/src/real_world_evaluation
 /opt/lerobot_venv/bin/python -m server --config configs/server.yaml
 ```
 
-等待模型加载完成，出现监听 `127.0.0.1:8000` 的提示，保持终端运行。
-
-**主机隧道终端：**
+等待模型加载完成，出现监听 `127.0.0.1:8000` 的提示。在另一个主机终端通过 SSH 检查服务器本机接口：
 
 ```bash
-ssh -N -o ExitOnForwardFailure=yes \
-  -L 8000:127.0.0.1:8000 用户名@10.5.174.93
+ssh -o ConnectTimeout=5 用户名@10.5.174.93 \
+  'curl --noproxy "*" --fail --show-error --connect-timeout 5 --max-time 10 http://127.0.0.1:8000/health'
 ```
 
-保持此终端运行。在另一主机终端检查：
+应返回包含 `"ready":true` 的 JSON。这一步检查服务器服务是否就绪，尚未使用本地隧道。
+
+### 3.3 建立隧道并检查端到端连接
+
+在主机单独的终端执行：
 
 ```bash
-curl --fail http://127.0.0.1:8000/health
+ssh -N -o ConnectTimeout=5 -o ExitOnForwardFailure=yes \
+  -L 127.0.0.1:8000:127.0.0.1:8000 用户名@10.5.174.93
 ```
 
-应返回 `ready: true`。核对 `state_names`、`cameras`、`action_names`、参考坐标系、TCP 和训练 `fps`，再完成主机配置。
+成功后通常没有输出，保持终端运行。在另一主机终端执行：
+
+```bash
+curl --noproxy '*' --fail --show-error --connect-timeout 5 --max-time 10 \
+  http://127.0.0.1:8000/health
+```
+
+应返回与服务器端相同的模型信息。核对 `policy_type`、`state_names`、`cameras`、`action_names`、参考坐标系、TCP 和训练 `fps`，再完成主机配置。
+
+若本地 8000 端口被占用，可将隧道参数改为 `-L 127.0.0.1:8001:127.0.0.1:8000`，并同步将主机 `server_url` 和本地检查地址改为 `http://127.0.0.1:8001`；服务器端口不变。
+
+### 3.4 检查实际推理请求（不连接机器人）
+
+在主机执行以下命令。它读取客户端连接配置，在内存中强制使用 Mock 环境，发送一份模拟观测并接收 Action Chunk，不改写配置文件，也不导入 ROS 或发送机器人命令。
+
+```bash
+cd /ros2_ws/src/real_world_evaluation
+/opt/lerobot_venv/bin/python - <<'PY'
+from pathlib import Path
+import yaml
+from rollout import run
+
+config = yaml.safe_load(Path('configs/client.yaml').read_text())
+config.update(mode='mock', execute_steps=1, max_steps=1)
+assert run(config) == 1
+print('服务器连接与推理请求成功，未连接机器人')
+PY
+```
+
+输出成功提示即表示 SSH 隧道、HTTP 请求、模型推理及动作响应校验均已通过。模拟图像和状态只用于验证通信与接口，不代表模型任务效果。测试时不要同时运行另一个 rollout。
 
 ## 4. 启动机械臂、夹爪和相机
 
@@ -186,6 +232,8 @@ cd /ros2_ws/src/real_world_evaluation
 
 | 现象 | 检查项 |
 | --- | --- |
+| SSH 连接超时或认证失败 | 网络/VPN、SSH 端口、账户和密钥；先完成第 3.1 步 |
+| 隧道提示端口已占用 | 更换本地端口并同步修改 `server_url`；不要连到已有的其他服务 |
 | `/health` 无法访问 | 服务是否已完成加载、SSH 隧道是否成功、本地 8000 端口是否被占用 |
 | 模型启动失败 | checkpoint 与处理器是否完整、LeRobot 版本和依赖是否匹配、CUDA 是否可用、策略是否满足当前接口要求 |
 | 相机键或尺寸不符 | 比较 `/health`、`client.yaml` 与实际原始图像；录制 resize 不会缩放发布话题 |
